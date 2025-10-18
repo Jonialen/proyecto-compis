@@ -1,18 +1,18 @@
-# Deliverables
+# Entregables
 
-Versioned reading copies for Entrega 2 live in [entrega2](entrega2/). Start with the report, then use the run guide to reproduce the evidence. Editable sources remain in `docs/semestre2/entrega2`; do not maintain a second Markdown copy here.
+Las copias de lectura versionadas de la Entrega 2 están en [entrega2](entrega2/). Empiece por el informe y luego use la guía de ejecución para reproducir la evidencia. Las fuentes editables permanecen en `docs/semestre2/entrega2`; no mantenga aquí una segunda copia en Markdown.
 
-| PDF | Editable source | Purpose |
+| PDF | Fuente editable | Propósito |
 |---|---|---|
-| [Technical report](entrega2/report.pdf) | [report.md](../docs/semestre2/entrega2/report.md) | Requirement matrix, evidence provenance and pending human checks |
-| [Architecture](entrega2/architecture.pdf) | [architecture.md](../docs/semestre2/entrega2/architecture.md) | Compiler pipeline, ownership and design decisions |
-| [Run and review guide](entrega2/run-guide.pdf) | [README.md](../docs/semestre2/entrega2/README.md) | Prerequisites, CLI/IDE usage and verification entry points |
-| [TAC reference](entrega2/tac-reference.pdf) | [tac-design.md](../docs/semestre2/entrega2/tac-design.md) | Instructions, translation examples and backend assumptions |
+| [Informe técnico](entrega2/report.pdf) | [report.md](../docs/semestre2/entrega2/report.md) | Matriz de requisitos, procedencia de la evidencia y comprobaciones humanas pendientes |
+| [Arquitectura](entrega2/architecture.pdf) | [architecture.md](../docs/semestre2/entrega2/architecture.md) | Flujo del compilador, responsabilidades y decisiones de diseño |
+| [Guía de ejecución y revisión](entrega2/run-guide.pdf) | [README.md](../docs/semestre2/entrega2/README.md) | Requisitos previos, uso de la CLI y el IDE, y puntos de entrada de verificación |
+| [Referencia TAC](entrega2/tac-reference.pdf) | [tac-design.md](../docs/semestre2/entrega2/tac-design.md) | Instrucciones, ejemplos de traducción y supuestos del backend |
 
-## Version policy
+## Política de versiones
 
-These four PDFs are exports, not additional implementation or browser-certification evidence. Regenerate the complete packet when its sources change and version the sources and PDFs together in the same commit. Git history retains earlier versions; this directory holds the current packet, not dated duplicates. Export tooling is temporary and is not a repository build-system feature.
+Estos cuatro PDF son exportaciones, no evidencia adicional de implementación ni de certificación en navegador. Regenere el paquete completo cuando cambien sus fuentes y versione las fuentes y los PDF juntos en el mismo commit. El historial de Git conserva las versiones anteriores; este directorio contiene el paquete actual, no duplicados fechados. Las herramientas de exportación son temporales y no forman parte del sistema de compilación del repositorio.
 
-Keep all four PDFs together: links between packet documents use sibling filenames and named destinations. Other references use repository branch/source-path URLs on `feat/compiscript-tac-closures-collections`; these are **not immutable commit permalinks**. They require publication of that branch and internet access. Offline checks validate the corresponding local paths, not remote availability. Source SHA-256 values can be compared with the export manifest retained during generation.
+Mantenga juntos los cuatro PDF: los enlaces entre documentos del paquete usan nombres de archivo hermanos y destinos con nombre. Las demás referencias usan URL de rutas de rama/fuente del repositorio en `feat/compiscript-tac-closures-collections`; **no son permalinks inmutables de commits**. Requieren que esa rama esté publicada y acceso a internet. Las comprobaciones sin conexión validan las rutas locales correspondientes, no la disponibilidad remota. Los valores SHA-256 de las fuentes pueden compararse con el manifiesto de exportación conservado durante la generación.
 
-The [canonical assignment transcription](../docs/semestre2/entrega2/instructions.md) contains all four original pages, including the rubric. The human-provided `Proyecto_2__Compiladores.pdf` stays local and ignored; a fresh clone needs only the versioned transcription. It is not one of the four exported deliverables.
+La [transcripción canónica del enunciado](../docs/semestre2/entrega2/instructions.md) contiene las cuatro páginas originales, incluida la rúbrica. El `Proyecto_2__Compiladores.pdf` proporcionado por el equipo se mantiene local e ignorado; una copia nueva solo necesita la transcripción versionada. No es uno de los cuatro entregables exportados.

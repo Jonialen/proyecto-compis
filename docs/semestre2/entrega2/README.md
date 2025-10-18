@@ -1,42 +1,43 @@
-# Entrega 2: run and review guide
+# Entrega 2: guía de ejecución y revisión
 
-Compiscript produces typed, located three-address code and a static extended-symbol report through one compiler core. Lowering covers all valid AST construction kinds, including the values/effects and guarded unknown-value/try-catch additions. Start here from the repository root. It is a compiler, not a source or TAC execution service. The [report](report.md) separates implemented contracts from grading, authorship and manual presentation checks.
+Compiscript produce código de tres direcciones tipado y ubicado, y un reporte estático de símbolos extendidos, mediante un único núcleo de compilador. La traducción (lowering) cubre todos los tipos de construcción válidos del AST, incluidas las adiciones de valores/efectos y de valores desconocidos protegidos/try-catch. Empiece aquí, desde la raíz del repositorio. Es un compilador, no un servicio de ejecución de código fuente ni de TAC. El [informe](report.md) separa los contratos implementados de la calificación, la autoría y las comprobaciones manuales para la presentación.
 
-## Documentation map
+## Mapa de la documentación
 
-| Need | Reference |
+| Necesidad | Referencia |
 |---|---|
-| Academic outcome, PDF requirements, contributions, resolved gaps and human checks | [Technical report](report.md) |
-| Pipeline, ownership and practical design decisions | [Architecture](architecture.md) |
-| Full instruction syntax, translation examples and backend assumptions | [TAC reference](tac-design.md) |
-| Successful/failed executable battery and evidence boundaries | [Acceptance](acceptance.md) |
-| Load/edit/compile/analyze, panels and HTTP guards | [IDE guide](ide.md) |
-| Complete four-page assignment, original page boundaries and rubric | [Canonical instructions](instructions.md) |
+| Resultado académico, requisitos del PDF, contribuciones, brechas resueltas y comprobaciones humanas | [Informe técnico](report.md) |
+| Flujo, responsabilidades y decisiones prácticas de diseño | [Arquitectura](architecture.md) |
+| Sintaxis completa de las instrucciones, ejemplos de traducción y supuestos del backend | [Referencia TAC](tac-design.md) |
+| Batería ejecutable de casos exitosos y fallidos, y límites de la evidencia | [Aceptación](acceptance.md) |
+| Cargar/editar/compilar/analizar, paneles y guardas HTTP | [Guía del IDE](ide.md) |
+| Enunciado completo de cuatro páginas, límites de página originales y rúbrica | [Instrucciones canónicas](instructions.md) |
 
-### Downloadable PDF packet
+### Paquete de PDF descargables
 
-- [Technical report](../../../deliverables/entrega2/report.pdf)
-- [Architecture](../../../deliverables/entrega2/architecture.pdf)
-- [Run and review guide](../../../deliverables/entrega2/run-guide.pdf)
-- [Detailed TAC reference, translation examples and assumptions](../../../deliverables/entrega2/tac-reference.pdf)
+- [Informe técnico](../../../deliverables/entrega2/report.pdf)
+- [Arquitectura](../../../deliverables/entrega2/architecture.pdf)
+- [Guía de ejecución y revisión](../../../deliverables/entrega2/run-guide.pdf)
+- [Referencia TAC detallada, ejemplos de traducción y supuestos](../../../deliverables/entrega2/tac-reference.pdf)
 
-The PDFs are readable exports of the editable Markdown sources above, not new
-implementation or browser-certification evidence. Keep the four PDFs together for
-packet links; other references open repository branch/source-path URLs, not immutable
-permalinks. See the [deliverables index and version policy](../../../deliverables/README.md).
-The [canonical instructions](instructions.md) preserve the complete assignment;
-the original `Proyecto_2__Compiladores.pdf` stays local and ignored. Regenerate the
-packet after changing its Markdown sources and version both together.
+Los PDF son exportaciones legibles de las fuentes Markdown editables anteriores, no
+evidencia nueva de implementación ni de certificación en navegador. Mantenga juntos los
+cuatro PDF para que funcionen los enlaces del paquete; las demás referencias abren URL de
+rutas de una rama del repositorio, no permalinks inmutables. Consulte el [índice de
+entregables y la política de versiones](../../../deliverables/README.md).
+Las [instrucciones canónicas](instructions.md) conservan el enunciado completo;
+el `Proyecto_2__Compiladores.pdf` original se mantiene local e ignorado. Regenere el
+paquete después de cambiar sus fuentes Markdown y versione ambos juntos.
 
-## Prerequisites
+## Requisitos previos
 
-- Go 1.26.1 or later, as declared in [go.mod](../../../go.mod); current local verification used Go 1.27.2 on darwin/arm64.
-- Existing Go module dependencies: ANTLR Go runtime v4.13.1 and the pinned indirect `golang.org/x/exp` version in `go.mod`. No dependency change is required.
-- Node.js for `node --test`; observed version 24.21.0. No npm install is needed for these built-in tests.
-- Java for ANTLR regeneration only; observed OpenJDK 17.0.20.1. The generator jar is ANTLR 4.13.2, cached at `tools/antlr/antlr-4.13.2-complete.jar`. Generator and Go runtime versions are distinct. A fresh offline checkout needs the same cached jar/modules; they are not guaranteed by Markdown or by Git alone.
-- A browser for the local IDE. Existing CodeMirror/Viz.js CDN assets make browser appearance and offline operation dependent on asset availability. No offline-browser guarantee is made.
+- Go 1.26.1 o posterior, según [go.mod](../../../go.mod); la verificación local actual usó Go 1.27.2 en darwin/arm64.
+- Dependencias de módulos Go existentes: runtime de ANTLR para Go v4.13.1 y la versión indirecta fijada de `golang.org/x/exp` en `go.mod`. No se requiere ningún cambio de dependencias.
+- Node.js para `node --test`; versión observada 24.21.0. Estas pruebas integradas no requieren `npm install`.
+- Java solo para regenerar ANTLR; versión observada OpenJDK 17.0.20.1. El jar del generador es ANTLR 4.13.2, almacenado en `tools/antlr/antlr-4.13.2-complete.jar`. Las versiones del generador y del runtime de Go son distintas. Una copia nueva sin conexión necesita el mismo jar y los mismos módulos en caché; ni el Markdown ni Git por sí solos los garantizan.
+- Un navegador para el IDE local. Los recursos CDN existentes de CodeMirror/Viz.js hacen que la apariencia en el navegador y el funcionamiento sin conexión dependan de su disponibilidad. No se garantiza el funcionamiento del navegador sin conexión.
 
-## Generate code
+## Generar código
 
 ```sh
 go run ./cmd/compiscript-tac -h
@@ -47,41 +48,41 @@ go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/dynamic-excep
 go run ./cmd/compiscript testdata/compiscript/tac/acceptance.cps
 ```
 
-The numeric TAC ends in a store to `s1.x:float`; it represents `x = 3.5` but does not print that runtime value. Successful compilation JSON contains `tac`, empty `diagnostics`, semantic `scopes` and optional `codegen` with unit `abstract-cell`. The last command is the legacy Analyze interface: AST/diagnostics/scopes, no TAC or codegen additions.
+El TAC numérico termina con una escritura en `s1.x:float`; representa `x = 3.5`, pero no imprime ese valor en tiempo de ejecución. El JSON de una compilación exitosa contiene `tac`, `diagnostics` vacío, `scopes` semánticos y `codegen` opcional con unidad `abstract-cell`. El último comando es la interfaz Analyze heredada: AST, diagnósticos y ámbitos, sin TAC ni las adiciones de codegen.
 
-The two new fixtures generate print/guard/handler instructions. Only the bounded test oracle executes them: `values-effects.cps` produces `3\n1\nnull\n` with `x=2`, `y=3`, `count=1`; `dynamic-exceptions.cps` produces `3\ndivision by zero\n11\n` with `result=3`, `effects=11`. These are test expectations, not CLI stdout. Unknown values may compile successfully and then encounter an explicit runtime fault; compilation is not execution safety certification. See the [values/handler contracts](tac-design.md#static-values-and-effects-t9).
+Los dos nuevos archivos de prueba generan instrucciones de print, guardas y manejadores. Solo el oráculo acotado de pruebas las ejecuta: `values-effects.cps` produce `3\n1\nnull\n` con `x=2`, `y=3`, `count=1`; `dynamic-exceptions.cps` produce `3\ndivision by zero\n11\n` con `result=3`, `effects=11`. Son expectativas de las pruebas, no la salida estándar de la CLI. Los valores desconocidos pueden compilar con éxito y después encontrar un fallo explícito en tiempo de ejecución; compilar no certifica que la ejecución sea segura. Consulte los [contratos de valores y manejadores](tac-design.md#valores-estáticos-y-efectos-t9).
 
-### Failed input and exact exit status
+### Entrada fallida y código de salida exacto
 
 ```sh
 go run ./cmd/compiscript-tac testdata/compiscript/acceptance/operators_invalid.cps
 go run ./cmd/compiscript-tac -format=json testdata/compiscript/acceptance/operators_invalid.cps
 ```
 
-This fixture yields six `SEM_OPERATOR` diagnostics. Text rejection has empty stdout and located errors on stderr. JSON rejection has the report on stdout, empty stderr, `tac: null` and no `codegen`. A built TAC binary exits **0** on success/help, **1** on diagnostics or I/O failure, **2** on argument/format/extension errors. Flags precede the path. Legacy Analyze still exits **0** for language diagnostics. `go run` wraps nonzero program exits; use the existing built-CLI tests for exact status proof, not the wrapper status.
+Este archivo de prueba produce seis diagnósticos `SEM_OPERATOR`. El rechazo en texto deja stdout vacío y muestra los errores ubicados en stderr. El rechazo en JSON deja el reporte en stdout, stderr vacío, `tac: null` y sin `codegen`. Un binario TAC compilado termina con **0** ante éxito o ayuda, con **1** ante diagnósticos o fallos de E/S, y con **2** ante errores de argumentos, formato o extensión. Las opciones preceden a la ruta. El Analyze heredado sigue terminando con **0** ante diagnósticos del lenguaje. `go run` envuelve los códigos de salida distintos de cero del programa; para comprobar el código exacto, use las pruebas existentes de la CLI construida, no el código del envoltorio.
 
-## Use the IDE
+## Usar el IDE
 
 ```sh
 go run ./cmd/ide
 ```
 
-Open `http://localhost:8080`. The address `:8080` and relative `web` file root are defined in [cmd/ide/main.go](../../../cmd/ide/main.go), so launch from the repository root. The server binds the wildcard address, not loopback exclusively; use only in a trusted local environment. Stop the foreground server with Ctrl+C.
+Abra `http://localhost:8080`. La dirección `:8080` y la raíz relativa de archivos `web` están definidas en [cmd/ide/main.go](../../../cmd/ide/main.go), por lo que debe iniciarse desde la raíz del repositorio. El servidor escucha en la dirección comodín, no exclusivamente en loopback; úselo solo en un entorno local de confianza. Detenga el servidor en primer plano con Ctrl+C.
 
-Select Compiscript, load a `.cps` file or edit source, then choose **Compile .cps**. TAC, diagnostics, environments and extended symbols are separate views. **Analyze .cps (AST)** keeps the older analysis workflow. See [IDE details](ide.md) for reset, stale responses and YAPar preservation.
+Seleccione Compiscript, cargue un archivo `.cps` o edite el código, y luego elija **Compile .cps**. El TAC, los diagnósticos, los entornos y los símbolos extendidos son vistas separadas. **Analyze .cps (AST)** conserva el flujo de análisis anterior. Consulte los [detalles del IDE](ide.md) sobre reinicio, respuestas obsoletas y preservación de YAPar.
 
-For a server already started locally, this request illustrates the public contract (not an execution request):
+Con un servidor ya iniciado localmente, esta solicitud ilustra el contrato público (no es una solicitud de ejecución):
 
 ```sh
 curl -sS http://localhost:8080/api/compiscript/compile -H 'Content-Type: application/json' --data '{"source":"let x=1+2;"}'
 ```
 
-HTTP 200 can contain language diagnostics; it does not mean the source compiled successfully. Request failures use 400/413/415/405 separately. No listener or curl request was started during the documentation check; httptest proves the handler boundary without a lingering server.
+Un HTTP 200 puede contener diagnósticos del lenguaje; no significa que la fuente haya compilado con éxito. Los fallos de la solicitud usan 400/413/415/405 por separado. Durante la comprobación de la documentación no se inició ningún servidor ni solicitud curl; httptest prueba la frontera del manejador sin dejar un servidor activo.
 
-## Run the battery safely
+## Ejecutar la batería de forma segura
 
-Use the [focused acceptance commands](acceptance.md#reproducible-tests). They exercise success, atomic rejection, CLI statuses, HTTP parity and bounded execution of emitted TAC. Broad `go test ./...` can regenerate ignored ANTLR files; run full generation/build/vet checks only in an isolated source snapshot. Offline checks require `GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local`, existing `GOMODCACHE`, and external HOME/TMPDIR/GOCACHE. Do not infer an offline installation capability from an already cached run.
+Use los [comandos de aceptación focalizados](acceptance.md#pruebas-reproducibles). Ejercitan el éxito, el rechazo atómico, los códigos de salida de la CLI, la paridad HTTP y la ejecución acotada del TAC emitido. Un `go test ./...` amplio puede regenerar archivos ANTLR ignorados; ejecute la generación, compilación y vet completos solo en una instantánea aislada del código. Las comprobaciones sin conexión requieren `GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local`, un `GOMODCACHE` existente y HOME/TMPDIR/GOCACHE externos. No infiera la capacidad de instalar sin conexión a partir de una ejecución que ya tenía caché.
 
-## Before presentation
+## Antes de la presentación
 
-Review the [current disposition and human checks](report.md#remaining-requirement-gaps-and-presentation-checks), manually inspect the browser, and verify GitHub access and actual individual authorship. The original accepted-construction gap is resolved by T9/T10; no additional concrete normative implementation gap is established by this refresh. That is not a proof of every program or future presentation conditions. The PDF's 25/65/10 points are grading weights, not completion percentages.
+Revise el [estado actual y las comprobaciones humanas](report.md#brechas-de-requisitos-pendientes-y-controles-de-presentación), inspeccione manualmente el navegador y verifique el acceso a GitHub y la autoría individual real. La brecha original de construcciones aceptadas quedó resuelta con T9/T10; esta actualización no establece ninguna brecha normativa concreta adicional de implementación. Eso no prueba todos los programas ni las condiciones futuras de la presentación. Los 25/65/10 puntos del PDF son pesos de calificación, no porcentajes de avance.

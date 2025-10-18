@@ -1,16 +1,17 @@
-# Mixed compiler acceptance
+# Aceptación del compilador con casos mixtos
 
-The final battery combines retained closures, object references, typed nested lists,
-iteration, switch transfer and recursion through the existing compiler. It also
-checks malformed input through Parse, Analyze, Compile, built CLIs and the HTTP
-mux. This is executable compiler evidence, not a physical runtime or visual IDE
-certification. T9/T10 extend the battery to values/effects, guarded unknown values
-and handlers. The [technical report and PDF matrix](report.md) record resolution
-of the initial construction gap, proof provenance and pending human checks.
+La batería final combina closures retenidos, referencias a objetos, listas anidadas
+tipadas, iteración, transferencia en switch y recursión a través del compilador existente.
+También verifica entradas mal formadas mediante Parse, Analyze, Compile, las CLI construidas
+y el mux HTTP. Esta es evidencia ejecutable del compilador, no una certificación de un
+runtime físico ni del IDE visual. T9/T10 extienden la batería a valores/efectos, valores
+desconocidos protegidos y manejadores. El [informe técnico y la matriz del PDF](report.md)
+registran la resolución de la brecha inicial de construcción, la procedencia de las pruebas
+y los controles humanos pendientes.
 
-## Quick path
+## Ruta rápida
 
-From the repository root, with the required Go dependencies already cached:
+Desde la raíz del repositorio, con las dependencias de Go requeridas ya en caché:
 
 ```sh
 go run ./cmd/compiscript-tac testdata/compiscript/tac/acceptance.cps
@@ -18,14 +19,15 @@ go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/acceptance.cp
 go run ./cmd/compiscript testdata/compiscript/tac/acceptance.cps
 ```
 
-All three commands succeed. The first emits TAC text; the second emits a report
-with non-null `tac`, empty `diagnostics` and `codegen.unit: "abstract-cell"`;
-the third emits the legacy analysis report without compilation metadata.
-The compiler emits code; it does **not** execute the program or print its values.
+Los tres comandos terminan con éxito. El primero emite texto TAC; el segundo emite un
+reporte con `tac` no nulo, `diagnostics` vacío y `codegen.unit: "abstract-cell"`;
+el tercero emite el reporte de análisis heredado, sin metadatos de compilación.
+El compilador emite código; **no** ejecuta el programa ni imprime sus valores.
 
-The test-only frame oracle executes both core TAC and CLI-emitted JSON:
+El oráculo de marcos, exclusivo de las pruebas, ejecuta tanto el TAC del núcleo como el
+JSON emitido por la CLI:
 
-| Global | Expected value |
+| Global | Valor esperado |
 |---|---:|
 | `first` | 30 |
 | `second` | 43 |
@@ -35,12 +37,13 @@ The test-only frame oracle executes both core TAC and CLI-emitted JSON:
 | `total` | 10 |
 | `result` | 147 |
 
-`saved` retains its original invocation and shared basket after `next` is replaced.
-The ragged list includes an empty row; switch `continue` skips value 2 within the
-inner foreach. Recursive calls preserve caller temporaries. Valid while, do,
-for and foreach loops also have separate executable preservation cases.
+`saved` conserva su invocación original y la canasta compartida después de reemplazar `next`.
+La lista irregular incluye una fila vacía; el `continue` del switch omite el valor 2 dentro
+del foreach interno. Las llamadas recursivas preservan los temporales del llamador. Los
+ciclos while, do, for y foreach válidos también tienen casos ejecutables de preservación
+por separado.
 
-## Reproducible tests
+## Pruebas reproducibles
 
 ```sh
 go test ./internal/compiscript/frontend ./internal/compiscript ./cmd/ide -run 'Test(MalformedForMissingBody|MissingLoopBodies|AcceptanceAtomicRecovery|AcceptanceMixedExecution|AcceptanceRecoveryCLI|AcceptanceValidLoops|MixedAcceptanceAPI)$' -count=1
@@ -55,111 +58,122 @@ go build ./...
 go vet -a ./...
 ```
 
-Expected outcome: every command exits zero. Do not use `-short` for the built-CLI
-proof: it deliberately skips external builds. Run full checks in an isolated
-source snapshot, because existing ANTLR tests exercise generation. Offline proof
-uses `GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local`, an existing cached
-`GOMODCACHE`, external `HOME`, `TMPDIR` and `GOCACHE`, and the cached ANTLR jar.
-No installation or network download is part of this battery.
+Resultado esperado: todos los comandos terminan con código cero. No use `-short` para la
+prueba con la CLI construida: omite deliberadamente las compilaciones externas. Ejecute las
+verificaciones completas en una copia aislada del código fuente, porque las pruebas
+existentes de ANTLR ejercitan la generación. La prueba sin conexión usa
+`GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local`, un `GOMODCACHE` existente en caché,
+`HOME`, `TMPDIR` y `GOCACHE` externos, y el jar de ANTLR en caché.
+Ninguna instalación ni descarga de red forma parte de esta batería.
 
-## Rejections and HTTP parity
+## Rechazos y paridad HTTP
 
-The durable tests create their own temporary input files and assert exact stdout,
-stderr and exit status against the public core report, then verify source hashes.
-They exercise these failures without modifying the submitted input:
+Las pruebas permanentes crean sus propios archivos de entrada temporales y comparan
+exactamente stdout, stderr y el código de salida contra el reporte público del núcleo;
+luego verifican los hashes del código fuente. Ejercitan estos fallos sin modificar la
+entrada entregada:
 
-| Input | Required outcome |
+| Entrada | Resultado requerido |
 |---|---|
-| `for(let i=0; i<;i=i+1){` | Located syntax diagnostics, no panic |
-| `while(true)`, `do`, `foreach(x in [1])`, `for(let i=0; i<2; i=i+1)` | Missing bodies rejected with located diagnostics |
-| `const rows:integer[][]=[[1]];rows[0][0]=2;` | Semantic rejection; const-root checks remain authoritative |
-| `let rows:integer[][]=[[1]];rows[0]=true;` | Semantic rejection of incompatible nested shape |
-| `let a=[1];if(false){try{print(a[missing]);}catch(e){}}` | Semantic diagnostic in unexecuted source; valid handlers are no longer rejection fixtures |
+| `for(let i=0; i<;i=i+1){` | Diagnósticos sintácticos ubicados, sin panic |
+| `while(true)`, `do`, `foreach(x in [1])`, `for(let i=0; i<2; i=i+1)` | Cuerpos faltantes rechazados con diagnósticos ubicados |
+| `const rows:integer[][]=[[1]];rows[0][0]=2;` | Rechazo semántico; las verificaciones de raíz const siguen siendo determinantes |
+| `let rows:integer[][]=[[1]];rows[0]=true;` | Rechazo semántico de una forma anidada incompatible |
+| `let a=[1];if(false){try{print(a[missing]);}catch(e){}}` | Diagnóstico semántico en código no ejecutado; los manejadores válidos ya no son archivos de prueba (fixtures) de rechazo |
 
-For each rejected compilation, `tac` is null and `codegen` is absent. Built TAC
-CLI text mode exits 1 with empty stdout and located diagnostics on stderr; JSON
-mode exits 1 with the full report on stdout and empty stderr. Legacy Analyze
-still exits 0 for language diagnostics. An invalid TAC `-format` remains a usage
-error (exit 2), not a language error. These statuses describe the **built binary**;
-`go run` wraps nonzero program statuses and is not the exit-policy oracle.
+Para cada compilación rechazada, `tac` es null y `codegen` está ausente. La CLI de TAC
+construida, en modo texto, termina con 1, stdout vacío y diagnósticos ubicados en stderr;
+el modo JSON termina con 1, con el reporte completo en stdout y stderr vacío. Analyze
+heredado sigue terminando con 0 ante diagnósticos del lenguaje. Un `-format` de TAC
+inválido sigue siendo un error de uso (salida 2), no un error del lenguaje. Estos códigos
+describen el **binario construido**; `go run` envuelve los códigos de salida distintos de
+cero del programa y no es el oráculo de la política de salida.
 
-`TestMixedAcceptanceAPI` sends the successful fixture, valid loops and rejected
-sources through `newMux` using httptest. Both `/api/compiscript/analyze` and
-`/api/compiscript/compile` return HTTP 200 for language reports, exactly matching
-their core JSON reports; compilation adds `tacText` from `Program.String()`.
-Transport errors remain governed by the existing strict request decoder.
-The existing Node VM suite separately tests request/render/reset and stale-response
-wiring. No real-browser appearance or performance result is claimed here.
+`TestMixedAcceptanceAPI` envía el archivo de prueba exitoso, los ciclos válidos y las
+fuentes rechazadas a través de `newMux` usando httptest. Tanto `/api/compiscript/analyze`
+como `/api/compiscript/compile` devuelven HTTP 200 para los reportes del lenguaje,
+coincidiendo exactamente con sus reportes JSON del núcleo; la compilación agrega `tacText`
+a partir de `Program.String()`. Los errores de transporte siguen gobernados por el
+decodificador estricto de solicitudes existente. La suite existente de Node VM prueba por
+separado el cableado de solicitud/renderizado/reinicio y de respuestas obsoletas. Aquí no
+se afirma ningún resultado de apariencia ni de rendimiento en un navegador real.
 
-## Recovery choice and limits
+## Elección de recuperación y límites
 
-### Dynamic and exception example
+### Ejemplo dinámico y de excepciones
 
 ```sh
 go run ./cmd/compiscript-tac testdata/compiscript/tac/dynamic-exceptions.cps
 go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/dynamic-exceptions.cps
 ```
 
-`TestDynamicExceptionsCompile` and
-`TestDynamicExceptionsCLI` execute its emitted IR with the shared bounded oracle:
-`result=3`, `effects=11`, and output `3\ndivision by zero\n11\n`.
-Prefix effects survive the catch; the unreachable write to 100 does not execute.
-The same suite covers untyped values/calls, typed boundaries, retained captures,
-strict invalid operations, reference identity and synchronous handler cleanup.
-`TestDynamicExceptionsFatalOracleFailures` separately proves malformed metadata
-and instruction/depth budgets bypass source handlers. See the
-[guard/handler contract](tac-design.md#guarded-values-and-synchronous-exceptions-t10).
+`TestDynamicExceptionsCompile` y
+`TestDynamicExceptionsCLI` ejecutan su IR emitido con el oráculo acotado compartido:
+`result=3`, `effects=11` y la salida `3\ndivision by zero\n11\n`.
+Los efectos previos sobreviven al catch; la escritura inalcanzable de 100 no se ejecuta.
+La misma suite cubre valores/llamadas sin tipo, fronteras tipadas, capturas retenidas,
+operaciones inválidas estrictas, identidad de referencias y limpieza síncrona de manejadores.
+`TestDynamicExceptionsFatalOracleFailures` demuestra por separado que los metadatos mal
+formados y los presupuestos de instrucciones/profundidad omiten los manejadores del código
+fuente. Consulte el
+[contrato de guardas/manejadores](tac-design.md#valores-protegidos-y-excepciones-síncronas-t10).
 
-The retained `independent_t10_verifier_test.go` and
-`independent_t10_b1_recheck_test.go` also test unknown field contracts, inherited
-layouts and annotated nominal fields. Unannotated fields do not narrow to their
-initializer's tag, including null; absent values stay undefined. Return values
-and types are checked before handler cleanup, and a catch body cannot catch its
-own fault with the already-consumed handler. These are current core/built-CLI
-tests, not comparisons requiring external baseline binaries or Git history.
+Los archivos retenidos `independent_t10_verifier_test.go` e
+`independent_t10_b1_recheck_test.go` también prueban contratos de campos desconocidos,
+disposiciones heredadas y campos nominales anotados. Los campos sin anotación no se
+estrechan a la etiqueta de su inicializador, incluido null; los valores ausentes permanecen
+indefinidos. Los valores y tipos de retorno se verifican antes de la limpieza del manejador,
+y un cuerpo catch no puede capturar su propio fallo con el manejador ya consumido. Estas son
+pruebas actuales del núcleo y de la CLI construida, no comparaciones que requieran binarios
+de referencia externos ni el historial de Git.
 
-### Recovered loop bodies
+### Cuerpos de ciclo recuperados
 
-ANTLR can recover an incomplete loop header before creating its required block.
-The mapper previously indexed an empty block slice. The surgical KISS fix returns
-nil only when that block is absent. Existing syntax-diagnostic recovery then
-marks the statement bad, and the normal compilation pipeline rejects it atomically.
-There is no blanket panic recovery, invented empty body, grammar change or new
-compiler pass. The same helper serves all four loop constructs, so all four have
-valid preservation and malformed-boundary proof.
+ANTLR puede recuperar el encabezado incompleto de un ciclo antes de crear su bloque
+requerido. Anteriormente, el mapeador indexaba una lista de bloques vacía. La corrección
+quirúrgica KISS devuelve nil solo cuando ese bloque está ausente. La recuperación existente
+de diagnósticos sintácticos marca entonces la sentencia como errónea, y el pipeline normal
+de compilación la rechaza de forma atómica. No hay recuperación general de panics, cuerpo
+vacío inventado, cambio en la gramática ni una nueva pasada del compilador. El mismo
+auxiliar sirve a las cuatro construcciones de ciclo, por lo que las cuatro tienen pruebas
+válidas de preservación y de frontera mal formada.
 
-Metadata offsets and sizes use abstract cells, not bytes or a target ABI. Runtime
-guards are IR contracts exercised by the test oracle, not a product interpreter.
-Actual syntax/semantic errors and static scope/initialization guard failures
-discard TAC, including in dead code. Dynamic-invalid operands may instead generate
-guarded IR and fault in the oracle; the IDE/CLI do not execute that IR.
+Los desplazamientos y tamaños de los metadatos usan celdas abstractas, no bytes ni una ABI
+objetivo. Las guardas en tiempo de ejecución son contratos del IR ejercitados por el oráculo
+de pruebas, no un intérprete del producto. Los errores sintácticos/semánticos reales y los
+fallos de guardas estáticas de ámbito/inicialización descartan el TAC, incluso en código
+muerto. En cambio, los operandos dinámicamente inválidos pueden generar IR protegido y
+fallar en el oráculo; el IDE y la CLI no ejecutan ese IR.
 
-## Static values/effects battery (T9)
+## Batería de valores/efectos estáticos (T9)
 
-`values_effects_test.go` and `values_effects_cli_test.go` check core and built-CLI
-JSON execution, exact output, values/fault effects, deterministic reports, unchanged
-Analyze and source bytes. Cases include lazy nested joins, captures, nominal
-shadowing, mutable targets/arguments, float remainder, null-result effects and
-fresh undefined cells. The legacy `runFunctionFrames` oracle wrapper is preserved.
+`values_effects_test.go` y `values_effects_cli_test.go` verifican la ejecución JSON del
+núcleo y de la CLI construida, la salida exacta, los efectos de valores/fallos, los reportes
+deterministas, y que Analyze y los bytes del código fuente no cambien. Los casos incluyen
+uniones anidadas perezosas, capturas, sombreado nominal, destinos/argumentos mutables,
+residuo de flotantes, efectos con resultado null y celdas indefinidas nuevas. Se preserva el
+envoltorio heredado del oráculo `runFunctionFrames`.
 
 ```sh
 go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/values-effects.cps
 ```
 
-This emits TAC, not runtime output. The bounded oracle's expected example output
-is `3`, `1`, `null`, each followed by a newline; `x=2`, `y=3`, `count=1`.
-Unknown values/untyped signatures and try/catch are implemented by T10, not
-remaining unsupported constructions. The original T9 field-null narrowing policy
-was superseded by T10's unknown-field contract. The [final matrix](report.md)
-separates construction coverage from runtime guards and presentation checks.
+Esto emite TAC, no salida en tiempo de ejecución. La salida esperada del ejemplo en el
+oráculo acotado es `3`, `1`, `null`, cada uno seguido de un salto de línea; `x=2`, `y=3`,
+`count=1`. Los valores desconocidos/firmas sin tipo y try/catch están implementados por
+T10; no son construcciones pendientes sin soporte. La política original de T9 de
+estrechamiento de campos a null fue reemplazada por el contrato de campos desconocidos de
+T10. La [matriz final](report.md) separa la cobertura de construcciones de las guardas en
+tiempo de ejecución y de los controles de presentación.
 
-## Verification provenance
+## Procedencia de la verificación
 
-At `633aad1`, T9/T10 implementation records report isolated full Go suites
-(18 tested packages, four without tests), build/forced vet, 39 Node tests and
-scoped exact compatibility checks. T10's final nominal-field **test-only** addition
-followed full-suite proof; the parent reran four affected packages afterward,
-with production unchanged. The documentation refresh reruns only focused retained
-T9/T10/API tests, Node and external CLI examples; it does not manufacture a newer
-full-suite/build/vet/ANTLR result. See [the report](report.md#observed-verification-and-provenance)
-for separate historical counts; overlapping sets are not added together.
+En `633aad1`, los registros de implementación de T9/T10 reportan suites completas de Go
+aisladas (18 paquetes probados, cuatro sin pruebas), build/vet forzado, 39 pruebas de Node
+y verificaciones de compatibilidad exacta acotadas. La adición final de T10 de campos
+nominales, **exclusiva de pruebas**, se realizó después de la prueba con la suite completa;
+el agente principal volvió a ejecutar después los cuatro paquetes afectados, sin cambios en producción.
+La actualización de la documentación vuelve a ejecutar solo las pruebas focalizadas
+retenidas de T9/T10/API, Node y los ejemplos de la CLI externa; no fabrica un resultado más
+reciente de suite completa/build/vet/ANTLR. Consulte [el informe](report.md#verificación-observada-y-procedencia)
+para los conteos históricos separados; los conjuntos superpuestos no se suman.

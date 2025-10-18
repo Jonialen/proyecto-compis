@@ -41,7 +41,7 @@ Los Markdown son las fuentes editables. Los cuatro PDF versionados están separa
 
 ## Pruebas reproducibles
 
-La [política de reproducción](docs/semestre2/entrega2/acceptance.md#reproducible-tests) describe las dependencias y la separación entre pruebas focalizadas y verificaciones completas. Ejemplos desde la raíz:
+La [política de reproducción](docs/semestre2/entrega2/acceptance.md#pruebas-reproducibles) describe las dependencias y la separación entre pruebas focalizadas y verificaciones completas. Ejemplos desde la raíz:
 
 ```sh
 go test ./internal/compiscript -run '^TestComplexSourceFilesCLI$' -count=1 -v
@@ -74,7 +74,7 @@ Las especificaciones de texto `lex` y `yapar`, el ejemplo `input.txt`, el materi
 
 El informe documenta traducción de construcciones válidas del AST, funciones/closures, objetos/listas, valores dinámicos y try/catch, junto con las guardas estáticas y los fallos de ejecución previstos por el IR. Esto no certifica todos los programas, terminación ni una calificación. Los desplazamientos usan celdas abstractas, no una ABI física; no se entrega un ensamblador ni un intérprete de producto.
 
-Antes de presentar: ejecutar la batería en el entorno de evaluación, revisar carga/edición/guardado y paneles en un navegador real, confirmar disponibilidad de los recursos CDN CodeMirror/Viz.js, acceso a GitHub y contribuciones individuales reales. La disponibilidad sin conexión del navegador no está garantizada. Consultar los [controles humanos pendientes](docs/semestre2/entrega2/report.md#remaining-requirement-gaps-and-presentation-checks).
+Antes de presentar: ejecutar la batería en el entorno de evaluación, revisar carga/edición/guardado y paneles en un navegador real, confirmar disponibilidad de los recursos CDN CodeMirror/Viz.js, acceso a GitHub y contribuciones individuales reales. La disponibilidad sin conexión del navegador no está garantizada. Consultar los [controles humanos pendientes](docs/semestre2/entrega2/report.md#brechas-de-requisitos-pendientes-y-controles-de-presentación).
 
 ## Herramientas históricas: YALex y YAPar
 

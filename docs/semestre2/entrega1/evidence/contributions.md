@@ -1,16 +1,16 @@
-# Contribution evidence
+# Evidencia de contribuciones
 
-This evidence records only authorship observable in the repository history. It does not infer an additional contributor to satisfy the course requirement.
+Esta evidencia registra únicamente la autoría observable en el historial del repositorio. No infiere un contribuyente adicional para satisfacer el requisito del curso.
 
-## Reproduce the count
+## Reproducción del conteo
 
-Run from the repository root:
+Ejecute desde la raíz del repositorio:
 
 ```bash
 git shortlog -sne --all
 ```
 
-Observed on 2026-08-30 at baseline revision `97c394b` (later documentation commits are intentionally outside this snapshot):
+Observado el 2026-08-30 en la revisión base `97c394b` (los commits de documentación posteriores quedan intencionalmente fuera de esta instantánea):
 
 ```text
 53  jonialen <jonathanalej09@gmail.com>
@@ -19,8 +19,8 @@ Observed on 2026-08-30 at baseline revision `97c394b` (later documentation commi
  1  Jonathan Díaz <77712004+Jonialen@users.noreply.github.com>
 ```
 
-The command reports 80 commits across four author signatures. The first two signatures share the same email and differ only by capitalization, so they are aliases for one observable contributor identity (70 commits combined). The GitHub noreply signature contains the same `Jonialen` account handle; it is documented as another Jonathan/Jonialen alias (1 commit), rather than as a third person. `DijanU <pad23663@uvg.edu.gt>` is the second observable contributor identity (9 commits).
+El comando reporta 80 commits distribuidos en cuatro firmas de autor. Las dos primeras firmas comparten el mismo correo electrónico y difieren solo en el uso de mayúsculas, por lo que son alias de una misma identidad de contribuyente observable (70 commits en total). La firma noreply de GitHub contiene el mismo identificador de cuenta `Jonialen`; se documenta como otro alias de Jonathan/Jonialen (1 commit), y no como una tercera persona. `DijanU <pad23663@uvg.edu.gt>` es la segunda identidad de contribuyente observable (9 commits).
 
-## Requirement limitation
+## Limitación del requisito
 
-The Git history therefore supports two contributor identities, not three. This evidence cannot demonstrate compliance with a three-member contribution requirement. Adding a name or attribution without a corresponding commit would be inaccurate; any future update must be regenerated from the real Git history.
+Por lo tanto, el historial de Git respalda dos identidades de contribuyentes, no tres. Esta evidencia no puede demostrar el cumplimiento de un requisito de contribución de tres integrantes. Agregar un nombre o una atribución sin un commit correspondiente sería inexacto; cualquier actualización futura debe regenerarse a partir del historial real de Git.

@@ -1,44 +1,44 @@
-# Compile Compiscript in the IDE
+# Compilar Compiscript en el IDE
 
-The IDE uses the same `compiscript.Compile` facade as the CLI. It displays generated TAC and static storage metadata; it does not execute programs or implement a second compiler.
+El IDE usa la misma fachada `compiscript.Compile` que la CLI. Muestra el TAC generado y los metadatos de almacenamiento estático; no ejecuta programas ni implementa un segundo compilador.
 
-T9/T10 print, remainder, lazy joins, assignments, undefined/null storage, guarded untyped values and try/catch therefore use the same Compile action without a separate web runtime. A successful report can contain runtime guards: the IDE does not print program output or catch faults by executing TAC. Actual syntax/semantic or static initialization diagnostics still clear TAC/codegen atomically.
+Por lo tanto, print, residuo, uniones perezosas, asignaciones, almacenamiento undefined/null, valores sin tipo protegidos y try/catch de T9/T10 usan la misma acción Compile sin un runtime web separado. Un reporte exitoso puede contener guardas en tiempo de ejecución: el IDE no imprime la salida del programa ni captura fallos ejecutando el TAC. Los diagnósticos sintácticos/semánticos reales o de inicialización estática siguen limpiando TAC/codegen de forma atómica.
 
-## Quick path
+## Ruta rápida
 
-1. From the repository root, run `go run ./cmd/ide` and open `http://localhost:8080`.
-2. Select **Compiscript** and write source, use **Load .cps**, or choose **Load sample**. Uploads must have a `.cps` extension and a plain-text or unspecified MIME type (generic binary MIME is accepted for platform compatibility).
-3. Choose **Compile .cps**, or press **Run / Ctrl+Enter** while the Compiscript editor is active.
-4. Read **TAC**, **Diagnostics**, **Environments**, and **Extended symbols**. **Analyze .cps (AST)** retains the prior analysis-only flow and populates the AST tab.
+1. Desde la raíz del repositorio, ejecute `go run ./cmd/ide` y abra `http://localhost:8080`.
+2. Seleccione **Compiscript** y escriba el código fuente, use **Load .cps** o elija **Load sample**. Los archivos subidos deben tener extensión `.cps` y un tipo MIME de texto plano o no especificado (el MIME binario genérico se acepta por compatibilidad entre plataformas).
+3. Elija **Compile .cps**, o presione **Run / Ctrl+Enter** mientras el editor de Compiscript esté activo.
+4. Lea **TAC**, **Diagnostics**, **Environments** y **Extended symbols**. **Analyze .cps (AST)** conserva el flujo previo de solo análisis y llena la pestaña AST.
 
-**Clear .cps** clears the editor and invalidates results. Editing, loading another file, or switching between Compiscript and YAPar invalidates pending requests so late responses cannot replace newer outputs. A file read captures its original editor target; subsequent edits or uploads to that target supersede the read. **Save** retains the existing local-file export. YAPar's lexer, grammar, input, methods and analysis flow remain available.
+**Clear .cps** limpia el editor e invalida los resultados. Editar, cargar otro archivo o cambiar entre Compiscript y YAPar invalida las solicitudes pendientes, de modo que las respuestas tardías no puedan reemplazar salidas más recientes. La lectura de un archivo captura su editor destino original; las ediciones o cargas posteriores en ese destino reemplazan la lectura. **Save** conserva la exportación existente a un archivo local. El lexer, la gramática, la entrada, los métodos y el flujo de análisis de YAPar siguen disponibles.
 
-The server listens on `:8080` (all interfaces) and serves the relative `web` directory; use a trusted local environment and launch from the repository root. No documentation check started a listener. For prerequisites and the public local curl example, see the [run guide](README.md).
+El servidor escucha en `:8080` (todas las interfaces) y sirve el directorio relativo `web`; use un entorno local de confianza y láncelo desde la raíz del repositorio. Ninguna verificación de la documentación inició un listener. Para los prerrequisitos y el ejemplo público de curl local, consulte la [guía de ejecución](README.md).
 
-## HTTP contract
+## Contrato HTTP
 
-`POST /api/compiscript/compile` accepts exactly `{"source":"let x = 1;"}` as `application/json` (optional charset parameters are accepted). The endpoint invokes `Compile` once and returns its complete, unchanged `CompilationReport` fields plus `tacText`, rendered on the server by `report.TAC.String()`. The browser never formats TAC from JSON. Analyze remains at `POST /api/compiscript/analyze` with its previous report shape.
+`POST /api/compiscript/compile` acepta exactamente `{"source":"let x = 1;"}` como `application/json` (se aceptan parámetros charset opcionales). El endpoint invoca `Compile` una vez y devuelve los campos completos y sin cambios de su `CompilationReport`, más `tacText`, renderizado en el servidor por `report.TAC.String()`. El navegador nunca da formato al TAC a partir del JSON. Analyze permanece en `POST /api/compiscript/analyze` con la forma de reporte anterior.
 
-| Result | HTTP / body |
+| Resultado | HTTP / cuerpo |
 |---|---|
-| Valid supported source, including empty source | 200; core report and server TAC text |
-| Lexical, syntax, semantic or codegen diagnostic | 200; located typed diagnostics, `tac: null`, empty `tacText`, absent `codegen` |
-| Missing/null source, malformed JSON, unknown/case-variant/duplicate keys, trailing JSON or invalid UTF-8 | 400; existing `{"error":"…"}` shape |
-| Body over 1 MiB | 413 |
-| Missing/wrong content type | 415 |
-| Method other than POST | 405, `Allow: POST` |
-| CORS preflight | OPTIONS 204 |
+| Código fuente válido con soporte, incluido el código fuente vacío | 200; reporte del núcleo y texto TAC del servidor |
+| Diagnóstico léxico, sintáctico, semántico o de codegen | 200; diagnósticos tipados ubicados, `tac: null`, `tacText` vacío, `codegen` ausente |
+| Source faltante/null, JSON mal formado, llaves desconocidas/con variante de mayúsculas/duplicadas, JSON sobrante al final o UTF-8 inválido | 400; forma existente `{"error":"…"}` |
+| Cuerpo de más de 1 MiB | 413 |
+| Content type faltante/incorrecto | 415 |
+| Método distinto de POST | 405, `Allow: POST` |
+| Preflight de CORS | OPTIONS 204 |
 
-Transport failures clear previous TAC, symbols and other Compiscript panels. Source, filenames, errors and metadata use text nodes rather than HTML. Controls are restored after completion or invalidation; Clear, sample loading and editing remain usable during a request.
+Los fallos de transporte limpian el TAC previo, los símbolos y los demás paneles de Compiscript. El código fuente, los nombres de archivo, los errores y los metadatos usan nodos de texto en lugar de HTML. Los controles se restauran tras completarse o invalidarse la solicitud; Clear, la carga del ejemplo y la edición siguen disponibles durante una solicitud.
 
-## Reading extended symbols
+## Lectura de símbolos extendidos
 
-The frozen optional `codegen` report contains `unit`, `symbols`, `spaces` and `labels`. The unit is **abstract-cell**, not bytes or physical addresses. Symbol entries retain semantic identities, scope IDs, type/source metadata, locations (`space`, `offset`, `size`, `role`) and labels. The panel shows complete storage-space slots and label spans as text, preserving the authoritative core report rather than inferring layouts in JavaScript. Globals, main temporaries, invocation frames, retained environments and instances have distinct ownership. Labels are not cells; empty location lists do not imply an invented allocation.
+El reporte opcional congelado `codegen` contiene `unit`, `symbols`, `spaces` y `labels`. La unidad es **abstract-cell**, no bytes ni direcciones físicas. Las entradas de símbolos conservan identidades semánticas, IDs de ámbito, metadatos de tipo/origen, ubicaciones (`space`, `offset`, `size`, `role`) y etiquetas. El panel muestra como texto las ranuras completas de los espacios de almacenamiento y los rangos de etiquetas, preservando el reporte determinante del núcleo en lugar de inferir disposiciones en JavaScript. Los globales, los temporales de main, los marcos de invocación, los entornos retenidos y las instancias tienen propiedad distinta. Las etiquetas no son celdas; las listas de ubicaciones vacías no implican una asignación inventada.
 
-An original semantic symbol's `error` type can mark absent annotation information; it is not itself a compilation diagnostic. Private unknown-value and exception storage contracts are described in the [TAC reference](tac-design.md#guarded-values-and-synchronous-exceptions-t10). In particular, an unannotated field remains unknown even when initialized to null, while explicitly annotated fields retain their type/nominal guards. The browser does not infer a new type from its initial value.
+El tipo `error` de un símbolo semántico original puede marcar información de anotación ausente; no es en sí mismo un diagnóstico de compilación. Los contratos privados de almacenamiento de valores desconocidos y de excepciones se describen en la [referencia de TAC](tac-design.md#valores-protegidos-y-excepciones-síncronas-t10). En particular, un campo sin anotación sigue siendo desconocido aun cuando se inicialice con null, mientras que los campos anotados explícitamente conservan sus guardas de tipo/nominales. El navegador no infiere un tipo nuevo a partir de su valor inicial.
 
-## Verification and limits
+## Verificación y límites
 
-Focused checks: `go test ./cmd/ide -count=1`, `node --test web/*.test.cjs`, and `go vet ./cmd/ide`. The Node command runs both the implementation and retained independent VM tests. HTTP tests compare the complete core report and server TAC text, and check strict transport parity with Analyze. Node's built-in VM tests exercise request bodies, rendering, resets, hostile text, failures and asynchronous ordering without a new browser framework.
+Verificaciones focalizadas: `go test ./cmd/ide -count=1`, `node --test web/*.test.cjs` y `go vet ./cmd/ide`. El comando de Node ejecuta tanto las pruebas de la implementación como las pruebas VM independientes retenidas. Las pruebas HTTP comparan el reporte completo del núcleo y el texto TAC del servidor, y verifican la paridad estricta de transporte con Analyze. Las pruebas con la VM integrada de Node ejercitan los cuerpos de solicitud, el renderizado, los reinicios, el texto hostil, los fallos y el orden asíncrono sin un nuevo framework de navegador.
 
-These tests establish HTTP/DOM wiring, not real-browser appearance. CodeMirror and Viz.js retain their existing CDN requirements. Visual/manual browser evaluation remains separate; compiler execution proof belongs to the existing CLI/compiler tests. No remote execution service is provided.
+Estas pruebas establecen el cableado HTTP/DOM, no la apariencia en un navegador real. CodeMirror y Viz.js mantienen sus requisitos existentes de CDN. La evaluación visual/manual en el navegador sigue siendo aparte; la prueba de ejecución del compilador corresponde a las pruebas existentes de la CLI/compilador. No se ofrece ningún servicio de ejecución remota.

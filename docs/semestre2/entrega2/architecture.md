@@ -1,8 +1,8 @@
-# Compiscript compiler architecture
+# Arquitectura del compilador de Compiscript
 
-One core compiles source bytes into deterministic TAC and static code-generation metadata. CLI and HTTP are adapters; the IDE never implements another parser, semantic analyzer or TAC formatter.
+Un único núcleo compila los bytes fuente a TAC determinista y a metadatos estáticos de generación de código. La CLI y HTTP son adaptadores; el IDE nunca implementa otro analizador sintáctico, analizador semántico ni formateador de TAC.
 
-## Pipeline and ownership
+## Flujo y responsabilidades
 
 ```text
 .cps bytes
@@ -13,59 +13,59 @@ One core compiles source bytes into deterministic TAC and static code-generation
   -> CompilationReport {tac, diagnostics, scopes, codegen?}
 ```
 
-The entry point is [Compile](../../../internal/compiscript/compile.go). Parse and semantic analysis each run once. Frontend/semantic diagnostics are stably ordered by span, phase, code and message, matching Analyze. Lowering errors reject the whole result: no partial TAC and no codegen report escape. Diagnostics carry phase/type code, message and source span; malformed/recovered ASTs and conservative initialization/scope violations can report `TAC_UNSUPPORTED` in `codegen`, even in unreachable source. No valid AST construction kind is rejected merely for being print, untyped or try/catch.
+El punto de entrada es [Compile](../../../internal/compiscript/compile.go). El análisis sintáctico y el semántico se ejecutan una sola vez cada uno. Los diagnósticos del frontend y semánticos se ordenan de forma estable por ubicación, fase, código y mensaje, igual que en Analyze. Los errores de traducción (lowering) rechazan el resultado completo: no se filtra TAC parcial ni reporte de codegen. Los diagnósticos incluyen fase/código de tipo, mensaje y ubicación en la fuente; los AST mal formados o recuperados y las violaciones conservadoras de inicialización o de ámbito pueden reportar `TAC_UNSUPPORTED` en `codegen`, incluso en código inalcanzable. Ningún tipo de construcción válido del AST se rechaza solo por ser print, sin tipo o try/catch.
 
-Source bytes, AST and semantic scope snapshots are inputs, not mutable codegen storage. Lowering derives private binding/layout metadata and the extended report joins semantic identities to emitted storage. [Mixed acceptance](acceptance.md) checks source hashes, AST/scope snapshots, deterministic repeated Compile results and public facade parity.
+Los bytes fuente, el AST y las instantáneas de ámbitos semánticos son entradas, no almacenamiento mutable de codegen. La traducción deriva metadatos privados de enlace y disposición, y el reporte extendido une las identidades semánticas con el almacenamiento emitido. La [aceptación con casos mixtos](acceptance.md) comprueba los hashes de las fuentes, las instantáneas del AST y de los ámbitos, que los resultados de Compile repetidos sean deterministas y la paridad de la fachada pública.
 
-| Component | Responsibility / source |
+| Componente | Responsabilidad / fuente |
 |---|---|
-| Frontend | [frontend](../../../internal/compiscript/frontend): lexer/parser diagnostics and project AST mapping, not lowering from generated CST types |
-| Semantics | [semantic](../../../internal/compiscript/semantic): types, scopes, mutability, nominal declarations and static bounds |
-| IR/lowering | [tac](../../../internal/compiscript/tac): explicit instructions, temporary allocation, control transfers, calls, retained environments, objects/lists |
-| Compile facade | [compile.go](../../../internal/compiscript/compile.go): atomic pipeline and additive compilation report |
-| Analyze facade | [analyze.go](../../../internal/compiscript/analyze.go): unchanged analysis-only report contract |
-| CLI | [compiscript-tac](../../../cmd/compiscript-tac/main.go): text/JSON and exit policy; [compiscript](../../../cmd/compiscript/main.go): legacy Analyze |
-| HTTP / browser | [server](../../../cmd/ide/main.go), [web](../../../web): one Compile call, server `Program.String()` as `tacText`, text-safe views |
-| Execution proof | Test-only bounded frame/reference/environment oracles under [compiler tests](../../../internal/compiscript); no product VM |
+| Frontend | [frontend](../../../internal/compiscript/frontend): diagnósticos del lexer/parser y mapeo al AST del proyecto; no traduce desde los tipos CST generados |
+| Semántica | [semantic](../../../internal/compiscript/semantic): tipos, ámbitos, mutabilidad, declaraciones nominales y límites estáticos |
+| IR/traducción | [tac](../../../internal/compiscript/tac): instrucciones explícitas, asignación de temporales, transferencias de control, llamadas, entornos retenidos, objetos/listas |
+| Fachada Compile | [compile.go](../../../internal/compiscript/compile.go): flujo atómico y reporte de compilación aditivo |
+| Fachada Analyze | [analyze.go](../../../internal/compiscript/analyze.go): contrato de reporte solo de análisis, sin cambios |
+| CLI | [compiscript-tac](../../../cmd/compiscript-tac/main.go): texto/JSON y política de códigos de salida; [compiscript](../../../cmd/compiscript/main.go): Analyze heredado |
+| HTTP / navegador | [servidor](../../../cmd/ide/main.go), [web](../../../web): una sola llamada a Compile, `Program.String()` del servidor como `tacText`, vistas seguras para texto |
+| Prueba de ejecución | Oráculos acotados de marcos, referencias y entornos, solo para pruebas, en las [pruebas del compilador](../../../internal/compiscript); no hay VM de producto |
 
-## IR and storage at a glance
+## IR y almacenamiento de un vistazo
 
-The [TAC reference](tac-design.md) is authoritative for instruction fields and examples. Numeric operations explicitly widen integers with `i2f`; comparisons/not and branches model short-circuit conditions. Labels and jumps implement loops, boolean switch and nearest break/continue. Calls/returns use fresh frames; indirect calls use selected retained closures and signature guards. Object instructions allocate references, access fields and bind methods; list instructions allocate, read internal length and perform indexed loads/stores. Strings, functions, objects and lists are typed reference values, not numeric encodings.
+La [referencia TAC](tac-design.md) es la fuente autorizada para los campos de las instrucciones y los ejemplos. Las operaciones numéricas amplían explícitamente los enteros con `i2f`; las comparaciones, la negación y las ramificaciones modelan condiciones en cortocircuito. Las etiquetas y los saltos implementan los ciclos, el switch booleano y break/continue hacia el destino más cercano. Las llamadas y los retornos usan marcos nuevos; las llamadas indirectas usan closures retenidos seleccionados y guardas de firma. Las instrucciones de objetos asignan referencias, acceden a campos y enlazan métodos; las instrucciones de listas asignan, leen la longitud interna y realizan lecturas/escrituras indexadas. Las cadenas, funciones, objetos y listas son valores de referencia tipados, no codificaciones numéricas.
 
-T9 adds `print`, remainder, undefined-cell `declare`, lazy ternary joins, value-producing assignments and null-valued storage/calls. T10 adds checked unknown operations, dynamic member access/calls and synchronous handlers. This completes dispatch for the [18 statement and 14 expression kinds](tac-design.md#guarded-values-and-synchronous-exceptions-t10) in [ast/nodes.go](../../../internal/compiscript/ast/nodes.go); recovery `BadStmt`/`BadExpr` still reject.
+T9 agrega `print`, residuo, `declare` con celda undefined, uniones perezosas de ternarios, asignaciones que producen valor y almacenamiento/llamadas con valor null. T10 agrega operaciones verificadas sobre valores desconocidos, acceso y llamadas dinámicas a miembros y manejadores síncronos. Con esto se completa el despacho de los [18 tipos de sentencia y 14 de expresión](tac-design.md#valores-protegidos-y-excepciones-síncronas-t10) de [ast/nodes.go](../../../internal/compiscript/ast/nodes.go); los nodos de recuperación `BadStmt`/`BadExpr` siguen rechazándose.
 
-The semantic `TypeError` absent-information marker remains unchanged; private guarded TAC carries actual runtime tags without adding `TypeAny`. An **unannotated field always retains an unknown storage contract**, even with a null/numeric initializer; no initializer leaves it undefined. Explicit annotations still enforce widening, nominal identities, list shapes and full callable signatures before body effects. Missing function result annotations still mean null, not inferred return types. Catch bindings use exception-reference storage and can be captured.
+El marcador semántico de información ausente `TypeError` no cambia; el TAC protegido privado transporta las etiquetas reales de tiempo de ejecución sin agregar `TypeAny`. Un **campo sin anotación siempre conserva un contrato de almacenamiento desconocido**, incluso con un inicializador null o numérico; sin inicializador queda undefined. Las anotaciones explícitas siguen imponiendo la ampliación de tipos, las identidades nominales, las formas de las listas y las firmas completas de los invocables antes de los efectos del cuerpo. La ausencia de anotación de resultado en una función sigue significando null, no tipos de retorno inferidos. Los enlaces de catch usan almacenamiento de referencia de excepción y pueden ser capturados.
 
-| Space / identity | Static meaning |
+| Espacio / identidad | Significado estático |
 |---|---|
-| `s<scopeId>.<name>` | Semantic binding identity, not a byte address |
-| `globals` | Actually emitted non-frame/non-environment binding cells, including main block bindings |
-| `main` | Emitted temporary cells; main has no invented activation frame |
-| `frame:<procedure>` | Continuation, control/global-access links, optional result, receiver/parameters, locals and temporaries |
-| `environment:s<scopeId>` | Retained lexical binding layout and parent layout; each runtime entry is a distinct instance |
-| `instance:<class>` | Inherited and own field offsets; methods map to procedure labels |
-| Labels / temporary IDs | Control/procedure/layout labels are not cells; `t0...` cells are recycled after final consumption |
+| `s<scopeId>.<name>` | Identidad semántica del enlace, no una dirección en bytes |
+| `globals` | Celdas de enlace efectivamente emitidas que no pertenecen a un marco ni a un entorno, incluidos los enlaces del bloque principal |
+| `main` | Celdas temporales emitidas; main no tiene un marco de activación inventado |
+| `frame:<procedure>` | Continuación, enlaces de control y de acceso a globales, resultado opcional, receptor/parámetros, locales y temporales |
+| `environment:s<scopeId>` | Disposición de enlaces léxicos retenidos y disposición del padre; cada entrada en tiempo de ejecución es una instancia distinta |
+| `instance:<class>` | Desplazamientos de campos heredados y propios; los métodos se asocian a etiquetas de procedimiento |
+| Etiquetas / ID de temporales | Las etiquetas de control, procedimiento y disposición no son celdas; las celdas `t0...` se reciclan tras su consumo final |
 
-`codegen` exposes semantic symbols, all actual locations, spaces/slots and labels. Offsets/sizes are **abstract cells**, not bytes or physical addresses. One reference cell does not describe heap payload size. A parameter/local can have both a frame staging slot and retained environment binding; inherited fields can appear in several instance layouts. An unemitted or non-storage symbol has no fabricated allocation. A static layout ID is never a live invocation/object address.
+`codegen` expone los símbolos semánticos, todas las ubicaciones reales, los espacios/ranuras y las etiquetas. Los desplazamientos y tamaños son **celdas abstractas**, no bytes ni direcciones físicas. Una celda de referencia no describe el tamaño del contenido en el heap. Un parámetro o local puede tener a la vez una ranura de preparación en el marco y un enlace en un entorno retenido; los campos heredados pueden aparecer en varias disposiciones de instancia. Un símbolo no emitido o que no es de almacenamiento no recibe una asignación inventada. Un ID de disposición estática nunca es la dirección de una invocación u objeto vivo.
 
-## Practical choices and reasons
+## Decisiones prácticas y sus razones
 
-| Choice | Reason and boundary |
+| Decisión | Razón y límite |
 |---|---|
-| One pipeline and additive report | Avoid divergent compilers and preserve Analyze/TAC compatibility; derive layouts from actual emitted state rather than a second allocator |
-| Smallest-free temporary reuse | Release after the final emitted consumer; bound demand across statements while retaining live values across effectful calls. Peak demand is not global optimal register allocation |
-| Retained mutable lexical cells | Closures share binding identity, survive defining returns and separate different invocations; do not copy captured scalar snapshots |
-| One call/frame mechanism | Bound methods and closures reuse invocation/result/guard machinery instead of inventing an object interpreter |
-| Initializer policy A | Explicit user decision: all inherited/own fields initialize base-to-derived in declaration order, then only the nearest selected constructor runs once. No automatic ancestor constructor calls or undefined-field defaults; the regression observes 9 |
-| Fixed-length list references | Reuse semantic list types and preserve alias mutation; foreach freezes the initial reference/length, creates per-entry mutable bindings and uses the existing transfer stack |
-| Strict HTTP decoding | Share Analyze's transport guards: valid JSON/UTF-8, exact unique `source`, no trailing data, 1 MiB bound and correct method/media type |
-| Server-side TAC text | `Program.String()` serves CLI and HTTP; browser only renders results, avoiding duplicate formatting |
-| Guard missing recovered loop block | Preserve existing located syntax recovery, not a blanket panic catch or invented empty body |
-| Tagged unknown values, not new semantics | Reuse semantic identities and existing frames; validate actual operands and typed boundaries instead of changing Analyze or inventing defaults |
-| Explicit handlers on the dynamic call stack | Preserve effects before a language fault, unwind to the nearest active handler and remove it before catch-body entry; lexical closures do not retain handlers |
-| Check return before cleanup | Evaluate and type-check the return value while its handler is active; escaping return/break/continue remove only crossed handlers |
-| Bounded print and fault categories | Deterministic text and explicit catchable language faults; malformed IR, resource budgets and host failures remain fatal, with no blanket recovery |
+| Un solo flujo y reporte aditivo | Evitar compiladores divergentes y preservar la compatibilidad de Analyze/TAC; derivar las disposiciones del estado emitido real en lugar de un segundo asignador |
+| Reutilización de temporales por ranura libre más pequeña | Liberar tras el último consumidor emitido; acotar la demanda entre sentencias y conservar los valores vivos a través de llamadas con efectos. La demanda máxima no es una asignación de registros globalmente óptima |
+| Celdas léxicas mutables retenidas | Los closures comparten la identidad del enlace, sobreviven al retorno de la función que los define y separan invocaciones distintas; no se copian instantáneas de escalares capturados |
+| Un solo mecanismo de llamada/marco | Los métodos enlazados y los closures reutilizan la maquinaria de invocación, resultado y guardas en lugar de inventar un intérprete de objetos |
+| Política de inicialización A | Decisión explícita del usuario: todos los campos heredados y propios se inicializan de la base a la derivada en orden de declaración, y luego solo el constructor seleccionado más cercano se ejecuta una vez. No hay llamadas automáticas a constructores de ancestros ni valores por defecto undefined para campos; la regresión observa 9 |
+| Referencias a listas de longitud fija | Reutilizar los tipos de lista semánticos y preservar la mutación a través de alias; foreach congela la referencia y la longitud iniciales, crea enlaces mutables por elemento y usa la pila de transferencias existente |
+| Decodificación HTTP estricta | Compartir las guardas de transporte de Analyze: JSON/UTF-8 válido, `source` exacto y único, sin datos sobrantes, límite de 1 MiB y método/tipo de medio correctos |
+| Texto TAC generado en el servidor | `Program.String()` sirve a la CLI y a HTTP; el navegador solo representa los resultados, lo que evita duplicar el formato |
+| Guarda ante bloque de ciclo recuperado faltante | Preservar la recuperación sintáctica ubicada existente, no una captura genérica de panic ni un cuerpo vacío inventado |
+| Valores desconocidos etiquetados, no semántica nueva | Reutilizar las identidades semánticas y los marcos existentes; validar los operandos reales y las fronteras tipadas en lugar de cambiar Analyze o inventar valores por defecto |
+| Manejadores explícitos en la pila dinámica de llamadas | Preservar los efectos anteriores a un fallo del lenguaje, desenrollar hasta el manejador activo más cercano y quitarlo antes de entrar al cuerpo de catch; los closures léxicos no retienen manejadores |
+| Verificar el retorno antes de la limpieza | Evaluar y verificar el tipo del valor de retorno mientras su manejador está activo; return/break/continue que escapan quitan solo los manejadores atravesados |
+| Print acotado y categorías de fallo | Texto determinista y fallos del lenguaje explícitos y capturables; el IR mal formado, los límites de recursos y los fallos del anfitrión siguen siendo fatales, sin recuperación genérica |
 
-## Boundary of the result
+## Alcance del resultado
 
-Dynamic signature/initialization, null, field and list-bounds guards are backend obligations exercised by the test oracle, not stronger static Analyze promises. A dynamic-invalid program accepted by Analyze can generate guarded TAC and fault when executed in tests. Syntax/semantic errors still produce nil TAC/no codegen; conservative static initialization guards remain explicit. No assembler, physical ABI, garbage collector or product executor is claimed. The [initial coverage gap is resolved](report.md#remaining-requirement-gaps-and-presentation-checks), with no new concrete normative gap established here. Construction coverage is not exhaustive correctness or browser visual certification.
+Las guardas dinámicas de firma e inicialización, null, campos y límites de listas son obligaciones del backend ejercitadas por el oráculo de pruebas, no promesas estáticas más fuertes de Analyze. Un programa inválido en tiempo de ejecución pero aceptado por Analyze puede generar TAC protegido y fallar al ejecutarse en las pruebas. Los errores sintácticos y semánticos siguen produciendo TAC nil y sin codegen; las guardas estáticas conservadoras de inicialización siguen siendo explícitas. No se afirma contar con ensamblador, ABI física, recolector de basura ni ejecutor de producto. La [brecha inicial de cobertura está resuelta](report.md#brechas-de-requisitos-pendientes-y-controles-de-presentación), y aquí no se establece ninguna brecha normativa concreta nueva. La cobertura de construcciones no equivale a corrección exhaustiva ni a certificación visual en el navegador.

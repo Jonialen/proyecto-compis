@@ -1,36 +1,38 @@
-# Compiscript Grammar Audit
+# Auditoría de la gramática de Compiscript
 
-## Compatibility
+## Compatibilidad
 
-The original grammar remains authoritative. `forStatement` preserves initializer and
-condition separator ownership, while official `if (n < 60) continue;` evidence
-justifies accepting one existing statement in each `if` branch without narrowing syntax.
+La gramática original sigue siendo determinante. `forStatement` preserva la pertenencia
+del inicializador y del separador de la condición, mientras que la evidencia oficial
+`if (n < 60) continue;` justifica aceptar una sentencia existente en cada rama de `if`
+sin restringir la sintaxis.
 
-## Float Delta
+## Delta de flotantes
 
-Official type rules justify reserved `float`. `FloatLiteral` precedes `IntegerLiteral`,
-requires digits on both sides, preserves `42` and `floatValue`, and rejects `.5`,
-`5.`, `1..2`, and `1.2.3` with diagnostics.
+Las reglas oficiales de tipos justifican la palabra reservada `float`. `FloatLiteral` precede
+a `IntegerLiteral`, requiere dígitos a ambos lados, preserva `42` y `floatValue`, y rechaza
+`.5`, `5.`, `1..2` y `1.2.3` con diagnósticos.
 
-## Generation Evidence
+## Evidencia de generación
 
-The generator verifies ANTLR 4.13.2, stages argv-safe output, formats Go, and swaps
-only after success; focused tests cover spaced paths and every specified failure.
-Generation runs from the grammar directory with the grammar basename, so generated
-headers contain `Compiscript.g4` rather than an absolute checkout path. A focused
-test regenerates from two distinct temporary checkout paths and compares both outputs
-with the committed artifacts byte for byte.
+El generador verifica ANTLR 4.13.2, prepara una salida segura respecto de argv, da formato
+al código Go y reemplaza solo tras un resultado exitoso; las pruebas focalizadas cubren rutas
+con espacios y cada fallo especificado. La generación se ejecuta desde el directorio de la
+gramática con el nombre base de la gramática, de modo que los encabezados generados
+contienen `Compiscript.g4` en lugar de una ruta absoluta de la copia local. Una prueba
+focalizada regenera desde dos rutas temporales distintas de copia local y compara ambas
+salidas con los artefactos confirmados, byte por byte.
 
-## Recovery and Acceptance Evidence
+## Evidencia de recuperación y de aceptación
 
-`recovery_test.go` proves that a malformed declaration becomes one localized
-`BadStmt` while its valid declaration siblings remain mapped, and that a malformed
-print operand becomes `BadExpr` without replacing adjacent print statements. It also
-parses two representative official `Especificaciones.md` examples with no diagnostics
-or top-level bad statements. The canonical manifest fixes this exact ordered
-eight-artifact scope:
+`recovery_test.go` demuestra que una declaración mal formada se convierte en un único
+`BadStmt` localizado mientras sus declaraciones hermanas válidas siguen mapeadas, y que un
+operando de print mal formado se convierte en `BadExpr` sin reemplazar las sentencias print
+adyacentes. También parsea dos ejemplos oficiales representativos de `Especificaciones.md`
+sin diagnósticos ni sentencias erróneas de nivel superior. El manifiesto canónico fija este
+alcance exacto y ordenado de ocho artefactos:
 `(cd "$tree" && for f in Compiscript.interp Compiscript.tokens CompiscriptLexer.interp CompiscriptLexer.tokens compiscript_base_visitor.go compiscript_lexer.go compiscript_parser.go compiscript_visitor.go; do sha256sum "$f"; done) | sha256sum | awk '{print $1}'`.
-After portable regeneration changed only checkout-specific generated headers, the
-current checked-in identity is
-`79d82b69a89a6ef6b5d21a1eaf9ec9b5699b9db3048c2deaa244bbdc344fe2bb`, matching
-the gate in `acceptance.md`.
+Después de que la regeneración portable cambiara solo los encabezados generados específicos
+de la copia local, la identidad confirmada actual es
+`79d82b69a89a6ef6b5d21a1eaf9ec9b5699b9db3048c2deaa244bbdc344fe2bb`, que coincide
+con la compuerta de `acceptance.md`.

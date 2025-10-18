@@ -1,10 +1,10 @@
-# Compiscript IDE API
+# API del IDE de Compiscript
 
-The IDE analyzes browser-provided Compiscript without changing the YALex/YAPar `/api/process` workflow.
+El IDE analiza el código Compiscript proporcionado por el navegador sin cambiar el flujo `/api/process` de YALex/YAPar.
 
-## Reproduce
+## Reproducción
 
-Start the server, then submit source:
+Inicie el servidor y luego envíe el código fuente:
 
 ```bash
 go run ./cmd/ide
@@ -14,18 +14,18 @@ curl --fail-with-body -sS \
   http://localhost:8080/api/compiscript/analyze
 ```
 
-The `200` response is the exact JSON encoding of `model.AnalysisReport`: `ast`, `diagnostics`, and `scopes`. Diagnostics, including syntax recovery diagnostics, are report data and still return `200`. Empty source is valid.
+La respuesta `200` es la codificación JSON exacta de `model.AnalysisReport`: `ast`, `diagnostics` y `scopes`. Los diagnósticos, incluidos los de recuperación sintáctica, son datos del reporte y aun así devuelven `200`. El código fuente vacío es válido.
 
-The complete request body must be valid UTF-8 and no larger than 1 MiB (`1,048,576` bytes). The JSON object must contain exactly one string-valued `source`; duplicate keys are rejected rather than resolved last-value-wins. `application/json; charset=utf-8` is accepted.
+El cuerpo completo de la solicitud debe ser UTF-8 válido y no superar 1 MiB (`1,048,576` bytes). El objeto JSON debe contener exactamente un `source` con valor de tipo string; las llaves duplicadas se rechazan en lugar de resolverse con la regla de que gana el último valor. Se acepta `application/json; charset=utf-8`.
 
-## HTTP contract
+## Contrato HTTP
 
-| Status | Meaning |
+| Estado | Significado |
 |---:|---|
-| `200` | The complete analysis report was emitted. |
-| `400` | The body is invalid UTF-8; JSON is malformed/trailing; `source` is missing, duplicated, or not a string; or the object has unknown fields. |
-| `405` | The request method is not `POST`; `Allow: POST` is returned. |
-| `413` | The complete request body exceeds 1 MiB; no partial source is analyzed. |
-| `415` | `Content-Type` is not `application/json`. |
+| `200` | Se emitió el reporte de análisis completo. |
+| `400` | El cuerpo es UTF-8 inválido; el JSON está mal formado o tiene contenido sobrante al final; `source` falta, está duplicado o no es un string; o el objeto tiene campos desconocidos. |
+| `405` | El método de la solicitud no es `POST`; se devuelve `Allow: POST`. |
+| `413` | El cuerpo completo de la solicitud supera 1 MiB; no se analiza ningún código fuente parcial. |
+| `415` | `Content-Type` no es `application/json`. |
 
-Errors use `{"error":"<stable message>"}`. The browser's Compiscript editor renders the submitted source, nested visual AST, diagnostics, and nested environments/symbols with DOM text nodes rather than HTML injection.
+Los errores usan `{"error":"<stable message>"}`. El editor de Compiscript del navegador renderiza el código fuente enviado, el AST visual anidado, los diagnósticos y los entornos/símbolos anidados con nodos de texto del DOM en lugar de inyección de HTML.
