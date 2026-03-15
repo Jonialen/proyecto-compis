@@ -1,0 +1,56 @@
+(* Analizador léxico para Lisp/Scheme simplificado *)
+(* Tokens segun Laboratorio 2 - Compiladores UVG     *)
+
+let DIGIT   = [0-9]
+let LETTER  = [a-zA-Z]
+let ALNUM   = [a-zA-Z0-9_]
+
+rule tokens =
+
+  (* Espacios en blanco — se descartan *)
+  | [' ' '\t' '\n' '\r']               { skip }
+
+  (* Comentarios de linea: ; hasta fin de linea *)
+  | ';' [^ '\n']*                      { COMMENT }
+
+  (* Literales especiales — antes de ID para ganar por prioridad *)
+  | "Nil"                              { NIL }
+  | ('T' | 'F')                        { BOOLEAN }
+
+  (* Numeros — FLOAT antes que INT *)
+  | DIGIT+ '.' DIGIT+                  { FLOAT }
+  | DIGIT+                             { INT }
+
+  (* Strings con secuencias de escape: "hola \"mundo\"" *)
+  | '"' ([^ '"' '\\'] | '\\' _)* '"'  { STRING }
+
+  (* Operadores de dos caracteres ANTES que los de uno *)
+  | "<="                               { OPERATOR }
+  | ">="                               { OPERATOR }
+  | '+'                                { OPERATOR }
+  | '-'                                { OPERATOR }
+  | '*'                                { OPERATOR }
+  | '/'                                { OPERATOR }
+  | '='                                { OPERATOR }
+  | '<'                                { OPERATOR }
+  | '>'                                { OPERATOR }
+
+  (* Keywords — ANTES que ID para ganar empate de longitud *)
+  | "If"                               { KEYWORD }
+  | "defun"                            { KEYWORD }
+  | "cond"                             { KEYWORD }
+  | "let"                              { KEYWORD }
+
+  (* Identificadores *)
+  | LETTER ALNUM*                      { ID }
+
+  (* Delimitadores *)
+  | '('                                { DELIMITER }
+  | ')'                                { DELIMITER }
+  | '['                                { DELIMITER }
+  | ']'                                { DELIMITER }
+  | '{'                                { DELIMITER }
+  | '}'                                { DELIMITER }
+  | ','                                { DELIMITER }
+  | '.'                                { DELIMITER }
+  | ':'                                { DELIMITER }
