@@ -29,9 +29,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Validation: We need either a source file to tokenize or an output file to generate.
-	if *srcFile == "" && *outFile == "" {
-		fmt.Fprintln(os.Stderr, "Error: You must provide either -src to tokenize a file or -out to generate a lexer.")
+	// Validation: We need either a source file to tokenize, an output file to generate, or tree mode.
+	if *srcFile == "" && *outFile == "" && !*genTree {
+		fmt.Fprintln(os.Stderr, "Error: You must provide at least one of -src, -out, or -tree.")
 		os.Exit(1)
 	}
 
