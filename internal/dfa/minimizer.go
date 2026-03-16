@@ -1,6 +1,6 @@
 package dfa
 
-// Minimize applies the Hopcroft/Table-Filling algorithm to reduce a DFA to its
+// Minimize applies the Table-Filling algorithm to reduce a DFA to its
 // minimal number of states by merging equivalent states.
 // Two states are equivalent if for every possible input string, they both
 // either lead to an accepting state or both lead to a non-accepting state.

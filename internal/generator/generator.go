@@ -42,7 +42,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 )
 
 // Token represents a lexical token identified by the generated lexer.
