@@ -1,12 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"genanalex/internal/dfa"
+	"genanalex/internal/generator"
 	"genanalex/internal/lexer"
 	"genanalex/internal/regex"
 	"genanalex/internal/yalex"
@@ -395,4 +398,362 @@ rule tokens =
 		{Type: "ID", Lexeme: "True"},
 	}
 	assertTokens(t, tokens, want)
+}
+
+// ---------- CLI / Generator Integration tests ----------
+
+// requireGoCompilerInteg skips if the Go toolchain is not available.
+func requireGoCompilerInteg(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("requires go compiler")
+	}
+}
+
+// projectRoot returns the project root directory (where go.mod lives).
+func projectRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	// The integration tests run from the project root already, but be safe.
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("could not find project root (go.mod)")
+		}
+		dir = parent
+	}
+}
+
+func TestIntegration_OutFlag(t *testing.T) {
+	requireGoCompilerInteg(t)
+	root := projectRoot(t)
+
+	tmpDir := t.TempDir()
+	outFile := filepath.Join(tmpDir, "generated_lexer.go")
+
+	cmd := exec.Command("go", "run", "main.go", "-yal", "testdata/lexer.yal", "-out", outFile)
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go run main.go -yal ... -out ... failed: %v\n%s", err, string(out))
+	}
+
+	// Verify output file was created and is non-empty
+	info, err := os.Stat(outFile)
+	if err != nil {
+		t.Fatalf("output file not created: %v", err)
+	}
+	if info.Size() == 0 {
+		t.Error("output file is empty")
+	}
+
+	// Verify the generated file can compile
+	goMod := "module testlexer\n\ngo 1.26.1\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+	// Rename to main.go for compilation
+	mainFile := filepath.Join(tmpDir, "main.go")
+	if outFile != mainFile {
+		data, err := os.ReadFile(outFile)
+		if err != nil {
+			t.Fatalf("reading generated file: %v", err)
+		}
+		if err := os.WriteFile(mainFile, data, 0644); err != nil {
+			t.Fatalf("writing main.go: %v", err)
+		}
+	}
+
+	binaryPath := filepath.Join(tmpDir, "lexer_bin")
+	compileCmd := exec.Command("go", "build", "-o", binaryPath, mainFile)
+	compileCmd.Dir = tmpDir
+	compileOut, err := compileCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("compiling generated lexer: %v\n%s", err, string(compileOut))
+	}
+}
+
+func TestIntegration_TreeFlagStandalone(t *testing.T) {
+	requireGoCompilerInteg(t)
+	root := projectRoot(t)
+
+	// tree.dot is written to the process working directory (project root)
+	dotPath := filepath.Join(root, "tree.dot")
+
+	// Clean up any pre-existing tree.dot, and ensure cleanup after the test
+	os.Remove(dotPath)
+	t.Cleanup(func() { os.Remove(dotPath) })
+
+	cmd := exec.Command("go", "run", "main.go", "-yal", "testdata/lexer.yal", "-tree")
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go run main.go -yal ... -tree failed: %v\n%s", err, string(out))
+	}
+
+	// Verify tree.dot was created
+	info, err := os.Stat(dotPath)
+	if err != nil {
+		t.Fatalf("tree.dot not created: %v", err)
+	}
+	if info.Size() == 0 {
+		t.Error("tree.dot is empty")
+	}
+}
+
+func TestIntegration_OutAndSrcTogether(t *testing.T) {
+	requireGoCompilerInteg(t)
+	root := projectRoot(t)
+
+	tmpDir := t.TempDir()
+	outFile := filepath.Join(tmpDir, "generated_lexer.go")
+
+	cmd := exec.Command("go", "run", "main.go",
+		"-yal", "testdata/lexer.yal",
+		"-src", "testdata/test.lisp",
+		"-out", outFile,
+	)
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go run main.go -yal -src -out failed: %v\n%s", err, string(out))
+	}
+
+	output := string(out)
+
+	// Verify the output file was created
+	if _, err := os.Stat(outFile); err != nil {
+		t.Fatalf("output file not created: %v", err)
+	}
+
+	// Verify tokens were printed to stdout (from the -src flag)
+	if !strings.Contains(output, "--- Tokenization Results ---") {
+		t.Errorf("expected tokenization results in stdout:\n%s", output)
+	}
+	if !strings.Contains(output, "KEYWORD") {
+		t.Errorf("expected KEYWORD token in stdout:\n%s", output)
+	}
+
+	// Verify the generated lexer was also written
+	if !strings.Contains(output, "Lexer generation successful") {
+		t.Errorf("expected generation success message:\n%s", output)
+	}
+}
+
+func TestIntegration_GeneratedLexerMatchesSimulator(t *testing.T) {
+	requireGoCompilerInteg(t)
+	root := projectRoot(t)
+
+	// --- Step 1: Run the simulator (in-memory) ---
+	yalData, err := os.ReadFile(filepath.Join(root, "testdata", "lexer.yal"))
+	if err != nil {
+		t.Fatalf("reading lexer.yal: %v", err)
+	}
+	srcData, err := os.ReadFile(filepath.Join(root, "testdata", "test.lisp"))
+	if err != nil {
+		t.Fatalf("reading test.lisp: %v", err)
+	}
+
+	// Build DFA entries via the full pipeline
+	tmpYalDir := t.TempDir()
+	yalPath := filepath.Join(tmpYalDir, "lexer.yal")
+	if err := os.WriteFile(yalPath, yalData, 0644); err != nil {
+		t.Fatalf("writing yal: %v", err)
+	}
+
+	parseResult, err := yalex.ParseFile(yalPath)
+	if err != nil {
+		t.Fatalf("parsing yal: %v", err)
+	}
+
+	expandedRules, err := yalex.Expand(parseResult.Macros, parseResult.Rules)
+	if err != nil {
+		t.Fatalf("expanding macros: %v", err)
+	}
+
+	var dfaEntries []lexer.DFAEntry
+	for _, rule := range expandedRules {
+		normalized, err := regex.Normalize(rule.Pattern)
+		if err != nil {
+			t.Fatalf("normalizing: %v", err)
+		}
+		postfix, err := regex.BuildPostfix(normalized)
+		if err != nil {
+			t.Fatalf("postfix: %v", err)
+		}
+		treeRoot, posToSymbol, err := dfa.BuildTree(postfix)
+		if err != nil {
+			t.Fatalf("tree: %v", err)
+		}
+		builtDFA := dfa.BuildDFA(treeRoot, posToSymbol, rule.Action)
+		minimized := dfa.Minimize(builtDFA)
+		dfaEntries = append(dfaEntries, lexer.DFAEntry{
+			DFA:       minimized,
+			TokenName: rule.Action,
+			Priority:  rule.Priority,
+		})
+	}
+
+	// Run simulator
+	srcPath := filepath.Join(tmpYalDir, "test.lisp")
+	if err := os.WriteFile(srcPath, srcData, 0644); err != nil {
+		t.Fatalf("writing src: %v", err)
+	}
+	src, err := lexer.ReadSource(srcPath)
+	if err != nil {
+		t.Fatalf("reading source: %v", err)
+	}
+	simTokens, simErrors := lexer.Tokenize(dfaEntries, src)
+	if len(simErrors) > 0 {
+		t.Fatalf("simulator errors: %v", simErrors)
+	}
+
+	// --- Step 2: Generate, compile, and run the standalone lexer ---
+	genDir := t.TempDir()
+	goMod := "module testlexer\n\ngo 1.26.1\n"
+	if err := os.WriteFile(filepath.Join(genDir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+
+	genFile := filepath.Join(genDir, "main.go")
+	if err := generator.GenerateSource(genFile, dfaEntries); err != nil {
+		t.Fatalf("GenerateSource: %v", err)
+	}
+
+	binaryPath := filepath.Join(genDir, "lexer_bin")
+	compileCmd := exec.Command("go", "build", "-o", binaryPath, genFile)
+	compileCmd.Dir = genDir
+	compileOut, err := compileCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("compilation: %v\n%s", err, string(compileOut))
+	}
+
+	// Copy test.lisp to genDir
+	genSrcPath := filepath.Join(genDir, "test.lisp")
+	if err := os.WriteFile(genSrcPath, srcData, 0644); err != nil {
+		t.Fatalf("writing test.lisp: %v", err)
+	}
+
+	runCmd := exec.Command(binaryPath, "-src", genSrcPath)
+	runOut, err := runCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("running generated lexer: %v\n%s", err, string(runOut))
+	}
+
+	// --- Step 3: Parse the generated lexer's output and compare ---
+	genOutput := string(runOut)
+
+	// Parse tokens from the generated lexer's output
+	// Format: [line] TYPE         lexeme
+	genTokens := parseGeneratedOutput(t, genOutput)
+
+	// Compare token counts
+	if len(genTokens) != len(simTokens) {
+		t.Errorf("token count mismatch: simulator=%d, generated=%d", len(simTokens), len(genTokens))
+		maxLen := len(simTokens)
+		if len(genTokens) > maxLen {
+			maxLen = len(genTokens)
+		}
+		for i := 0; i < maxLen; i++ {
+			simStr := "<missing>"
+			genStr := "<missing>"
+			if i < len(simTokens) {
+				simStr = fmt.Sprintf("[%d] %s %q", simTokens[i].Line, simTokens[i].Type, simTokens[i].Lexeme)
+			}
+			if i < len(genTokens) {
+				genStr = fmt.Sprintf("[%d] %s %q", genTokens[i].line, genTokens[i].typ, genTokens[i].lexeme)
+			}
+			if simStr != genStr {
+				t.Logf("  diff[%d]: sim=%s | gen=%s", i, simStr, genStr)
+			}
+		}
+		return
+	}
+
+	// Compare each token
+	for i := range simTokens {
+		sim := simTokens[i]
+		gen := genTokens[i]
+
+		if sim.Type != gen.typ {
+			t.Errorf("token[%d] type mismatch: simulator=%q, generated=%q", i, sim.Type, gen.typ)
+		}
+		if sim.Lexeme != gen.lexeme {
+			t.Errorf("token[%d] lexeme mismatch: simulator=%q, generated=%q", i, sim.Lexeme, gen.lexeme)
+		}
+		if sim.Line != gen.line {
+			t.Errorf("token[%d] line mismatch: simulator=%d, generated=%d", i, sim.Line, gen.line)
+		}
+	}
+}
+
+// parsedToken represents a token parsed from the generated lexer's stdout.
+type parsedToken struct {
+	line   int
+	typ    string
+	lexeme string
+}
+
+// parseGeneratedOutput parses the generated lexer's stdout into tokens.
+// Expected format per line: [line] TYPE         lexeme
+func parseGeneratedOutput(t *testing.T, output string) []parsedToken {
+	t.Helper()
+	var tokens []parsedToken
+
+	lines := strings.Split(output, "\n")
+	inTokens := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "--- Tokens ---" {
+			inTokens = true
+			continue
+		}
+		if strings.HasPrefix(trimmed, "--- ") && trimmed != "--- Tokens ---" {
+			inTokens = false
+			continue
+		}
+		if !inTokens || trimmed == "" {
+			continue
+		}
+		// Parse: [line] TYPE         lexeme
+		if !strings.HasPrefix(trimmed, "[") {
+			continue
+		}
+
+		var lineNum int
+		var typ, lexeme string
+		// Find the closing bracket
+		closeBracket := strings.Index(trimmed, "]")
+		if closeBracket < 0 {
+			continue
+		}
+		_, err := fmt.Sscanf(trimmed[1:closeBracket], "%d", &lineNum)
+		if err != nil {
+			continue
+		}
+		rest := strings.TrimSpace(trimmed[closeBracket+1:])
+		// Split into type and lexeme (type is the first whitespace-delimited field)
+		fields := strings.Fields(rest)
+		if len(fields) < 1 {
+			continue
+		}
+		typ = fields[0]
+		if len(fields) >= 2 {
+			lexeme = strings.Join(fields[1:], " ")
+		}
+
+		tokens = append(tokens, parsedToken{
+			line:   lineNum,
+			typ:    typ,
+			lexeme: lexeme,
+		})
+	}
+
+	return tokens
 }
