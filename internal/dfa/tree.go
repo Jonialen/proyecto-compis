@@ -1,3 +1,5 @@
+// Package dfa provides tools for building and minimizing Deterministic Finite Automata
+// from regular expression syntax trees.
 package dfa
 
 import (
@@ -7,35 +9,35 @@ import (
 	"genanalex/internal/regex"
 )
 
-// NodeKind represents the type of a syntax tree node.
+// NodeKind identifies the type of an operation or leaf in the syntax tree.
 type NodeKind int
 
 const (
-	NodeLeaf    NodeKind = iota // leaf with a symbol
-	NodeEpsilon                 // ε (epsilon)
-	NodeCat                     // concatenation ·
-	NodeOr                      // alternation |
-	NodeStar                    // Kleene star *
-	NodePlus                    // one-or-more +
-	NodeOpt                     // zero-or-one ?
+	NodeLeaf    NodeKind = iota // A leaf node containing an input symbol.
+	NodeEpsilon                 // An epsilon (ε) node representing the empty string.
+	NodeCat                     // A concatenation (·) node.
+	NodeOr                      // An alternation (|) node.
+	NodeStar                    // A Kleene star (*) node for 0 or more repetitions.
+	NodePlus                    // A plus (+) node for 1 or more repetitions.
+	NodeOpt                     // An optional (?) node for 0 or 1 occurrence.
 )
 
-// Node is a node in the regex syntax tree.
+// Node represents a single element in the syntax tree of a regular expression.
 type Node struct {
 	Kind   NodeKind
-	Symbol rune // only valid for NodeLeaf
-	Pos    int  // position number, only for NodeLeaf (1-indexed, 0 means epsilon)
+	Symbol rune // The input symbol (valid for NodeLeaf).
+	Pos    int  // The unique position ID (1-indexed) assigned to leaf nodes.
 	Left   *Node
 	Right  *Node
 
-	// Memoization caches for Nullable/FirstPos/LastPos
+	// Memoization caches used to optimize the computation of DFA properties.
 	nullableCache *bool
 	firstPosCache map[int]bool
 	lastPosCache  map[int]bool
 }
 
-// BuildTree constructs a syntax tree from a postfix []RegexToken.
-// Returns the root node and a map from position → symbol.
+// BuildTree transforms a postfix regular expression into a syntax tree.
+// It returns the root node and a mapping of leaf positions to their symbols.
 func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 	var stack []*Node
 	posCounter := 0
@@ -44,6 +46,7 @@ func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 	for _, tok := range postfix {
 		switch tok.Kind {
 		case regex.TokAtom:
+			// Each literal symbol becomes a leaf node with a unique position.
 			posCounter++
 			leaf := &Node{
 				Kind:   NodeLeaf,
@@ -54,6 +57,7 @@ func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 			stack = append(stack, leaf)
 
 		case regex.TokOp:
+			// Operators pop their operands from the stack and push a new subtree.
 			switch tok.Op {
 			case '|':
 				if len(stack) < 2 {
@@ -102,11 +106,12 @@ func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 			}
 
 		case regex.TokOpen, regex.TokClose:
-			// Should not appear in postfix
+			// Parentheses are used during postfix conversion but should not exist in the final postfix.
 			return nil, nil, fmt.Errorf("unexpected parenthesis in postfix")
 		}
 	}
 
+	// At the end, there should be exactly one node on the stack (the root).
 	if len(stack) != 1 {
 		return nil, nil, fmt.Errorf("syntax tree build error: %d nodes remaining (expected 1)", len(stack))
 	}
@@ -114,7 +119,7 @@ func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 	return stack[0], posToSymbol, nil
 }
 
-// ToDOT generates a Graphviz DOT representation of the syntax tree.
+// ToDOT generates a Graphviz DOT representation for visualizing the syntax tree.
 func ToDOT(root *Node) string {
 	var sb strings.Builder
 	sb.WriteString("digraph syntaxtree {\n")
@@ -144,6 +149,7 @@ func ToDOT(root *Node) string {
 	return sb.String()
 }
 
+// nodeLabel provides a descriptive label for each node in the DOT representation.
 func nodeLabel(n *Node) string {
 	switch n.Kind {
 	case NodeLeaf:
