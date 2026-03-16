@@ -1,3 +1,5 @@
+// Package regex provides tools for normalizing, tokenizing, and converting
+// regular expressions into postfix notation suitable for DFA construction.
 package regex
 
 import (
@@ -6,47 +8,51 @@ import (
 	"unicode"
 )
 
-// ConcatOp is a sentinel rune for the concatenation operator.
-// Used ONLY in the Token.Op field, never as an atom.
+// ConcatOp is a sentinel rune representing the explicit concatenation operator.
+// It is inserted during normalization to facilitate syntax tree building.
 const ConcatOp = '\x01'
 
-// EndMarker is the augmented end-marker symbol.
-// Used ONLY as an atom symbol, never in real input.
+// EndMarker is a special augmented symbol used to mark the end of a regular expression.
+// It is essential for identifying accepting states during direct DFA construction.
 const EndMarker = '\x00'
 
-// TokKind distinguishes operator tokens from atom tokens.
+// TokKind defines the type of a regular expression token.
 type TokKind int
 
 const (
-	TokAtom  TokKind = iota // a literal character
-	TokOp                   // an operator: |, ConcatOp, *, +, ?, (, )
-	TokOpen                 // (
-	TokClose                // )
+	TokAtom  TokKind = iota // A literal character or a symbol from the alphabet.
+	TokOp                   // A regex operator (|, *, +, ?, etc.).
+	TokOpen                 // An opening parenthesis (.
+	TokClose                // A closing parenthesis ).
 )
 
-// RegexToken is a single element in a tokenized/postfix regex.
+// RegexToken represents a single element in a tokenized or postfix regular expression.
 type RegexToken struct {
 	Kind TokKind
-	Atom rune // valid when Kind == TokAtom
-	Op   rune // valid when Kind == TokOp (or Open/Close)
+	Atom rune // The literal character (only valid if Kind == TokAtom).
+	Op   rune // The operator symbol (only valid if Kind == TokOp, TokOpen, or TokClose).
 }
 
+// Helper functions for creating RegexToken instances.
 func atomTok(r rune) RegexToken { return RegexToken{Kind: TokAtom, Atom: r} }
 func opTok(op rune) RegexToken  { return RegexToken{Kind: TokOp, Op: op} }
 func openTok() RegexToken       { return RegexToken{Kind: TokOpen, Op: '('} }
 func closeTok() RegexToken      { return RegexToken{Kind: TokClose, Op: ')'} }
 
-// Normalize converts a .yal pattern string into a token slice with
-// explicit concatenation operators inserted.
+// Normalize transforms a raw YALex pattern into a sequence of RegexTokens.
+// It expands character classes, handles wildcards, resolves escape sequences,
+// and inserts explicit concatenation operators.
 func Normalize(pattern string) ([]RegexToken, error) {
 	tokens, err := tokenize(pattern)
 	if err != nil {
 		return nil, fmt.Errorf("tokenizing %q: %w", pattern, err)
 	}
+	// Post-process the tokens to insert the concatenation operator (·)
+	// where concatenation is implicit in the regex syntax.
 	return insertConcat(tokens), nil
 }
 
-// tokenize parses the pattern string into a flat slice of RegexTokens.
+// tokenize converts the input pattern string into a flat slice of RegexTokens.
 func tokenize(pattern string) ([]RegexToken, error) {
 	var tokens []RegexToken
 	runes := []rune(pattern)
@@ -76,8 +82,8 @@ func tokenize(pattern string) ([]RegexToken, error) {
 			i++
 
 		case '\'':
-			// Single-quoted literal: 'c', '\n', etc.
-			i++ // skip opening '
+			// Handle single-quoted character literals: 'a', '\n', '\'', etc.
+			i++ // Skip opening quote
 			r, newI, err := parseSingleQuoted(runes, i)
 			if err != nil {
 				return nil, err
@@ -86,12 +92,12 @@ func tokenize(pattern string) ([]RegexToken, error) {
 			if i >= len(runes) || runes[i] != '\'' {
 				return nil, fmt.Errorf("expected closing ' at position %d", i)
 			}
-			i++ // skip closing '
+			i++ // Skip closing quote
 			tokens = append(tokens, atomTok(r))
 
 		case '"':
-			// Double-quoted string: "abc" → atoms for a, b, c
-			i++ // skip opening "
+			// Handle double-quoted string literals: "abc" -> (a·b·c).
+			i++ // Skip opening quote
 			var chars []rune
 			for i < len(runes) && runes[i] != '"' {
 				if runes[i] == '\\' && i+1 < len(runes) {
@@ -109,13 +115,14 @@ func tokenize(pattern string) ([]RegexToken, error) {
 			if i >= len(runes) {
 				return nil, fmt.Errorf("unclosed double quote")
 			}
-			i++ // skip closing "
+			i++ // Skip closing quote
+
 			if len(chars) == 0 {
-				// empty string - epsilon, skip
+				// Empty string (epsilon) - currently skipped as we don't handle empty transitions.
 			} else if len(chars) == 1 {
 				tokens = append(tokens, atomTok(chars[0]))
 			} else {
-				// Wrap in a group, insert explicit concats
+				// Strings are converted to a grouped sequence of concatenated atoms.
 				tokens = append(tokens, openTok())
 				for j, r := range chars {
 					tokens = append(tokens, atomTok(r))
@@ -127,8 +134,8 @@ func tokenize(pattern string) ([]RegexToken, error) {
 			}
 
 		case '[':
-			// Character class [...]
-			i++ // skip [
+			// Handle character classes like [a-z], [0-9], [^0-9], etc.
+			i++ // Skip [
 			classTokens, newI, err := expandCharClass(runes, i)
 			if err != nil {
 				return nil, fmt.Errorf("expanding char class: %w", err)
@@ -137,13 +144,13 @@ func tokenize(pattern string) ([]RegexToken, error) {
 			tokens = append(tokens, classTokens...)
 
 		case '.':
-			// Wildcard
+			// Wildcard: matches any character in the alphabet (excluding \n).
 			classTokens := buildWildcardTokens()
 			tokens = append(tokens, classTokens...)
 			i++
 
 		case '_':
-			// Underscore wildcard: matches any character (same as '.')
+			// Alternative wildcard syntax (common in YALex): matches any character.
 			classTokens := buildWildcardTokens()
 			tokens = append(tokens, classTokens...)
 			i++
@@ -153,7 +160,7 @@ func tokenize(pattern string) ([]RegexToken, error) {
 				i++
 				continue
 			}
-			// Regular character literal
+			// Treat any other character as a literal atom.
 			tokens = append(tokens, atomTok(c))
 			i++
 		}
@@ -162,10 +169,7 @@ func tokenize(pattern string) ([]RegexToken, error) {
 	return tokens, nil
 }
 
-// parseSingleQuoted parses the content of a single-quoted literal.
-// i points to the first char after the opening '.
-// Returns (rune, newIndex) where newIndex points past the last content char
-// (the closing ' will be consumed by caller).
+// parseSingleQuoted extracts a literal character from a single-quoted sequence.
 func parseSingleQuoted(runes []rune, i int) (rune, int, error) {
 	if i >= len(runes) {
 		return 0, i, fmt.Errorf("unexpected end inside single quote")
@@ -183,7 +187,7 @@ func parseSingleQuoted(runes []rune, i int) (rune, int, error) {
 	return runes[i], i + 1, nil
 }
 
-// parseEscape converts an escape character (char after \) to its rune value.
+// parseEscape maps an escaped character to its corresponding rune value.
 func parseEscape(c rune) (rune, error) {
 	switch c {
 	case 'n':
@@ -201,12 +205,12 @@ func parseEscape(c rune) (rune, error) {
 	case '0':
 		return '\x00', nil
 	default:
+		// Unknown escape sequences are treated as the literal character.
 		return c, nil
 	}
 }
 
-// expandCharClass expands a [...] character class into a group of alternation tokens.
-// i points past the '['. Returns the token group and new index (past ']').
+// expandCharClass parses a [...] block and converts it into a grouped alternation (a|b|c...).
 func expandCharClass(runes []rune, i int) ([]RegexToken, int, error) {
 	complement := false
 	if i < len(runes) && runes[i] == '^' {
@@ -220,18 +224,19 @@ func expandCharClass(runes []rune, i int) ([]RegexToken, int, error) {
 		c := runes[i]
 
 		if c == '\'' {
-			// single-quoted char inside class like [' ' '\t']
-			i++ // skip '
+			// Handle quoted characters within the class, e.g., [' ' '\t'].
+			i++
 			r, newI, err := parseSingleQuoted(runes, i)
 			if err != nil {
 				return nil, i, err
 			}
 			i = newI
 			if i < len(runes) && runes[i] == '\'' {
-				i++ // skip closing '
+				i++
 			}
 			chars = append(chars, r)
 		} else if c == '\\' {
+			// Handle escape sequences within the class.
 			if i+1 >= len(runes) {
 				return nil, i, fmt.Errorf("unexpected end after backslash in class")
 			}
@@ -240,9 +245,9 @@ func expandCharClass(runes []rune, i int) ([]RegexToken, int, error) {
 				return nil, i, err
 			}
 			i += 2
-			// Check for range after escaped char
+			// Check for character ranges starting with an escape, e.g., [\x00-\xFF].
 			if i+1 < len(runes) && runes[i] == '-' && runes[i+1] != ']' {
-				i++ // skip -
+				i++
 				end := runes[i]
 				i++
 				for r2 := r; r2 <= end; r2++ {
@@ -252,11 +257,10 @@ func expandCharClass(runes []rune, i int) ([]RegexToken, int, error) {
 				chars = append(chars, r)
 			}
 		} else if c == ' ' || c == '\t' {
-			// Unquoted whitespace inside [...] is a separator (not a literal char)
-			// e.g., [^ '\n'] has a space between ^ and '\n' that's just formatting
+			// Whitespace acts as a separator in YALex character classes.
 			i++
 		} else {
-			// Check for range like a-z
+			// Handle literal character ranges, e.g., [a-z].
 			if i+2 < len(runes) && runes[i+1] == '-' && runes[i+2] != ']' {
 				start := c
 				end := runes[i+2]
@@ -272,10 +276,11 @@ func expandCharClass(runes []rune, i int) ([]RegexToken, int, error) {
 	}
 
 	if i < len(runes) && runes[i] == ']' {
-		i++ // skip ]
+		i++
 	}
 
 	if complement {
+		// For [^...], include all alphabet symbols NOT present in the specified set.
 		alphabet := buildAlphabet()
 		exclude := make(map[rune]bool)
 		for _, c := range chars {
@@ -297,10 +302,9 @@ func expandCharClass(runes []rune, i int) ([]RegexToken, int, error) {
 	return buildAlternationGroup(chars), i, nil
 }
 
-// buildAlternationGroup creates a group (a|b|c...) from a list of runes.
+// buildAlternationGroup creates a grouped (a|b|c...) token sequence from a list of symbols.
 func buildAlternationGroup(chars []rune) []RegexToken {
 	if len(chars) == 1 {
-		// No need for grouping
 		return []RegexToken{atomTok(chars[0])}
 	}
 	tokens := []RegexToken{openTok()}
@@ -314,13 +318,12 @@ func buildAlternationGroup(chars []rune) []RegexToken {
 	return tokens
 }
 
-// buildWildcardTokens builds the token group for the '.' wildcard.
+// buildWildcardTokens creates the token group representing any character in the alphabet.
 func buildWildcardTokens() []RegexToken {
 	return buildAlternationGroup(buildAlphabet())
 }
 
-// buildAlphabet returns all characters for complement classes and wildcards.
-// Includes ASCII 32-126 plus \t and \r, but NOT \n (conventional . behavior).
+// buildAlphabet returns the set of printable ASCII characters plus common control chars.
 func buildAlphabet() []rune {
 	var alphabet []rune
 	alphabet = append(alphabet, '\t', '\r')
@@ -330,7 +333,8 @@ func buildAlphabet() []rune {
 	return alphabet
 }
 
-// insertConcat inserts explicit ConcatOp tokens between elements that should be concatenated.
+// insertConcat adds explicit concatenation operators (·) between adjacent tokens.
+// This simplifies the conversion to postfix notation and syntax tree building.
 func insertConcat(tokens []RegexToken) []RegexToken {
 	var result []RegexToken
 
@@ -346,8 +350,10 @@ func insertConcat(tokens []RegexToken) []RegexToken {
 	return result
 }
 
-// needsConcat returns true if a ConcatOp should be inserted between left and right.
+// needsConcat determines if a concatenation operator is required between two adjacent tokens.
 func needsConcat(left, right RegexToken) bool {
+	// An operator is needed if the left token "ends" an expression (atom, close paren, or quantifier)
+	// and the right token "starts" an expression (atom or open paren).
 	leftOutput := left.Kind == TokAtom ||
 		left.Kind == TokClose ||
 		(left.Kind == TokOp && (left.Op == '*' || left.Op == '+' || left.Op == '?'))
@@ -357,7 +363,7 @@ func needsConcat(left, right RegexToken) bool {
 	return leftOutput && rightInput
 }
 
-// TokensToString converts a token slice to a debug string for display.
+// TokensToString converts a slice of RegexTokens into a human-readable string for debugging.
 func TokensToString(tokens []RegexToken) string {
 	var sb strings.Builder
 	for _, tok := range tokens {
