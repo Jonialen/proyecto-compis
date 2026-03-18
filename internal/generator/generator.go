@@ -1,5 +1,14 @@
-// Package generator handles the creation of standalone lexer source code
-// from the constructed DFAs.
+// Package generator se encarga de generar archivos fuente Go autonomos que
+// funcionan como analizadores lexicos (lexers) independientes. Toma los DFAs
+// construidos durante el procesamiento del archivo .yal y los serializa dentro
+// de un archivo Go que puede compilarse y ejecutarse por separado, sin depender
+// de la herramienta genanalex en tiempo de ejecucion.
+//
+// Nota importante sobre las estructuras DFA:
+// La estructura DFA en el codigo generado difiere de la interna (internal/dfa.DFA).
+// En el codigo generado, el campo TokenName vive dentro de la estructura DFA
+// (no como campo separado en DFAEntry), y no existe el campo States.
+// Esto simplifica el codigo generado al hacer cada DFA auto-descriptivo.
 package generator
 
 import (
@@ -11,23 +20,57 @@ import (
 	"genanalex/internal/lexer"
 )
 
-// LexerData holds all the information necessary to generate a standalone lexer.
+// LexerData contiene toda la informacion necesaria para generar un analizador lexico
+// autonomo. Sirve como estructura de datos que se pasa al template de Go para
+// la generacion de codigo.
+//
+// Campos:
+//   - DFAs: slice de DFAEntry con todos los automatas y sus metadatos (prioridad, nombre de token).
+//     Cada entrada corresponde a una regla del archivo .yal.
 type LexerData struct {
 	DFAs []lexer.DFAEntry
 }
 
-// GenerateSource generates a Go source file for the lexer and writes it to the specified path.
+// GenerateSource genera un archivo fuente Go completo para el analizador lexico
+// y lo escribe en la ruta especificada. El archivo generado es un programa main
+// autonomo que puede compilarse con "go build" y ejecutarse para tokenizar
+// cualquier archivo fuente.
+//
+// Parametros:
+//   - outputPath: ruta del archivo de salida donde se escribira el codigo Go generado.
+//   - entries:    slice de DFAEntry con los automatas a serializar en el codigo generado.
+//
+// Retorna:
+//   - error: si falla la compilacion del template, la ejecucion del template,
+//     o la escritura del archivo de salida.
+//
+// Proceso:
+//  1. Parsear el template Go embebido (lexerTemplate) que define la estructura
+//     del archivo generado.
+//  2. Ejecutar el template con los datos de los DFAs, generando el codigo fuente
+//     como texto en un buffer intermedio. Durante esta fase, el template itera
+//     sobre todos los DFAs y serializa sus transiciones, estados de aceptacion
+//     y metadatos como literales Go.
+//  3. Escribir el contenido del buffer al archivo de salida con permisos 0644.
 func GenerateSource(outputPath string, entries []lexer.DFAEntry) error {
+	// Parsear el template de texto/template de Go. Si el template tiene errores
+	// de sintaxis, se detectan aqui.
 	tmpl, err := template.New("lexer").Parse(lexerTemplate)
 	if err != nil {
 		return fmt.Errorf("parsing template: %w", err)
 	}
 
+	// Ejecutar el template con los datos, escribiendo el resultado en un buffer.
+	// Se usa un buffer intermedio en lugar de escribir directo al archivo para
+	// evitar dejar un archivo parcial/corrupto si ocurre un error durante
+	// la generacion del template.
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, LexerData{DFAs: entries}); err != nil {
 		return fmt.Errorf("executing template: %w", err)
 	}
 
+	// Escribir el archivo generado con permisos de lectura/escritura para el
+	// propietario y solo lectura para grupo y otros (0644).
 	if err := os.WriteFile(outputPath, buf.Bytes(), 0644); err != nil {
 		return fmt.Errorf("writing generated file: %w", err)
 	}
@@ -35,6 +78,29 @@ func GenerateSource(outputPath string, entries []lexer.DFAEntry) error {
 	return nil
 }
 
+// lexerTemplate es el template de Go que define la estructura completa del
+// archivo fuente generado. Contiene:
+//
+//   - Definiciones de tipos: Token, DFA y DFAEntry (versiones simplificadas
+//     adaptadas para el codigo generado, sin dependencias externas).
+//   - Variable global "dfas": slice con todos los DFAs serializados como
+//     literales Go, incluyendo sus transiciones, estados de aceptacion,
+//     estado inicial, nombre de token y prioridad.
+//   - Funcion main(): punto de entrada que lee un archivo fuente desde
+//     la linea de comandos (flag -src) y muestra los tokens identificados.
+//   - Funcion tokenize(): implementacion del algoritmo Maximal Munch,
+//     identica en logica a lexer.Tokenize() pero adaptada para las
+//     estructuras locales del codigo generado.
+//
+// Diferencias clave con las estructuras internas:
+//   - DFA generado: tiene TokenName como campo propio (el DFA interno lo tiene en DFAEntry).
+//   - DFAEntry generado: no tiene campo TokenName (vive dentro de DFA).
+//   - No existe el campo States en el DFA generado (solo se necesitan Transitions y Accepting).
+//
+// El template usa la sintaxis de text/template de Go con rangos para iterar
+// sobre los DFAs y sus transiciones. Los caracteres (runas) se serializan
+// como enteros para evitar problemas con caracteres especiales o no imprimibles,
+// y se incluye un comentario con la representacion legible (%q) de cada caracter.
 const lexerTemplate = `// Code generated by genanalex. DO NOT EDIT.
 package main
 
@@ -44,14 +110,16 @@ import (
 	"os"
 )
 
-// Token represents a lexical token identified by the generated lexer.
+// Token representa una unidad lexica identificada por el analizador lexico generado.
 type Token struct {
 	Type   string
 	Lexeme string
 	Line   int
 }
 
-// DFA represents a deterministic finite automaton structure.
+// DFA representa la estructura de un automata finito determinista.
+// A diferencia del DFA interno de genanalex, esta version incluye TokenName
+// directamente y omite el campo States (innecesario en tiempo de ejecucion).
 type DFA struct {
 	Transitions map[int]map[rune]int
 	Start       int
@@ -59,12 +127,15 @@ type DFA struct {
 	TokenName   string
 }
 
-// DFAEntry associates a DFA with a priority for disambiguation.
+// DFAEntry asocia un DFA con una prioridad para la desambiguacion.
+// La prioridad se hereda del orden de definicion en el archivo .yal original.
 type DFAEntry struct {
 	DFA      DFA
 	Priority int
 }
 
+// dfas contiene todos los automatas serializados, listos para la simulacion.
+// Cada entrada fue generada a partir de una regla del archivo .yal.
 var dfas = []DFAEntry{
 	{{- range $i, $entry := .DFAs }}
 	{
@@ -91,6 +162,9 @@ var dfas = []DFAEntry{
 	{{- end }}
 }
 
+// main es el punto de entrada del analizador lexico generado.
+// Lee un archivo fuente desde la ruta proporcionada con el flag -src,
+// lo tokeniza y muestra los tokens resultantes en la salida estandar.
 func main() {
 	srcPath := flag.String("src", "", "path to the source file to tokenize")
 	flag.Parse()
@@ -108,11 +182,14 @@ func main() {
 
 	tokens, errors := tokenize(string(content))
 
+	// Imprimir los tokens identificados con su linea, tipo y lexema.
 	fmt.Println("\n--- Tokens ---")
 	for _, tok := range tokens {
 		fmt.Printf("[%d] %-12s %s\n", tok.Line, tok.Type, tok.Lexeme)
 	}
 
+	// Si hubo errores lexicos (caracteres no reconocidos), mostrarlos
+	// y salir con codigo de error.
 	if len(errors) > 0 {
 		fmt.Println("\n--- Errors ---")
 		for _, e := range errors {
@@ -122,21 +199,31 @@ func main() {
 	}
 }
 
+// tokenize procesa el contenido de un archivo fuente y lo convierte en tokens.
+// Implementa el algoritmo Maximal Munch: ejecuta todos los DFAs en paralelo
+// y selecciona la coincidencia mas larga. En caso de empate, gana la prioridad.
+//
+// La logica es identica a la de lexer.Tokenize() del paquete interno,
+// pero adaptada para usar las estructuras locales del codigo generado.
 func tokenize(content string) ([]Token, []string) {
 	var tokens []Token
 	var errors []string
 
+	// Convertir a runas para soporte Unicode completo.
 	runes := []rune(content)
-	i := 0
-	line := 1
+	i := 0    // Posicion actual en la entrada.
+	line := 1 // Contador de linea (base 1).
 
+	// Ciclo principal: procesar toda la entrada.
 	for i < len(runes) {
+		// dfaState rastrea el estado de simulacion de un DFA individual.
 		type dfaState struct {
 			entry   DFAEntry
 			current int
 			active  bool
 		}
 
+		// Inicializar todos los DFAs en su estado inicial.
 		states := make([]dfaState, len(dfas))
 		for k, entry := range dfas {
 			states[k] = dfaState{
@@ -146,14 +233,16 @@ func tokenize(content string) ([]Token, []string) {
 			}
 		}
 
-		lastOKPos := -1
-		var lastOKMatches []DFAEntry
+		lastOKPos := -1              // Posicion del fin de la coincidencia mas larga.
+		var lastOKMatches []DFAEntry // DFAs que aceptaron en esa posicion.
 
+		// Ciclo de lookahead: avanzar buscando la coincidencia mas larga.
 		j := i
 		for j < len(runes) {
 			c := runes[j]
 			anyActive := false
 
+			// Transicionar cada DFA activo con el caracter actual.
 			for k := range states {
 				if !states[k].active {
 					continue
@@ -167,12 +256,14 @@ func tokenize(content string) ([]Token, []string) {
 				}
 			}
 
+			// Si ningun DFA puede avanzar, terminar el lookahead.
 			if !anyActive {
 				break
 			}
 
 			j++
 
+			// Registrar DFAs en estado de aceptacion.
 			var currentAccepting []DFAEntry
 			for k := range states {
 				if states[k].active && states[k].entry.DFA.Accepting[states[k].current] {
@@ -180,12 +271,14 @@ func tokenize(content string) ([]Token, []string) {
 				}
 			}
 
+			// Actualizar la coincidencia mas larga si hay aceptacion.
 			if len(currentAccepting) > 0 {
 				lastOKPos = j
 				lastOKMatches = currentAccepting
 			}
 		}
 
+		// Error lexico: ningun DFA reconocio el caracter.
 		if lastOKPos == -1 {
 			errors = append(errors, fmt.Sprintf("line %d: unrecognized character %q", line, runes[i]))
 			if runes[i] == '\n' {
@@ -195,6 +288,7 @@ func tokenize(content string) ([]Token, []string) {
 			continue
 		}
 
+		// Extraer lexema y desambiguar por prioridad.
 		lexeme := string(runes[i:lastOKPos])
 		bestMatch := lastOKMatches[0]
 		for _, m := range lastOKMatches[1:] {
@@ -203,6 +297,7 @@ func tokenize(content string) ([]Token, []string) {
 			}
 		}
 
+		// Descartar tokens "skip" (espacios en blanco, etc.).
 		if bestMatch.DFA.TokenName != "skip" {
 			tokens = append(tokens, Token{
 				Type:   bestMatch.DFA.TokenName,
@@ -211,6 +306,7 @@ func tokenize(content string) ([]Token, []string) {
 			})
 		}
 
+		// Actualizar contador de linea para el lexema consumido.
 		for _, r := range lexeme {
 			if r == '\n' {
 				line++

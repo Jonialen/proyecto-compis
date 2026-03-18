@@ -1,43 +1,74 @@
+// minimizer.go implementa la minimizacion de un AFD (Automata Finito Determinista)
+// usando el algoritmo de llenado de tabla (Table-Filling), tambien conocido como
+// algoritmo de marcado de pares.
+//
+// A diferencia del algoritmo de Hopcroft (que usa particionamiento), este algoritmo:
+//  1. Crea una tabla triangular de pares de estados
+//  2. Marca como distinguibles los pares donde uno es de aceptacion y el otro no
+//  3. Itera propagando marcas hasta alcanzar un punto fijo
+//  4. Agrupa estados no distinguibles usando Union-Find con compresion de caminos
+//  5. Reconstruye el AFD minimal con los grupos resultantes
+//
+// Complejidad: O(n^2 * k) donde n es el numero de estados y k el tamanno del alfabeto.
+// Es mas simple de implementar que Hopcroft aunque menos eficiente para AFDs grandes.
 package dfa
 
-// Minimize applies the Table-Filling algorithm to reduce a DFA to its
-// minimal number of states by merging equivalent states.
-// Two states are equivalent if for every possible input string, they both
-// either lead to an accepting state or both lead to a non-accepting state.
+// Minimize aplica el algoritmo de llenado de tabla para reducir un AFD a su
+// numero minimo de estados fusionando estados equivalentes.
+// Dos estados son equivalentes si para toda cadena de entrada posible, ambos
+// llevan a aceptacion o ambos llevan a rechazo.
+//
+// Parametros:
+//   - d: el AFD a minimizar
+//
+// Retorna:
+//   - *DFA: un nuevo AFD con el minimo numero de estados posible, equivalente al original
+//
+// El algoritmo tiene 5 fases principales:
+//  1. Preparacion: obtener lista ordenada de estados y crear indice
+//  2. Tabla de distinguibilidad: crear matriz triangular e inicializar marcas base
+//  3. Propagacion iterativa: propagar distinguibilidad transitivamente
+//  4. Agrupacion: usar Union-Find para agrupar estados equivalentes
+//  5. Reconstruccion: construir el AFD minimal a partir de los grupos
 func Minimize(d *DFA) *DFA {
 	if len(d.States) == 0 {
 		return d
 	}
 
-	// 1. Preparation: Get a stable, sorted list of current state IDs.
+	// === FASE 1: Preparacion ===
+	// Obtener una lista estable y ordenada de IDs de estado para poder
+	// indexar la tabla triangular de forma determinista.
 	stateList := sortedStateIDs(d)
 	n := len(stateList)
 	if n == 0 {
 		return d
 	}
 
-	// Map each state ID to its index in the stateList for efficient table lookup.
+	// Crear un indice inverso: dado un ID de estado original, obtener su indice
+	// en stateList. Esto permite busqueda O(1) al consultar la tabla.
 	stateIndex := make(map[int]int, n)
 	for i, s := range stateList {
 		stateIndex[s] = i
 	}
 
-	// 2. The Distinguishability Table:
-	// A triangular matrix where marked[i][j] = true means states i and j
-	// have been proven to be non-equivalent (distinguishable).
+	// === FASE 2: Tabla de distinguibilidad ===
+	// Matriz triangular superior donde marked[i][j] = true (con i < j) indica que
+	// los estados con indices i y j han sido demostrados como no equivalentes (distinguibles).
+	// Se usa solo la mitad superior para ahorrar memoria (la relacion es simetrica).
 	marked := make([][]bool, n)
 	for i := range marked {
 		marked[i] = make([]bool, n)
 	}
 
-	// Helper function to mark a pair of states as distinguishable.
+	// Funcion auxiliar para marcar un par de estados como distinguibles.
+	// Normaliza los indices para que siempre i < j (mitad superior de la matriz).
 	mark := func(i, j int) {
 		if i > j {
 			i, j = j, i
 		}
 		marked[i][j] = true
 	}
-	// Helper function to check if a pair of states is already marked.
+	// Funcion auxiliar para consultar si un par de estados ya esta marcado como distinguible.
 	isMarked := func(i, j int) bool {
 		if i > j {
 			i, j = j, i
@@ -45,8 +76,8 @@ func Minimize(d *DFA) *DFA {
 		return marked[i][j]
 	}
 
-	// Initial Marking: A pair of states is distinguishable if one is an
-	// accepting state and the other is not.
+	// Marcado inicial (caso base): un par de estados es trivialmente distinguible
+	// si uno es de aceptacion y el otro no. Esta es la semilla del algoritmo.
 	for i := 0; i < n; i++ {
 		for j := i + 1; j < n; j++ {
 			si, sj := stateList[i], stateList[j]
@@ -56,21 +87,24 @@ func Minimize(d *DFA) *DFA {
 		}
 	}
 
-	// 3. Iterative Propagation:
-	// For every pair of non-marked states (i, j), check if they transition
-	// to a pair of states (ri, rj) that are already known to be distinguishable.
-	// Repeat this process until no more markings can be made.
+	// === FASE 3: Propagacion iterativa ===
+	// Para cada par de estados no marcados (i, j), verificar si sus transiciones
+	// con algun simbolo llevan a un par de estados (ri, rj) ya marcado como distinguible.
+	// Si es asi, (i, j) tambien son distinguibles.
+	// Se repite hasta que no se puedan hacer mas marcas (punto fijo).
 	changed := true
 	for changed {
 		changed = false
 		for i := 0; i < n; i++ {
 			for j := i + 1; j < n; j++ {
+				// Saltar pares ya marcados como distinguibles.
 				if isMarked(i, j) {
 					continue
 				}
 				si, sj := stateList[i], stateList[j]
 
-				// Collect the union of all symbols used in transitions from both states.
+				// Recolectar la union de todos los simbolos usados en las transiciones
+				// de ambos estados. Se necesita verificar todos los simbolos posibles.
 				symbols := make(map[rune]bool)
 				for sym := range d.Transitions[si] {
 					symbols[sym] = true
@@ -84,18 +118,23 @@ func Minimize(d *DFA) *DFA {
 					rj, hasRj := d.Transitions[sj][sym]
 
 					if hasRi != hasRj {
-						// One state has a transition for 'sym' and the other doesn't.
+						// Si un estado tiene transicion para este simbolo y el otro no,
+						// los estados son distinguibles (uno puede avanzar y el otro no).
 						mark(i, j)
 						changed = true
 						break
 					}
 					if !hasRi && !hasRj {
+						// Ambos estados no tienen transicion para este simbolo: no aporta
+						// informacion de distinguibilidad para este simbolo.
 						continue
 					}
 					if ri == rj {
+						// Ambos transicionan al mismo estado: no aporta distinguibilidad.
 						continue
 					}
-					// If the targets (ri, rj) are already marked as distinguishable, then (si, sj) are too.
+					// Si los estados destino (ri, rj) ya estan marcados como distinguibles,
+					// entonces los estados origen (si, sj) tambien lo son por transitividad.
 					riIdx := stateIndex[ri]
 					rjIdx := stateIndex[rj]
 					if isMarked(riIdx, rjIdx) {
@@ -108,20 +147,30 @@ func Minimize(d *DFA) *DFA {
 		}
 	}
 
-	// 4. State Grouping:
-	// Use Union-Find to group all non-distinguishable states into equivalence classes.
+	// === FASE 4: Agrupacion con Union-Find ===
+	// Los pares de estados que NO fueron marcados como distinguibles son equivalentes.
+	// Se usa una estructura Union-Find (tambien conocida como Disjoint Set Union)
+	// con compresion de caminos para agrupar eficientemente los estados equivalentes
+	// en clases de equivalencia.
+
+	// Inicializar: cada estado es su propio representante.
 	parent := make([]int, n)
 	for i := range parent {
 		parent[i] = i
 	}
 
+	// find retorna el representante de la clase de equivalencia de x.
+	// Aplica compresion de caminos para optimizar consultas futuras:
+	// cada nodo visitado se conecta directamente a la raiz.
 	var find func(int) int
 	find = func(x int) int {
 		if parent[x] != x {
-			parent[x] = find(parent[x])
+			parent[x] = find(parent[x]) // Compresion de caminos.
 		}
 		return parent[x]
 	}
+
+	// union fusiona las clases de equivalencia de x y y en una sola.
 	union := func(x, y int) {
 		px, py := find(x), find(y)
 		if px != py {
@@ -129,6 +178,7 @@ func Minimize(d *DFA) *DFA {
 		}
 	}
 
+	// Unir todos los pares de estados que no fueron marcados como distinguibles.
 	for i := 0; i < n; i++ {
 		for j := i + 1; j < n; j++ {
 			if !isMarked(i, j) {
@@ -137,9 +187,11 @@ func Minimize(d *DFA) *DFA {
 		}
 	}
 
-	// Map each equivalence class to a new, unique state ID for the minimal DFA.
+	// Asignar un nuevo ID de estado unico a cada clase de equivalencia (grupo).
+	// classRep mapea el indice del representante del grupo a su nuevo ID en el AFD minimal.
 	classRep := make(map[int]int)
 	newStateID := 0
+	// indexToNew mapea cada indice original a su nuevo ID de estado en el AFD minimal.
 	indexToNew := make(map[int]int)
 
 	for i := 0; i < n; i++ {
@@ -151,7 +203,9 @@ func Minimize(d *DFA) *DFA {
 		indexToNew[i] = classRep[rep]
 	}
 
-	// 5. Reconstruction: Build the minimized DFA using the merged states.
+	// === FASE 5: Reconstruccion del AFD minimal ===
+	// Se construye un nuevo AFD donde cada estado representa una clase de equivalencia
+	// completa del AFD original.
 	newDFA := &DFA{
 		States:      make(map[int]map[int]bool),
 		Transitions: make(map[int]map[rune]int),
@@ -159,14 +213,15 @@ func Minimize(d *DFA) *DFA {
 		StateToken:  make(map[int]string),
 	}
 
-	// Map the old start state to its corresponding class representative in the new DFA.
+	// Mapear el estado inicial original a su representante en el AFD minimal.
 	startIdx := stateIndex[d.Start]
 	newDFA.Start = indexToNew[startIdx]
 
 	for i, s := range stateList {
 		newS := indexToNew[i]
 
-		// Merge the syntax tree position sets from all states in the same class.
+		// Fusionar los conjuntos de posiciones del arbol sintactico de todos
+		// los estados en la misma clase de equivalencia.
 		if newDFA.States[newS] == nil {
 			newDFA.States[newS] = make(map[int]bool)
 		}
@@ -174,7 +229,8 @@ func Minimize(d *DFA) *DFA {
 			newDFA.States[newS][p] = true
 		}
 
-		// Preserve acceptance status and token association.
+		// Preservar el estatus de aceptacion y la asociacion con el nombre del token.
+		// Si cualquier estado del grupo era de aceptacion, el grupo es de aceptacion.
 		if d.Accepting[s] {
 			newDFA.Accepting[newS] = true
 			if tok, ok := d.StateToken[s]; ok {
@@ -182,7 +238,8 @@ func Minimize(d *DFA) *DFA {
 			}
 		}
 
-		// Rebuild transitions: Transitions from any state in a class point to the class representative of the target.
+		// Reconstruir las transiciones: las transiciones de cualquier estado del grupo
+		// apuntan al representante de la clase de equivalencia del estado destino.
 		for sym, next := range d.Transitions[s] {
 			nextIdx := stateIndex[next]
 			newNext := indexToNew[nextIdx]
@@ -196,13 +253,26 @@ func Minimize(d *DFA) *DFA {
 	return newDFA
 }
 
-// sortedStateIDs provides a stable, deterministic ordering of state IDs.
+// sortedStateIDs proporciona un ordenamiento estable y determinista de los IDs de estado.
+// Esto es importante porque los mapas en Go no garantizan orden de iteracion,
+// y el algoritmo de minimizacion necesita un orden consistente para indexar
+// la tabla triangular de distinguibilidad.
+//
+// Parametros:
+//   - d: el AFD cuyos IDs de estado se van a ordenar
+//
+// Retorna:
+//   - []int: IDs de estado ordenados de menor a mayor
+//
+// Utiliza ordenamiento por insercion, adecuado para las cantidades tipicamente
+// pequenas de estados en AFDs generados a partir de expresiones regulares.
 func sortedStateIDs(d *DFA) []int {
 	ids := make([]int, 0, len(d.States))
 	for id := range d.States {
 		ids = append(ids, id)
 	}
-	// Using a simple insertion sort to avoid external dependencies.
+	// Ordenamiento por insercion: para cada elemento, se desplaza hacia la izquierda
+	// hasta encontrar su posicion correcta. Es estable y eficiente para arreglos pequenos.
 	for i := 1; i < len(ids); i++ {
 		key := ids[i]
 		j := i - 1

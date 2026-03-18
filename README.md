@@ -1,62 +1,82 @@
-# YALex Lexer Generator
+# Generador de Analizadores Léxicos (genAnaLex)
 
-This project is a powerful and efficient **Lexer Generator** written in Go. It translates YALex (`.yal`) specification files into standalone, optimized Go source code for lexical analysis.
+Este proyecto es un Generador de Analizadores Léxicos implementado en Go. Toma como entrada una especificación en lenguaje **YALex** y genera automáticamente un analizador léxico funcional basado en Autómatas Finitos Deterministas (DFA).
 
-## Key Features
+## Características
 
-*   **Lexer Generation:** Generates standalone `.go` files containing a complete table-driven lexical analyzer.
-*   **YALex Compatible:** Full support for the YALex specification, including macros, rules, and priority-based disambiguation.
-*   **Direct DFA Construction:** Builds Deterministic Finite Automata (DFA) directly from syntax trees (Aho-Sethi-Ullman algorithm).
-*   **DFA Minimization:** Implements state minimization (Table-Filling algorithm) to produce the most compact lexers possible.
-*   **Maximal Munch:** The generated lexers always identify the longest possible match from the current position.
-*   **Visualization:** Can generate Graphviz DOT files to visualize the syntax trees of your regular expressions.
+- **Soporte YALex:** Procesa macros (`let`), reglas (`rule`) y acciones asociadas.
+- **Construcción de Árboles de Expresión:** Genera la representación visual de las expresiones regulares en formato Graphviz (`.dot`).
+- **DFA Directo:** Implementa el algoritmo de construcción directa de DFA a partir del árbol de sintaxis.
+- **Minimización de DFA:** Optimiza el autómata resultante para mayor eficiencia.
+- **Generación de Código:** Produce un archivo fuente en Go autónomo que puede tokenizar archivos de texto.
+- **Modo Simulación:** Permite tokenizar archivos directamente desde la herramienta principal sin necesidad de compilar el lexer generado.
 
-## How to Use
+## Requisitos
 
-The tool can be used either to tokenize a file directly (engine mode) or to generate a standalone lexer (generator mode).
+- [Go](https://golang.org/dl/) 1.18 o superior.
+- [Graphviz](https://graphviz.org/download/) (opcional, para visualizar los árboles generados).
 
-### 1. Generator Mode (Recommended)
+## Instalación
 
-To generate a standalone lexer source file from a `.yal` specification:
-
-```bash
-go run main.go -yal <path_to_yal_file> -out <output_lexer.go>
-```
-
-Then, you can compile and run your generated lexer:
+Clona el repositorio y compila el binario:
 
 ```bash
-go run <output_lexer.go> -src <path_to_input_file>
+go build -o genanalex main.go
 ```
 
-### 2. Engine Mode
+## Uso
 
-To tokenize an input file directly without generating intermediate source code:
+La herramienta `genanalex` acepta varios parámetros para controlar el flujo de trabajo:
+
+### 1. Generar Árboles de Expresión
+Para visualizar la estructura interna de las expresiones regulares definidas en el `.yal`:
 
 ```bash
-go run main.go -yal <path_to_yal_file> -src <path_to_input_file>
+./genanalex -yal testdata/lexer.yal -tree
+```
+Esto generará un archivo `tree.dot` que puedes convertir a imagen con:
+```bash
+dot -Tpng tree.dot -o tree.png
 ```
 
-### 3. Visualization Mode
-
-To generate syntax tree diagrams:
+### 2. Generar y Ejecutar el Analizador Léxico (Código Fuente)
+Para generar el programa en Go que servirá como tu lexer personalizado:
 
 ```bash
-go run main.go -yal <path_to_yal_file> -tree
+./genanalex -yal testdata/lexer.yal -out mi_lexer.go
 ```
 
-## Project Structure
+Luego puedes compilar y ejecutar este lexer generado:
 
-*   `main.go`: Tool entry point (Generator/Engine CLI).
-*   `internal/yalex`: YALex parser and macro expander.
-*   `internal/regex`: Regex tokenizer and postfix converter.
-*   `internal/dfa`: DFA construction, minimization, and tree building.
-*   `internal/generator`: Source code generation templates.
-*   `internal/lexer`: Core simulation logic and input reading.
+```bash
+go run mi_lexer.go -src testdata/test.lisp
+```
 
-## Compliance
+### 3. Tokenización Directa (Modo Simulación)
+Si deseas probar la especificación contra un archivo de entrada inmediatamente sin generar un archivo intermedio:
 
-This implementation strictly follows the requirements set in the project instructions:
-1.  **Input:** Reads `.yal` lexer specifications.
-2.  **Output:** Generates a **source program** implementing the lexer and **visualized syntax trees**.
-3.  **Functionality:** Recognizes tokens based on regular definitions and detects lexical errors.
+```bash
+./genanalex -yal testdata/lexer.yal -src testdata/test.lisp
+```
+
+## Estructura del Proyecto
+
+- `main.go`: Punto de entrada que coordina el flujo de generación y simulación.
+- `internal/yalex/`: Parser y expansor de macros para el lenguaje YALex.
+- `internal/regex/`: Normalizador de expresiones regulares y conversión a postfix.
+- `internal/dfa/`: Construcción de árboles, cálculo de funciones (followpos) y construcción/minimización de DFA.
+- `internal/generator/`: Motor de plantillas para la generación del código fuente del lexer.
+- `internal/lexer/`: Simulador del lexer para pruebas rápidas y definiciones de estructuras de tokens.
+
+## Ejemplo de Especificación (YALex)
+
+```ocaml
+let DIGIT = [0-9]
+rule tokens =
+  | [' ' '\t' '\n'] { skip }
+  | DIGIT+          { INT }
+  | ['a'-'z']+      { ID }
+```
+
+## Créditos
+Desarrollado para el curso de Diseño de Lenguajes de Programación, Universidad del Valle de Guatemala.
