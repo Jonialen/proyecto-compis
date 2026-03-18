@@ -90,6 +90,24 @@ func expandMacros(macros map[string]string) (map[string]string, error) {
 		if !ok {
 			return "", fmt.Errorf("undefined macro: %s", name)
 		}
+
+		// Detectar auto-referencia literal: si el valor recortado es un unico
+		// identificador igual al nombre de la macro (ej: let or = or),
+		// tratar el valor como secuencia de caracteres literales en vez de
+		// referencia a macro. Se convierte cada caracter a comilla simple
+		// para que el normalizador lo trate como literal.
+		trimmedVal := strings.TrimSpace(val)
+		if trimmedVal == name && isSingleIdent(trimmedVal) {
+			var literal strings.Builder
+			for _, ch := range trimmedVal {
+				literal.WriteRune('\'')
+				literal.WriteRune(ch)
+				literal.WriteRune('\'')
+			}
+			expanded[name] = literal.String()
+			return literal.String(), nil
+		}
+
 		// Marcar como en la pila de recursion para deteccion de ciclos
 		inStack[name] = true
 		visited[name] = true
@@ -294,6 +312,25 @@ func expandPatternWithResolver(pattern string, macros map[string]string, resolve
 	}
 
 	return strings.TrimSpace(result.String()), nil
+}
+
+// isSingleIdent verifica si un string es exactamente un identificador valido
+// (una secuencia de caracteres que comienza con letra o guion bajo y continua
+// con letras, digitos o guion bajo, sin espacios ni operadores).
+func isSingleIdent(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	runes := []rune(s)
+	if !isIdentStart(runes[0]) {
+		return false
+	}
+	for _, r := range runes[1:] {
+		if !isIdentContinue(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // isIdentStart determina si un caracter puede ser el inicio de un identificador.

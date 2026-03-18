@@ -157,19 +157,29 @@ func tokenize(pattern string) ([]RegexToken, error) {
 		case '\'':
 			// --- Literales entre comillas simples ---
 			// Formato: 'c' o '\n' (un solo caracter, posiblemente escapado).
+			// Caso especial: '\s' se expande a alternacion de espacios en blanco.
 			// Se avanza pasando la comilla de apertura, se parsea el caracter
 			// (con posible escape), y se verifica la comilla de cierre.
 			i++ // Saltar comilla de apertura
-			r, newI, err := parseSingleQuoted(runes, i)
-			if err != nil {
-				return nil, err
+
+			// Detectar '\s' fuera de clase de caracteres: expandir como
+			// (' '|'\t'|'\n'|'\r')
+			if i+2 < len(runes) && runes[i] == '\\' && runes[i+1] == 's' && runes[i+2] == '\'' {
+				wsChars := []rune{' ', '\t', '\n', '\r'}
+				tokens = append(tokens, buildAlternationGroup(wsChars)...)
+				i += 3 // Saltar \s y comilla de cierre
+			} else {
+				r, newI, err := parseSingleQuoted(runes, i)
+				if err != nil {
+					return nil, err
+				}
+				i = newI
+				if i >= len(runes) || runes[i] != '\'' {
+					return nil, fmt.Errorf("expected closing ' at position %d", i)
+				}
+				i++ // Saltar comilla de cierre
+				tokens = append(tokens, atomTok(r))
 			}
-			i = newI
-			if i >= len(runes) || runes[i] != '\'' {
-				return nil, fmt.Errorf("expected closing ' at position %d", i)
-			}
-			i++ // Saltar comilla de cierre
-			tokens = append(tokens, atomTok(r))
 
 		case '"':
 			// --- Literales entre comillas dobles ---
@@ -368,38 +378,76 @@ func expandCharClass(runes []rune, i int) ([]RegexToken, int, error) {
 			// Caracter entre comillas simples dentro de la clase.
 			// Ejemplo: [' ' '\t'] -- permite incluir espacios y caracteres
 			// especiales de forma explicita.
+			// Tambien soporta rangos con comillas: ['A'-'Z'] se interpreta
+			// como rango de A a Z.
+			// Caso especial: '\s' dentro de clase se expande a caracteres de
+			// espacio en blanco (espacio, tab, newline, retorno de carro).
 			i++
-			r, newI, err := parseSingleQuoted(runes, i)
-			if err != nil {
-				return nil, i, err
+
+			// Detectar '\s' antes de parsear: expande a multiples caracteres
+			if i+2 < len(runes) && runes[i] == '\\' && runes[i+1] == 's' && runes[i+2] == '\'' {
+				chars = append(chars, ' ', '\t', '\n', '\r')
+				i += 3 // Saltar \s y la comilla de cierre
+			} else {
+				r, newI, err := parseSingleQuoted(runes, i)
+				if err != nil {
+					return nil, i, err
+				}
+				i = newI
+				if i < len(runes) && runes[i] == '\'' {
+					i++ // Saltar la comilla de cierre
+				}
+				// Verificar si es un rango: 'X'-'Y'
+				// Despues de cerrar la comilla del primer caracter, buscar '-' seguido de '<comilla>
+				if i < len(runes) && runes[i] == '-' && i+1 < len(runes) && runes[i+1] == '\'' {
+					// Consumir '-' y la comilla de apertura del segundo caracter
+					i++ // Saltar '-'
+					i++ // Saltar comilla de apertura del segundo caracter
+					endR, newI2, err2 := parseSingleQuoted(runes, i)
+					if err2 != nil {
+						return nil, i, err2
+					}
+					i = newI2
+					if i < len(runes) && runes[i] == '\'' {
+						i++ // Saltar la comilla de cierre del segundo caracter
+					}
+					// Generar todos los caracteres del rango inclusive
+					for r2 := r; r2 <= endR; r2++ {
+						chars = append(chars, r2)
+					}
+				} else {
+					chars = append(chars, r)
+				}
 			}
-			i = newI
-			if i < len(runes) && runes[i] == '\'' {
-				i++ // Saltar la comilla de cierre
-			}
-			chars = append(chars, r)
 		} else if c == '\\' {
 			// Secuencia de escape dentro de la clase de caracteres.
 			if i+1 >= len(runes) {
 				return nil, i, fmt.Errorf("unexpected end after backslash in class")
 			}
-			r, err := parseEscape(runes[i+1])
-			if err != nil {
-				return nil, i, err
-			}
-			i += 2
-			// Verificar si el caracter escapado es el inicio de un rango.
-			// Ejemplo: [\x00-\xFF] -> rango desde el caracter escapado
-			// hasta el caracter final.
-			if i+1 < len(runes) && runes[i] == '-' && runes[i+1] != ']' {
-				i++ // Saltar el '-'
-				end := runes[i]
-				i++
-				for r2 := r; r2 <= end; r2++ {
-					chars = append(chars, r2)
-				}
+			// Caso especial: \s (sin comillas) dentro de clase se expande
+			// a caracteres de espacio en blanco
+			if runes[i+1] == 's' {
+				chars = append(chars, ' ', '\t', '\n', '\r')
+				i += 2
 			} else {
-				chars = append(chars, r)
+				r, err := parseEscape(runes[i+1])
+				if err != nil {
+					return nil, i, err
+				}
+				i += 2
+				// Verificar si el caracter escapado es el inicio de un rango.
+				// Ejemplo: [\x00-\xFF] -> rango desde el caracter escapado
+				// hasta el caracter final.
+				if i+1 < len(runes) && runes[i] == '-' && runes[i+1] != ']' {
+					i++ // Saltar el '-'
+					end := runes[i]
+					i++
+					for r2 := r; r2 <= end; r2++ {
+						chars = append(chars, r2)
+					}
+				} else {
+					chars = append(chars, r)
+				}
 			}
 		} else if c == ' ' || c == '\t' {
 			// Los espacios y tabulaciones actuan como separadores en
