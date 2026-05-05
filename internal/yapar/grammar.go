@@ -3,6 +3,13 @@ package yapar
 
 import "fmt"
 
+const (
+	// EndMarker representa el fin de entrada reservado para el parser.
+	EndMarker = "$"
+	// Epsilon representa la cadena vacía a nivel semántico.
+	Epsilon = "ε"
+)
+
 // Symbol representa un símbolo terminal o no terminal de la gramática.
 type Symbol struct {
 	Name     string
@@ -14,6 +21,11 @@ type Production struct {
 	ID   int
 	Head string
 	Body []Symbol
+}
+
+// IsEpsilon reporta si la producción deriva la cadena vacía.
+func (p Production) IsEpsilon() bool {
+	return len(p.Body) == 0
 }
 
 // Grammar representa la gramática formal y aumentada consumida por el pipeline LR.
@@ -31,22 +43,39 @@ func BuildGrammar(spec *YaparSpec) (*Grammar, error) {
 	if spec == nil {
 		return nil, &SpecError{Message: "nil spec"}
 	}
+	if len(spec.Productions) == 0 {
+		return nil, &SpecError{Message: "no productions declared"}
+	}
 	if spec.StartSymbol == "" {
 		return nil, &SpecError{Message: "missing start symbol"}
 	}
 
-	g := &Grammar{
-		Start:        spec.StartSymbol,
-		Augmented:    augmentedName(spec.StartSymbol, collectHeads(spec)),
-		Terminals:    make(map[string]bool),
-		NonTerminals: collectHeads(spec),
-		IgnoreSet:    cloneBoolMap(spec.IgnoreTokens),
+	nonTerminals, err := collectNonTerminals(spec)
+	if err != nil {
+		return nil, err
+	}
+	if !nonTerminals[spec.StartSymbol] {
+		return nil, &SpecError{Message: fmt.Sprintf("start symbol %q does not have a production", spec.StartSymbol)}
 	}
 
-	for _, tok := range spec.Tokens {
-		g.Terminals[tok] = true
+	terminals, err := collectTerminals(spec, nonTerminals)
+	if err != nil {
+		return nil, err
 	}
-	g.Terminals["$"] = true
+	ignoreSet, err := validateIgnoreTokens(spec, terminals)
+	if err != nil {
+		return nil, err
+	}
+	reserved := collectReservedNames(terminals, nonTerminals)
+
+	g := &Grammar{
+		Start:        spec.StartSymbol,
+		Augmented:    augmentedName(spec.StartSymbol, reserved),
+		Terminals:    cloneBoolMap(terminals),
+		NonTerminals: cloneBoolMap(nonTerminals),
+		IgnoreSet:    ignoreSet,
+	}
+	g.Terminals[EndMarker] = true
 
 	g.Productions = append(g.Productions, Production{
 		ID:   0,
@@ -56,10 +85,21 @@ func BuildGrammar(spec *YaparSpec) (*Grammar, error) {
 
 	nextID := 1
 	for _, raw := range spec.Productions {
+		if !g.NonTerminals[raw.Head] {
+			return nil, &SpecError{Message: fmt.Sprintf("production head %q is not a declared non-terminal", raw.Head)}
+		}
+		if len(raw.Bodies) == 0 {
+			return nil, &SpecError{Message: fmt.Sprintf("production %q must declare at least one alternative", raw.Head)}
+		}
 		for _, body := range raw.Bodies {
 			production := Production{ID: nextID, Head: raw.Head}
+			if len(body) == 0 {
+				g.Productions = append(g.Productions, production)
+				nextID++
+				continue
+			}
 			for _, name := range body {
-				terminal, err := resolveTerminal(name, g.Terminals, g.NonTerminals)
+				terminal, err := resolveSymbol(name, g.Terminals, g.NonTerminals, g.IgnoreSet)
 				if err != nil {
 					return nil, err
 				}
@@ -103,15 +143,21 @@ func (g *Grammar) IsNonTerminal(name string) bool {
 	return g.NonTerminals[name] || name == g.Augmented
 }
 
-func collectHeads(spec *YaparSpec) map[string]bool {
+func collectNonTerminals(spec *YaparSpec) (map[string]bool, error) {
 	headSet := make(map[string]bool)
 	if spec == nil {
-		return headSet
+		return headSet, nil
 	}
 	for _, production := range spec.Productions {
+		if production.Head == "" {
+			return nil, &SpecError{Message: "production head cannot be empty"}
+		}
+		if isReservedGrammarName(production.Head) {
+			return nil, &SpecError{Message: fmt.Sprintf("symbol %q is reserved by the grammar model", production.Head)}
+		}
 		headSet[production.Head] = true
 	}
-	return headSet
+	return headSet, nil
 }
 
 func augmentedName(start string, reserved map[string]bool) string {
@@ -122,17 +168,71 @@ func augmentedName(start string, reserved map[string]bool) string {
 	return name
 }
 
-func resolveTerminal(name string, terminals, nonTerminals map[string]bool) (bool, error) {
+func resolveSymbol(name string, terminals, nonTerminals, ignoreSet map[string]bool) (bool, error) {
 	switch {
+	case name == "":
+		return false, &SpecError{Message: "empty symbol in production body"}
+	case name == Epsilon:
+		return false, &SpecError{Message: "explicit epsilon symbol is not allowed; use an empty alternative instead"}
+	case name == EndMarker:
+		return false, &SpecError{Message: fmt.Sprintf("symbol %q is reserved for end of input", EndMarker)}
 	case terminals[name]:
+		if ignoreSet[name] {
+			return false, &SpecError{Message: fmt.Sprintf("ignored token %q cannot appear in grammar productions", name)}
+		}
 		return true, nil
 	case nonTerminals[name]:
 		return false, nil
-	case name == "":
-		return false, &SpecError{Message: "empty symbol in production body"}
 	default:
 		return false, &SpecError{Message: fmt.Sprintf("symbol %q is neither token nor production head", name)}
 	}
+}
+
+func collectTerminals(spec *YaparSpec, nonTerminals map[string]bool) (map[string]bool, error) {
+	terminals := make(map[string]bool, len(spec.Tokens))
+	for _, tok := range spec.Tokens {
+		if tok == "" {
+			return nil, &SpecError{Message: "token name cannot be empty"}
+		}
+		if isReservedGrammarName(tok) {
+			return nil, &SpecError{Message: fmt.Sprintf("symbol %q is reserved by the grammar model", tok)}
+		}
+		if nonTerminals[tok] {
+			return nil, &SpecError{Message: fmt.Sprintf("symbol %q cannot be both token and non-terminal", tok)}
+		}
+		if terminals[tok] {
+			return nil, &SpecError{Message: fmt.Sprintf("token %q declared more than once", tok)}
+		}
+		terminals[tok] = true
+	}
+	return terminals, nil
+}
+
+func validateIgnoreTokens(spec *YaparSpec, terminals map[string]bool) (map[string]bool, error) {
+	ignoreSet := cloneBoolMap(spec.IgnoreTokens)
+	for tok := range ignoreSet {
+		if !terminals[tok] {
+			return nil, &SpecError{Message: fmt.Sprintf("ignored token %q must be declared with %%token", tok)}
+		}
+	}
+	return ignoreSet, nil
+}
+
+func collectReservedNames(terminals, nonTerminals map[string]bool) map[string]bool {
+	reserved := make(map[string]bool, len(terminals)+len(nonTerminals)+2)
+	for name := range terminals {
+		reserved[name] = true
+	}
+	for name := range nonTerminals {
+		reserved[name] = true
+	}
+	reserved[EndMarker] = true
+	reserved[Epsilon] = true
+	return reserved
+}
+
+func isReservedGrammarName(name string) bool {
+	return name == EndMarker || name == Epsilon
 }
 
 func cloneBoolMap(src map[string]bool) map[string]bool {

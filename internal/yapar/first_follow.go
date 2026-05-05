@@ -82,7 +82,7 @@ func ComputeFirstFollow(g *Grammar) (*FirstFollow, error) {
 			ff.Follow[nonTerminal] = NewSet()
 		}
 		if g.Start != "" {
-			ff.Follow[g.Start] = NewSet("$")
+			ff.Follow[g.Start] = NewSet(EndMarker)
 		}
 	}
 	return ff, ErrNotImplemented
@@ -101,7 +101,7 @@ func FirstOfSequence(seq []Symbol, ff *FirstFollow) Set {
 		}
 		current := ff.First[symbol.Name]
 		for token := range current {
-			if token != "ε" {
+			if token != Epsilon {
 				result.Add(token)
 			}
 		}
@@ -110,7 +110,7 @@ func FirstOfSequence(seq []Symbol, ff *FirstFollow) Set {
 		}
 	}
 	if len(seq) == 0 {
-		result.Add("ε")
+		result.Add(Epsilon)
 	}
 	return result
 }
