@@ -38,7 +38,14 @@ func (e *GrammarConflictError) Error() string {
 	if e == nil {
 		return "<nil>"
 	}
-	return fmt.Sprintf("yapar grammar conflict (%s) at state %d, symbol %q", e.Kind, e.State, e.Symbol)
+	return fmt.Sprintf(
+		"yapar grammar conflict (%s) at state %d, symbol %q: existing=%s new=%s",
+		e.Kind,
+		e.State,
+		e.Symbol,
+		formatAction(e.Current),
+		formatAction(e.New),
+	)
 }
 
 // SyntaxError representa errores del simulador LR sobre un stream de tokens.
