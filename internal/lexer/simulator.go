@@ -12,20 +12,11 @@ import (
 	"fmt"
 
 	"genanalex/internal/dfa"
+	"genanalex/internal/shared"
 )
 
-// Token representa una unidad lexica individual identificada por el analizador lexico.
-//
-// Campos:
-//   - Type:   tipo del token (por ejemplo, "ID", "NUMBER", "OPERATOR").
-//     Corresponde al nombre de la regla que lo reconocio.
-//   - Lexeme: la cadena exacta del codigo fuente que coincidio con el patron.
-//   - Line:   numero de linea (base 1) donde se encontro el token.
-type Token struct {
-	Type   string
-	Lexeme string
-	Line   int
-}
+// Token expone el contrato compartido entre el lexer y los consumidores sintácticos.
+type Token = shared.Token
 
 // DFAEntry agrupa un DFA con los metadatos necesarios para el proceso de simulacion.
 // Cada regla del archivo .yal se convierte en un DFAEntry independiente.
