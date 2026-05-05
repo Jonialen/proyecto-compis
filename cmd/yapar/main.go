@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"genanalex/internal/generator"
 	"genanalex/internal/lexbuild"
 	"genanalex/internal/yapar"
 )
@@ -15,6 +16,7 @@ import (
 type config struct {
 	yalpFile   string
 	yalFile    string
+	outFile    string
 	srcFile    string
 	printTable bool
 }
@@ -75,6 +77,14 @@ func run(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprint(stdout, formatParsingTable(grammar, table))
 	}
 
+	if cfg.outFile != "" {
+		fmt.Fprintf(stdout, "[*] Generating standalone parser: %s\n", cfg.outFile)
+		if err := generator.GenerateParserSource(cfg.outFile, grammar, table); err != nil {
+			return fmt.Errorf("generate standalone parser: %w", err)
+		}
+		fmt.Fprintln(stdout, "[+] Standalone parser generated successfully.")
+	}
+
 	if cfg.srcFile == "" {
 		fmt.Fprintln(stdout, "[+] No source provided; syntax pipeline built successfully.")
 		return nil
@@ -115,10 +125,11 @@ func parseFlags(args []string, stderr io.Writer) (*config, error) {
 	cfg := &config{}
 	fs.StringVar(&cfg.yalpFile, "yalp", "", "path to the .yalp parser specification file")
 	fs.StringVar(&cfg.yalFile, "yal", "", "path to the .yal lexer specification file")
+	fs.StringVar(&cfg.outFile, "out", "", "path to the output .go file for the generated parser")
 	fs.StringVar(&cfg.srcFile, "src", "", "path to the source file to tokenize and parse")
 	fs.BoolVar(&cfg.printTable, "table", false, "print the generated SLR(1) parsing table")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: yapar -yalp <parser.yalp> [-yal <lexer.yal> -src <input>] [-table]")
+		fmt.Fprintln(stderr, "Usage: yapar -yalp <parser.yalp> [-out <generated_parser.go>] [-yal <lexer.yal> -src <input>] [-table]")
 		fs.PrintDefaults()
 	}
 
