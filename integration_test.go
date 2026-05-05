@@ -437,11 +437,11 @@ func TestIntegration_OutFlag(t *testing.T) {
 	tmpDir := t.TempDir()
 	outFile := filepath.Join(tmpDir, "generated_lexer.go")
 
-	cmd := exec.Command("go", "run", "main.go", "-yal", "testdata/lexer.yal", "-out", outFile)
+	cmd := exec.Command("go", "run", "./cmd/yalex", "-yal", "testdata/lexer.yal", "-out", outFile)
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("go run main.go -yal ... -out ... failed: %v\n%s", err, string(out))
+		t.Fatalf("go run ./cmd/yalex -yal ... -out ... failed: %v\n%s", err, string(out))
 	}
 
 	// Verify output file was created and is non-empty
@@ -490,11 +490,11 @@ func TestIntegration_TreeFlagStandalone(t *testing.T) {
 	os.Remove(dotPath)
 	t.Cleanup(func() { os.Remove(dotPath) })
 
-	cmd := exec.Command("go", "run", "main.go", "-yal", "testdata/lexer.yal", "-tree")
+	cmd := exec.Command("go", "run", "./cmd/yalex", "-yal", "testdata/lexer.yal", "-tree")
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("go run main.go -yal ... -tree failed: %v\n%s", err, string(out))
+		t.Fatalf("go run ./cmd/yalex -yal ... -tree failed: %v\n%s", err, string(out))
 	}
 
 	// Verify tree.dot was created
@@ -514,7 +514,7 @@ func TestIntegration_OutAndSrcTogether(t *testing.T) {
 	tmpDir := t.TempDir()
 	outFile := filepath.Join(tmpDir, "generated_lexer.go")
 
-	cmd := exec.Command("go", "run", "main.go",
+	cmd := exec.Command("go", "run", "./cmd/yalex",
 		"-yal", "testdata/lexer.yal",
 		"-src", "testdata/test.lisp",
 		"-out", outFile,
@@ -522,7 +522,7 @@ func TestIntegration_OutAndSrcTogether(t *testing.T) {
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("go run main.go -yal -src -out failed: %v\n%s", err, string(out))
+		t.Fatalf("go run ./cmd/yalex -yal -src -out failed: %v\n%s", err, string(out))
 	}
 
 	output := string(out)
