@@ -312,8 +312,9 @@ func TestExpand_TransitiveMacro(t *testing.T) {
 }
 
 func TestExpand_CyclicMacro(t *testing.T) {
-	// A self-referencing macro (A=A) should be detected as a cycle
-	// and produce an error.
+	// Una macro auto-referencial (A=A) donde el valor es un unico
+	// identificador igual al nombre se trata como secuencia literal.
+	// Esto soporta patrones como: let or = or (keyword literal).
 	macros := map[string]string{
 		"A": "A",
 	}
@@ -321,12 +322,14 @@ func TestExpand_CyclicMacro(t *testing.T) {
 		{Pattern: "A", Action: "X", Priority: 0},
 	}
 
-	_, err := Expand(macros, rules)
-	if err == nil {
-		t.Fatal("expected error for cyclic macro, got nil")
+	expanded, err := Expand(macros, rules)
+	if err != nil {
+		t.Fatalf("unexpected error for self-referencing literal macro: %v", err)
 	}
-	if !strings.Contains(err.Error(), "cyclic") {
-		t.Errorf("expected error containing 'cyclic', got %q", err.Error())
+	// A se expande a 'A' (literal), luego la regla lo envuelve en parentesis
+	got := expanded[0].Pattern
+	if got != "('A')" {
+		t.Errorf("expanded pattern = %q, want %q", got, "('A')")
 	}
 }
 

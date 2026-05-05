@@ -1,5 +1,13 @@
-// Package dfa provides tools for building and minimizing Deterministic Finite Automata
-// from regular expression syntax trees.
+// Package dfa implementa la construccion y minimizacion de Automatas Finitos Deterministas (AFD)
+// a partir de arboles sintacticos de expresiones regulares. Utiliza el algoritmo de construccion
+// directa de AFD descrito en el Dragon Book (Aho, Sethi, Ullman), Seccion 3.9.
+//
+// El flujo general es:
+//  1. Convertir la expresion regular (en postfijo) a un arbol sintactico (tree.go)
+//  2. Calcular las funciones Nullable, FirstPos y LastPos (positions.go)
+//  3. Calcular la tabla FollowPos (followpos.go)
+//  4. Construir el AFD usando el algoritmo de lista de trabajo (builder.go)
+//  5. Minimizar el AFD usando el algoritmo de llenado de tabla (minimizer.go)
 package dfa
 
 import (
@@ -9,44 +17,78 @@ import (
 	"genanalex/internal/regex"
 )
 
-// NodeKind identifies the type of an operation or leaf in the syntax tree.
+// NodeKind identifica el tipo de operacion o hoja en el arbol sintactico.
+// Cada nodo del arbol puede ser una hoja (literal o epsilon) o un operador
+// (concatenacion, alternancia, cerradura de Kleene, cerradura positiva, o opcional).
 type NodeKind int
 
 const (
-	NodeLeaf    NodeKind = iota // A leaf node containing an input symbol.
-	NodeEpsilon                 // An epsilon (ε) node representing the empty string.
-	NodeCat                     // A concatenation (·) node.
-	NodeOr                      // An alternation (|) node.
-	NodeStar                    // A Kleene star (*) node for 0 or more repetitions.
-	NodePlus                    // A plus (+) node for 1 or more repetitions.
-	NodeOpt                     // An optional (?) node for 0 or 1 occurrence.
+	NodeLeaf    NodeKind = iota // Nodo hoja que contiene un simbolo de entrada.
+	NodeEpsilon                 // Nodo epsilon (vacio) que representa la cadena vacia.
+	NodeCat                     // Nodo de concatenacion (·) que une dos subexpresiones secuencialmente.
+	NodeOr                      // Nodo de alternancia (|) que representa la union de dos subexpresiones.
+	NodeStar                    // Nodo de cerradura de Kleene (*) para 0 o mas repeticiones.
+	NodePlus                    // Nodo de cerradura positiva (+) para 1 o mas repeticiones.
+	NodeOpt                     // Nodo opcional (?) para 0 o 1 ocurrencia.
 )
 
-// Node represents a single element in the syntax tree of a regular expression.
+// Node representa un solo elemento en el arbol sintactico de una expresion regular.
+// Los nodos hoja (NodeLeaf) contienen un simbolo y una posicion unica; los nodos internos
+// (operadores) tienen uno o dos hijos que representan sus operandos.
+//
+// Campos:
+//   - Kind:   tipo de nodo (hoja, operador, epsilon)
+//   - Symbol: el caracter literal (solo valido para NodeLeaf)
+//   - Pos:    identificador de posicion unico (1-indexado), asignado solo a nodos hoja
+//   - Left:   hijo izquierdo (primer operando)
+//   - Right:  hijo derecho (segundo operando, nil para operadores unarios)
+//
+// Los campos de cache (nullableCache, firstPosCache, lastPosCache) se usan para
+// memoizacion de las funciones Nullable, FirstPos y LastPos, evitando recalculos
+// costosos durante el recorrido repetido del arbol.
 type Node struct {
 	Kind   NodeKind
-	Symbol rune // The input symbol (valid for NodeLeaf).
-	Pos    int  // The unique position ID (1-indexed) assigned to leaf nodes.
+	Symbol rune // El simbolo de entrada (valido para NodeLeaf).
+	Pos    int  // El ID de posicion unico (1-indexado) asignado a nodos hoja.
 	Left   *Node
 	Right  *Node
 
-	// Memoization caches used to optimize the computation of DFA properties.
+	// Caches de memoizacion usados para optimizar el calculo de propiedades del AFD.
+	// Se usa *bool para nullableCache para distinguir "no calculado" (nil) de "calculado como false".
 	nullableCache *bool
 	firstPosCache map[int]bool
 	lastPosCache  map[int]bool
 }
 
-// BuildTree transforms a postfix regular expression into a syntax tree.
-// It returns the root node and a mapping of leaf positions to their symbols.
+// BuildTree transforma una expresion regular en notacion postfija en un arbol sintactico.
+// Utiliza un algoritmo basado en pila: los operandos se apilan y los operadores los desapilan
+// para construir subarboles.
+//
+// Parametros:
+//   - postfix: secuencia de tokens en notacion postfija generada por el modulo regex
+//
+// Retorna:
+//   - *Node: el nodo raiz del arbol sintactico construido
+//   - map[int]rune: mapeo de posiciones (enteros) a sus simbolos correspondientes,
+//     necesario para la construccion posterior del AFD
+//   - error: si la expresion postfija es invalida (operandos insuficientes, parentesis inesperados, etc.)
+//
+// Algoritmo:
+//  1. Recorrer cada token de la expresion postfija
+//  2. Si es un atomo (literal), crear un nodo hoja con posicion unica y apilarlo
+//  3. Si es un operador binario (|, concat), desapilar dos operandos y crear un nodo padre
+//  4. Si es un operador unario (*, +, ?), desapilar un operando y crear un nodo padre
+//  5. Al final, la pila debe contener exactamente un nodo: la raiz del arbol
 func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 	var stack []*Node
-	posCounter := 0
-	posToSymbol := make(map[int]rune)
+	posCounter := 0                   // Contador global de posiciones para asignar IDs unicos a hojas.
+	posToSymbol := make(map[int]rune) // Mapeo de posicion -> simbolo, usado luego por BuildDFA.
 
 	for _, tok := range postfix {
 		switch tok.Kind {
 		case regex.TokAtom:
-			// Each literal symbol becomes a leaf node with a unique position.
+			// Cada simbolo literal se convierte en un nodo hoja con una posicion unica.
+			// El contador de posiciones se incrementa para garantizar unicidad.
 			posCounter++
 			leaf := &Node{
 				Kind:   NodeLeaf,
@@ -57,9 +99,10 @@ func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 			stack = append(stack, leaf)
 
 		case regex.TokOp:
-			// Operators pop their operands from the stack and push a new subtree.
+			// Los operadores desapilan sus operandos de la pila y empujan un nuevo subarbol.
 			switch tok.Op {
 			case '|':
+				// Operador de alternancia: necesita dos operandos (izquierdo y derecho).
 				if len(stack) < 2 {
 					return nil, nil, fmt.Errorf("not enough operands for |")
 				}
@@ -69,6 +112,7 @@ func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 				stack = append(stack, &Node{Kind: NodeOr, Left: l, Right: r})
 
 			case regex.ConcatOp:
+				// Operador de concatenacion: necesita dos operandos (izquierdo y derecho).
 				if len(stack) < 2 {
 					return nil, nil, fmt.Errorf("not enough operands for concat")
 				}
@@ -78,6 +122,7 @@ func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 				stack = append(stack, &Node{Kind: NodeCat, Left: l, Right: r})
 
 			case '*':
+				// Cerradura de Kleene: necesita un operando (0 o mas repeticiones).
 				if len(stack) < 1 {
 					return nil, nil, fmt.Errorf("not enough operands for *")
 				}
@@ -86,6 +131,7 @@ func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 				stack = append(stack, &Node{Kind: NodeStar, Left: n})
 
 			case '+':
+				// Cerradura positiva: necesita un operando (1 o mas repeticiones).
 				if len(stack) < 1 {
 					return nil, nil, fmt.Errorf("not enough operands for +")
 				}
@@ -94,6 +140,7 @@ func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 				stack = append(stack, &Node{Kind: NodePlus, Left: n})
 
 			case '?':
+				// Operador opcional: necesita un operando (0 o 1 ocurrencia).
 				if len(stack) < 1 {
 					return nil, nil, fmt.Errorf("not enough operands for ?")
 				}
@@ -106,12 +153,15 @@ func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 			}
 
 		case regex.TokOpen, regex.TokClose:
-			// Parentheses are used during postfix conversion but should not exist in the final postfix.
+			// Los parentesis se utilizan durante la conversion a postfijo pero no deben
+			// aparecer en la expresion postfija final. Si aparecen, es un error.
 			return nil, nil, fmt.Errorf("unexpected parenthesis in postfix")
 		}
 	}
 
-	// At the end, there should be exactly one node on the stack (the root).
+	// Al finalizar, la pila debe contener exactamente un nodo (la raiz del arbol).
+	// Si hay mas de uno, la expresion postfija tiene operandos sobrantes.
+	// Si hay cero, la expresion estaba vacia.
 	if len(stack) != 1 {
 		return nil, nil, fmt.Errorf("syntax tree build error: %d nodes remaining (expected 1)", len(stack))
 	}
@@ -119,12 +169,25 @@ func BuildTree(postfix []regex.RegexToken) (*Node, map[int]rune, error) {
 	return stack[0], posToSymbol, nil
 }
 
-// ToDOT generates a Graphviz DOT representation for visualizing the syntax tree.
+// ToDOT genera una representacion en formato DOT de Graphviz para visualizar el arbol sintactico.
+// Realiza un recorrido en preorden del arbol, asignando un ID numerico a cada nodo y
+// creando las aristas correspondientes entre padres e hijos.
+//
+// Parametros:
+//   - root: el nodo raiz del arbol sintactico
+//
+// Retorna:
+//   - string: el codigo DOT completo que puede ser procesado por Graphviz para generar
+//     una imagen del arbol
 func ToDOT(root *Node) string {
 	var sb strings.Builder
 	sb.WriteString("digraph syntaxtree {\n")
 	sb.WriteString("  node [shape=circle];\n")
-	counter := 0
+	counter := 0 // Contador para asignar IDs unicos a cada nodo en el grafo DOT.
+
+	// visit recorre el arbol recursivamente en preorden.
+	// Asigna un ID al nodo actual, escribe su etiqueta, y luego visita
+	// recursivamente los hijos izquierdo y derecho creando las aristas.
 	var visit func(n *Node) int
 	visit = func(n *Node) int {
 		if n == nil {
@@ -149,13 +212,17 @@ func ToDOT(root *Node) string {
 	return sb.String()
 }
 
-// nodeLabel provides a descriptive label for each node in the DOT representation.
+// nodeLabel genera la etiqueta descriptiva para cada nodo en la representacion DOT.
+// Para nodos hoja muestra el simbolo y su posicion; para el marcador de fin (#)
+// muestra solo la posicion; para operadores muestra el simbolo del operador.
 func nodeLabel(n *Node) string {
 	switch n.Kind {
 	case NodeLeaf:
+		// Si es el marcador de fin de expresion, se muestra como "#(posicion)".
 		if n.Symbol == regex.EndMarker {
 			return fmt.Sprintf("#(%d)", n.Pos)
 		}
+		// Para hojas normales, se muestra el simbolo entre comillas y su posicion.
 		return fmt.Sprintf("%q(%d)", n.Symbol, n.Pos)
 	case NodeEpsilon:
 		return "ε"
