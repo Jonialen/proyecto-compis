@@ -1,82 +1,106 @@
-# Generador de Analizadores Léxicos (genAnaLex)
+# genAnaLex + YAPar
 
-Este proyecto es un Generador de Analizadores Léxicos implementado en Go. Toma como entrada una especificación en lenguaje **YALex** y genera automáticamente un analizador léxico funcional basado en Autómatas Finitos Deterministas (DFA).
+Toolkit en Go para construir y ejecutar analizadores de compiladores en dos capas:
 
-## Características
+- **YALex**: compila especificaciones `.yal`, genera DFA, tokeniza entradas y puede generar un lexer standalone.
+- **YAPar**: compila especificaciones `.yalp`, construye gramática + tabla **SLR(1)**, simula parsing y puede generar un parser standalone.
 
-- **Soporte YALex:** Procesa macros (`let`), reglas (`rule`) y acciones asociadas.
-- **Construcción de Árboles de Expresión:** Genera la representación visual de las expresiones regulares en formato Graphviz (`.dot`).
-- **DFA Directo:** Implementa el algoritmo de construcción directa de DFA a partir del árbol de sintaxis.
-- **Minimización de DFA:** Optimiza el autómata resultante para mayor eficiencia.
-- **Generación de Código:** Produce un archivo fuente en Go autónomo que puede tokenizar archivos de texto.
-- **Modo Simulación:** Permite tokenizar archivos directamente desde la herramienta principal sin necesidad de compilar el lexer generado.
+La referencia técnica completa está en `docs/documentacion_tecnica.md`. Este README solo cubre el uso rápido real del repositorio.
+
+## Estructura actual
+
+```text
+cmd/
+  yalex/   # CLI del lexer
+  yapar/   # CLI del parser
+
+internal/
+  dfa/
+  generator/
+  lexbuild/
+  lexer/
+  regex/
+  shared/
+  yalex/
+  yapar/
+
+docs/
+testdata/
+```
 
 ## Requisitos
 
-- [Go](https://golang.org/dl/) 1.18 o superior.
-- [Graphviz](https://graphviz.org/download/) (opcional, para visualizar los árboles generados).
+- Go 1.26+
+- Graphviz opcional, solo si quieres visualizar `tree.dot`
 
-## Instalación
+## Uso rápido
 
-Clona el repositorio y compila el binario:
-
-```bash
-go build -o genanalex main.go
-```
-
-## Uso
-
-La herramienta `genanalex` acepta varios parámetros para controlar el flujo de trabajo:
-
-### 1. Generar Árboles de Expresión
-Para visualizar la estructura interna de las expresiones regulares definidas en el `.yal`:
+### 1) YALex: generar o simular lexer
 
 ```bash
-./genanalex -yal testdata/lexer.yal -tree
-```
-Esto generará un archivo `tree.dot` que puedes convertir a imagen con:
-```bash
-dot -Tpng tree.dot -o tree.png
+go run ./cmd/yalex -yal testdata/lexer.yal -src testdata/test.lisp
+go run ./cmd/yalex -yal testdata/lexer.yal -out lexer_gen.go
+go run ./cmd/yalex -yal testdata/lexer.yal -tree
 ```
 
-### 2. Generar y Ejecutar el Analizador Léxico (Código Fuente)
-Para generar el programa en Go que servirá como tu lexer personalizado:
+Notas:
 
-```bash
-./genanalex -yal testdata/lexer.yal -out mi_lexer.go
-```
+- `-yal` es obligatorio.
+- Debes usar al menos uno de `-src`, `-out` o `-tree`.
+- `-tree` genera `tree.dot` en el directorio actual.
 
-Luego puedes compilar y ejecutar este lexer generado:
+### 2) YAPar: construir tabla, simular parser o generar parser standalone
 
 ```bash
-go run mi_lexer.go -src testdata/test.lisp
+go run ./cmd/yapar -yalp parser.yalp -table
+go run ./cmd/yapar -yalp parser.yalp -out parser_gen.go
+go run ./cmd/yapar -yalp parser.yalp -yal lexer.yal -src input.txt
 ```
 
-### 3. Tokenización Directa (Modo Simulación)
-Si deseas probar la especificación contra un archivo de entrada inmediatamente sin generar un archivo intermedio:
+Notas:
+
+- `-yalp` es obligatorio.
+- `-yal` y `-src` deben usarse juntos para ejecutar el flujo completo lexer → parser.
+- Si usas solo `-yalp`, la CLI valida el pipeline sintáctico hasta la tabla SLR(1).
+
+## Flujo básico del proyecto
+
+```text
+.yal  -> YALex -> tokens
+.yalp -> YAPar -> tabla SLR(1)
+tokens + tabla -> simulación sintáctica
+```
+
+Flujo de punta a punta desde las CLIs:
+
+1. Compilas el lexer desde `.yal`.
+2. Tokenizas el archivo fuente.
+3. Compilas la gramática desde `.yalp`.
+4. Ejecutas el parsing SLR(1) sobre esos tokens.
+
+## Parser standalone
+
+El parser generado con `-out` es autónomo y recibe tokens por JSON:
 
 ```bash
-./genanalex -yal testdata/lexer.yal -src testdata/test.lisp
+go run parser_gen.go -tokens tokens.json
 ```
 
-## Estructura del Proyecto
+Contrato esperado:
 
-- `main.go`: Punto de entrada que coordina el flujo de generación y simulación.
-- `internal/yalex/`: Parser y expansor de macros para el lenguaje YALex.
-- `internal/regex/`: Normalizador de expresiones regulares y conversión a postfix.
-- `internal/dfa/`: Construcción de árboles, cálculo de funciones (followpos) y construcción/minimización de DFA.
-- `internal/generator/`: Motor de plantillas para la generación del código fuente del lexer.
-- `internal/lexer/`: Simulador del lexer para pruebas rápidas y definiciones de estructuras de tokens.
-
-## Ejemplo de Especificación (YALex)
-
-```ocaml
-let DIGIT = [0-9]
-rule tokens =
-  | [' ' '\t' '\n'] { skip }
-  | DIGIT+          { INT }
-  | ['a'-'z']+      { ID }
+```json
+[
+  { "type": "ID", "lexeme": "x", "line": 1 }
+]
 ```
 
-## Créditos
-Desarrollado para el curso de Diseño de Lenguajes de Programación, Universidad del Valle de Guatemala.
+Campos:
+
+- `type`: token reconocido por la gramática
+- `lexeme`: lexema original
+- `line`: línea de origen
+
+## Documentación adicional
+
+- `docs/documentacion_tecnica.md`: estado técnico real del repositorio
+- `docs/parte2/`: planeación e implementación de YAPar
