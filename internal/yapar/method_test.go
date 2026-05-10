@@ -104,23 +104,18 @@ expr : ID PLUS ID ;
 }
 
 func TestSLRTableViewExposesActionGoto(t *testing.T) {
-	g := mustBuildGrammar(t, `%token C D
+	g, table := mustBuildParsingTable(t, `%token C D
 %%
 s : c c ;
 c : C c | D ;
 `)
-	ff, err := ComputeFirstFollow(g)
-	if err != nil {
-		t.Fatalf("ComputeFirstFollow() error = %v", err)
-	}
-	parser, err := BuildParser(g, ff, MethodSLR)
-	if err != nil {
-		t.Fatalf("BuildParser() error = %v", err)
-	}
 
-	view := parser.Table()
-	if got, ok := view.ActionAt(0, "C"); !ok || got.Kind != ActionShift {
-		t.Fatalf("ActionAt(0, C) = (%#v, %v), want shift action", got, ok)
+	view := (&slrTableView{grammar: g, table: table})
+	if kind, target, ok := view.ActionAt(0, "C"); !ok || kind != ActionShift || target == 0 {
+		t.Fatalf("ActionAt(0, C) = (%v, %d, %v), want shift action with target state", kind, target, ok)
+	}
+	if !assertHasReduceAction(t, view, table) {
+		t.Fatal("ActionAt() did not expose any reduce action from the SLR table")
 	}
 	if got, ok := view.GotoAt(0, "c"); !ok || got == 0 {
 		t.Fatalf("GotoAt(0, c) = (%d, %v), want target state", got, ok)
@@ -134,4 +129,24 @@ c : C c | D ;
 	if len(view.States()) == 0 {
 		t.Fatal("States() = empty, want parser states")
 	}
+}
+
+func assertHasReduceAction(t *testing.T, view TableView, table *ParsingTable) bool {
+	t.Helper()
+	for state, row := range table.Action {
+		for symbol, action := range row {
+			if action.Kind != ActionReduce {
+				continue
+			}
+			kind, target, ok := view.ActionAt(state, symbol)
+			if !ok {
+				t.Fatalf("ActionAt(%d, %q) = missing, want reduce action", state, symbol)
+			}
+			if kind != ActionReduce || target != action.ProductionID {
+				t.Fatalf("ActionAt(%d, %q) = (%v, %d, %v), want reduce production %d", state, symbol, kind, target, ok, action.ProductionID)
+			}
+			return true
+		}
+	}
+	return false
 }

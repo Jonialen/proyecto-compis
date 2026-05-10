@@ -136,14 +136,18 @@ expr : ID PLUS ID ;
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	err := run([]string{"-yalp", yalpPath, "-method", "ll1"}, &stdout, &stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want not implemented error")
-	}
-	if !strings.Contains(err.Error(), "not implemented") || !strings.Contains(err.Error(), "ll1") {
-		t.Fatalf("error = %q, want ll1 not implemented message", err.Error())
+	for _, method := range []string{"ll1", "lalr"} {
+		t.Run(method, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			err := run([]string{"-yalp", yalpPath, "-method", method}, &stdout, &stderr)
+			if err == nil {
+				t.Fatal("run() error = nil, want not implemented error")
+			}
+			if !strings.Contains(err.Error(), "not implemented") || !strings.Contains(err.Error(), method) {
+				t.Fatalf("error = %q, want %s not implemented message", err.Error(), method)
+			}
+		})
 	}
 }
 

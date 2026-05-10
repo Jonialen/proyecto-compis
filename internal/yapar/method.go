@@ -24,7 +24,7 @@ type ExecutableParser interface {
 }
 
 type TableView interface {
-	ActionAt(state int, symbol string) (Action, bool)
+	ActionAt(state int, symbol string) (ActionKind, int, bool)
 	GotoAt(state int, symbol string) (int, bool)
 	States() []int
 	Terminals() []string

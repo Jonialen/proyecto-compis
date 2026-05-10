@@ -32,16 +32,19 @@ type slrTableView struct {
 	table   *ParsingTable
 }
 
-func (v *slrTableView) ActionAt(state int, symbol string) (Action, bool) {
+func (v *slrTableView) ActionAt(state int, symbol string) (ActionKind, int, bool) {
 	if v == nil || v.table == nil || v.table.Action == nil {
-		return Action{}, false
+		return ActionError, 0, false
 	}
 	row := v.table.Action[state]
 	if row == nil {
-		return Action{}, false
+		return ActionError, 0, false
 	}
 	action, ok := row[symbol]
-	return action, ok
+	if !ok {
+		return ActionError, 0, false
+	}
+	return action.Kind, actionValue(action), true
 }
 
 func (v *slrTableView) GotoAt(state int, symbol string) (int, bool) {
@@ -69,4 +72,15 @@ func (v *slrTableView) Terminals() []string {
 
 func (v *slrTableView) NonTerminals() []string {
 	return sortedGrammarNonTerminals(v.grammar)
+}
+
+func actionValue(action Action) int {
+	switch action.Kind {
+	case ActionShift:
+		return action.TargetState
+	case ActionReduce:
+		return action.ProductionID
+	default:
+		return 0
+	}
 }

@@ -202,15 +202,15 @@ func formatGotoRow(table yapar.TableView, state int, nonTerminals []string) stri
 }
 
 func lookupAction(table yapar.TableView, state int, symbol string) string {
-	action, ok := table.ActionAt(state, symbol)
+	kind, value, ok := table.ActionAt(state, symbol)
 	if !ok {
 		return ""
 	}
-	switch action.Kind {
+	switch kind {
 	case yapar.ActionShift:
-		return fmt.Sprintf("s%d", action.TargetState)
+		return fmt.Sprintf("s%d", value)
 	case yapar.ActionReduce:
-		return fmt.Sprintf("r%d", action.ProductionID)
+		return fmt.Sprintf("r%d", value)
 	case yapar.ActionAccept:
 		return "acc"
 	default:
