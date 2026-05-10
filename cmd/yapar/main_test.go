@@ -22,7 +22,7 @@ expr : ID PLUS ID ;
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err := run([]string{"-yalp", yalpPath, "-table"}, &stdout, &stderr)
+	err := run([]string{"-yalp", yalpPath, "-method", "slr", "-table"}, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("run() error = %v; stderr=%s", err, stderr.String())
 	}
@@ -36,6 +36,28 @@ expr : ID PLUS ID ;
 	}
 	if !strings.Contains(out, "No source provided") {
 		t.Fatalf("stdout = %q, want no-source confirmation", out)
+	}
+}
+
+func TestRunDefaultsToSLRMethod(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := filepath.Join(dir, "parser.yalp")
+	if err := os.WriteFile(yalpPath, []byte(`%token ID PLUS WS
+IGNORE WS
+%%
+expr : ID PLUS ID ;
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v; stderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Parser pipeline ready") {
+		t.Fatalf("stdout = %q, want pipeline summary", stdout.String())
 	}
 }
 
@@ -80,6 +102,48 @@ rule tokens =
 	}
 	if !strings.Contains(out, "Input accepted.") {
 		t.Fatalf("stdout = %q, want accepted parse", out)
+	}
+}
+
+func TestRunRejectsInvalidMethod(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := filepath.Join(dir, "parser.yalp")
+	if err := os.WriteFile(yalpPath, []byte(`%token ID PLUS
+%%
+expr : ID PLUS ID ;
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-method", "foo"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want invalid method error")
+	}
+	if !strings.Contains(err.Error(), "slr") || !strings.Contains(err.Error(), "ll1") || !strings.Contains(err.Error(), "lalr") {
+		t.Fatalf("error = %q, want valid method options", err.Error())
+	}
+}
+
+func TestRunRejectsUnimplementedMethod(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := filepath.Join(dir, "parser.yalp")
+	if err := os.WriteFile(yalpPath, []byte(`%token ID PLUS
+%%
+expr : ID PLUS ID ;
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-method", "ll1"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want not implemented error")
+	}
+	if !strings.Contains(err.Error(), "not implemented") || !strings.Contains(err.Error(), "ll1") {
+		t.Fatalf("error = %q, want ll1 not implemented message", err.Error())
 	}
 }
 

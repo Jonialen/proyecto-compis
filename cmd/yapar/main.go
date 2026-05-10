@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strings"
 
 	"genanalex/internal/generator"
@@ -18,6 +17,7 @@ type config struct {
 	yalFile    string
 	outFile    string
 	srcFile    string
+	method     yapar.Method
 	printTable bool
 }
 
@@ -59,27 +59,26 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("compute FIRST/FOLLOW: %w", err)
 	}
 
-	fmt.Fprintln(stdout, "[*] Building LR(0) canonical collection...")
-	states, transitions, err := yapar.BuildCanonicalCollection(grammar)
+	fmt.Fprintf(stdout, "[*] Building parser backend (%s)...\n", cfg.method)
+	parser, err := yapar.BuildParser(grammar, ff, cfg.method)
 	if err != nil {
-		return fmt.Errorf("build LR(0) collection: %w", err)
+		return fmt.Errorf("build parser backend: %w", err)
 	}
 
-	fmt.Fprintln(stdout, "[*] Building SLR(1) parsing table...")
-	table, err := yapar.BuildSLRTable(grammar, ff, states, transitions)
-	if err != nil {
-		return fmt.Errorf("build SLR(1) table: %w", err)
-	}
-
-	fmt.Fprintf(stdout, "[+] Parser pipeline ready: %d productions, %d states\n", len(grammar.Productions), len(states))
+	table := parser.Table()
+	fmt.Fprintf(stdout, "[+] Parser pipeline ready: %d productions, %d states\n", len(grammar.Productions), len(table.States()))
 	if cfg.printTable {
-		fmt.Fprintln(stdout, "\n--- SLR(1) Table ---")
-		fmt.Fprint(stdout, formatParsingTable(grammar, table))
+		tableLabel := strings.ToUpper(string(cfg.method))
+		if cfg.method == yapar.MethodSLR {
+			tableLabel = "SLR(1)"
+		}
+		fmt.Fprintf(stdout, "\n--- %s Table ---\n", tableLabel)
+		fmt.Fprint(stdout, formatParsingTable(table))
 	}
 
 	if cfg.outFile != "" {
 		fmt.Fprintf(stdout, "[*] Generating standalone parser: %s\n", cfg.outFile)
-		if err := generator.GenerateParserSource(cfg.outFile, grammar, table); err != nil {
+		if err := generator.GenerateParserSourceFromTableView(cfg.outFile, grammar, table); err != nil {
 			return fmt.Errorf("generate standalone parser: %w", err)
 		}
 		fmt.Fprintln(stdout, "[+] Standalone parser generated successfully.")
@@ -106,7 +105,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 
 	fmt.Fprintf(stdout, "[*] Parsing %d tokens...\n", len(tokens))
-	result, err := yapar.ParseTokens(grammar, table, tokens)
+	result, err := parser.Parse(tokens)
 	if err != nil {
 		return fmt.Errorf("parse tokens: %w", err)
 	}
@@ -127,6 +126,8 @@ func parseFlags(args []string, stderr io.Writer) (*config, error) {
 	fs.StringVar(&cfg.yalFile, "yal", "", "path to the .yal lexer specification file")
 	fs.StringVar(&cfg.outFile, "out", "", "path to the output .go file for the generated parser")
 	fs.StringVar(&cfg.srcFile, "src", "", "path to the source file to tokenize and parse")
+	method := string(yapar.MethodSLR)
+	fs.StringVar(&method, "method", method, "parser method: slr, ll1, lalr")
 	fs.BoolVar(&cfg.printTable, "table", false, "print the generated SLR(1) parsing table")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: yapar -yalp <parser.yalp> [-out <generated_parser.go>] [-yal <lexer.yal> -src <input>] [-table]")
@@ -143,6 +144,11 @@ func parseFlags(args []string, stderr io.Writer) (*config, error) {
 	if (cfg.yalFile == "") != (cfg.srcFile == "") {
 		return nil, fmt.Errorf("-yal and -src must be provided together")
 	}
+	parsedMethod, err := yapar.ParseMethod(method)
+	if err != nil {
+		return nil, err
+	}
+	cfg.method = parsedMethod
 	if fs.NArg() > 0 {
 		return nil, fmt.Errorf("unexpected positional arguments: %s", strings.Join(fs.Args(), " "))
 	}
@@ -150,14 +156,14 @@ func parseFlags(args []string, stderr io.Writer) (*config, error) {
 	return cfg, nil
 }
 
-func formatParsingTable(grammar *yapar.Grammar, table *yapar.ParsingTable) string {
+func formatParsingTable(table yapar.TableView) string {
 	if table == nil {
 		return "<empty table>\n"
 	}
 
-	terms := sortedSymbols(grammar.Terminals)
-	nonTerms := sortedNonTerminals(grammar)
-	states := sortedStateIDs(table)
+	terms := table.Terminals()
+	nonTerms := table.NonTerminals()
+	states := table.States()
 
 	var builder strings.Builder
 	builder.WriteString("State\tACTION\tGOTO\n")
@@ -167,47 +173,7 @@ func formatParsingTable(grammar *yapar.Grammar, table *yapar.ParsingTable) strin
 	return builder.String()
 }
 
-func sortedSymbols(symbols map[string]bool) []string {
-	result := make([]string, 0, len(symbols))
-	for symbol := range symbols {
-		result = append(result, symbol)
-	}
-	sort.Strings(result)
-	return result
-}
-
-func sortedNonTerminals(grammar *yapar.Grammar) []string {
-	if grammar == nil {
-		return nil
-	}
-	result := make([]string, 0, len(grammar.NonTerminals))
-	for symbol := range grammar.NonTerminals {
-		if symbol == grammar.Augmented {
-			continue
-		}
-		result = append(result, symbol)
-	}
-	sort.Strings(result)
-	return result
-}
-
-func sortedStateIDs(table *yapar.ParsingTable) []int {
-	stateSet := make(map[int]bool)
-	for state := range table.Action {
-		stateSet[state] = true
-	}
-	for state := range table.Goto {
-		stateSet[state] = true
-	}
-	result := make([]int, 0, len(stateSet))
-	for state := range stateSet {
-		result = append(result, state)
-	}
-	sort.Ints(result)
-	return result
-}
-
-func formatActionRow(table *yapar.ParsingTable, state int, terminals []string) string {
+func formatActionRow(table yapar.TableView, state int, terminals []string) string {
 	parts := make([]string, 0, len(terminals))
 	for _, symbol := range terminals {
 		action := lookupAction(table, state, symbol)
@@ -222,7 +188,7 @@ func formatActionRow(table *yapar.ParsingTable, state int, terminals []string) s
 	return strings.Join(parts, ", ")
 }
 
-func formatGotoRow(table *yapar.ParsingTable, state int, nonTerminals []string) string {
+func formatGotoRow(table yapar.TableView, state int, nonTerminals []string) string {
 	parts := make([]string, 0, len(nonTerminals))
 	for _, symbol := range nonTerminals {
 		if target, ok := lookupGoto(table, state, symbol); ok {
@@ -235,15 +201,8 @@ func formatGotoRow(table *yapar.ParsingTable, state int, nonTerminals []string) 
 	return strings.Join(parts, ", ")
 }
 
-func lookupAction(table *yapar.ParsingTable, state int, symbol string) string {
-	if table == nil || table.Action == nil {
-		return ""
-	}
-	row := table.Action[state]
-	if row == nil {
-		return ""
-	}
-	action, ok := row[symbol]
+func lookupAction(table yapar.TableView, state int, symbol string) string {
+	action, ok := table.ActionAt(state, symbol)
 	if !ok {
 		return ""
 	}
@@ -259,14 +218,6 @@ func lookupAction(table *yapar.ParsingTable, state int, symbol string) string {
 	}
 }
 
-func lookupGoto(table *yapar.ParsingTable, state int, symbol string) (int, bool) {
-	if table == nil || table.Goto == nil {
-		return 0, false
-	}
-	row := table.Goto[state]
-	if row == nil {
-		return 0, false
-	}
-	target, ok := row[symbol]
-	return target, ok
+func lookupGoto(table yapar.TableView, state int, symbol string) (int, bool) {
+	return table.GotoAt(state, symbol)
 }

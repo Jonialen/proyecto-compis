@@ -52,6 +52,14 @@ type parserGotoCellData struct {
 
 // GenerateParserSource serializa la gramática y la tabla LR en un parser Go autónomo.
 func GenerateParserSource(outputPath string, g *yapar.Grammar, table *yapar.ParsingTable) error {
+	if table == nil {
+		return fmt.Errorf("generating parser source: parsing table is required")
+	}
+	return GenerateParserSourceFromTableView(outputPath, g, parserTableViewAdapter{grammar: g, table: table})
+}
+
+// GenerateParserSourceFromTableView serializa la gramática y cualquier tabla compatible con TableView.
+func GenerateParserSourceFromTableView(outputPath string, g *yapar.Grammar, table yapar.TableView) error {
 	if g == nil {
 		return fmt.Errorf("generating parser source: grammar is required")
 	}
@@ -65,7 +73,7 @@ func GenerateParserSource(outputPath string, g *yapar.Grammar, table *yapar.Pars
 	}
 
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, buildParserTemplateData(g, table)); err != nil {
+	if err := tmpl.Execute(&buf, buildParserTemplateDataFromTableView(g, table)); err != nil {
 		return fmt.Errorf("executing parser template: %w", err)
 	}
 
@@ -76,7 +84,7 @@ func GenerateParserSource(outputPath string, g *yapar.Grammar, table *yapar.Pars
 	return nil
 }
 
-func buildParserTemplateData(g *yapar.Grammar, table *yapar.ParsingTable) parserTemplateData {
+func buildParserTemplateDataFromTableView(g *yapar.Grammar, table yapar.TableView) parserTemplateData {
 	data := parserTemplateData{
 		Start:     g.Start,
 		Augmented: g.Augmented,
@@ -93,33 +101,41 @@ func buildParserTemplateData(g *yapar.Grammar, table *yapar.ParsingTable) parser
 		data.Productions = append(data.Productions, entry)
 	}
 
-	data.ActionRows = buildActionRows(table.Action)
-	data.GotoRows = buildGotoRows(table.Goto)
+	data.ActionRows = buildActionRows(table)
+	data.GotoRows = buildGotoRows(table)
 	return data
 }
 
-func buildActionRows(actionTable map[int]map[string]yapar.Action) []parserActionRowData {
-	states := sortedIntKeysFromActions(actionTable)
+func buildActionRows(table yapar.TableView) []parserActionRowData {
+	states := table.States()
 	rows := make([]parserActionRowData, 0, len(states))
+	terminals := table.Terminals()
 	for _, state := range states {
 		row := parserActionRowData{State: state}
-		symbols := sortedActionSymbols(actionTable[state])
-		for _, symbol := range symbols {
-			row.Cells = append(row.Cells, parserActionCellData{Symbol: symbol, Action: actionTable[state][symbol]})
+		for _, symbol := range terminals {
+			action, ok := table.ActionAt(state, symbol)
+			if !ok {
+				continue
+			}
+			row.Cells = append(row.Cells, parserActionCellData{Symbol: symbol, Action: action})
 		}
 		rows = append(rows, row)
 	}
 	return rows
 }
 
-func buildGotoRows(gotoTable map[int]map[string]int) []parserGotoRowData {
-	states := sortedIntKeysFromGotos(gotoTable)
+func buildGotoRows(table yapar.TableView) []parserGotoRowData {
+	states := table.States()
 	rows := make([]parserGotoRowData, 0, len(states))
+	nonTerminals := table.NonTerminals()
 	for _, state := range states {
 		row := parserGotoRowData{State: state}
-		symbols := sortedStringIntKeys(gotoTable[state])
-		for _, symbol := range symbols {
-			row.Cells = append(row.Cells, parserGotoCellData{Symbol: symbol, Target: gotoTable[state][symbol]})
+		for _, symbol := range nonTerminals {
+			target, ok := table.GotoAt(state, symbol)
+			if !ok {
+				continue
+			}
+			row.Cells = append(row.Cells, parserGotoCellData{Symbol: symbol, Target: target})
 		}
 		rows = append(rows, row)
 	}
@@ -140,40 +156,71 @@ func sortedBoolKeys(values map[string]bool) []string {
 	return keys
 }
 
-func sortedIntKeysFromActions(values map[int]map[string]yapar.Action) []int {
-	keys := make([]int, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Ints(keys)
-	return keys
+type parserTableViewAdapter struct {
+	grammar *yapar.Grammar
+	table   *yapar.ParsingTable
 }
 
-func sortedIntKeysFromGotos(values map[int]map[string]int) []int {
-	keys := make([]int, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
+func (v parserTableViewAdapter) ActionAt(state int, symbol string) (yapar.Action, bool) {
+	if v.table == nil || v.table.Action == nil {
+		return yapar.Action{}, false
 	}
-	sort.Ints(keys)
-	return keys
+	row := v.table.Action[state]
+	if row == nil {
+		return yapar.Action{}, false
+	}
+	action, ok := row[symbol]
+	return action, ok
 }
 
-func sortedActionSymbols(values map[string]yapar.Action) []string {
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
+func (v parserTableViewAdapter) GotoAt(state int, symbol string) (int, bool) {
+	if v.table == nil || v.table.Goto == nil {
+		return 0, false
 	}
-	sort.Strings(keys)
-	return keys
+	row := v.table.Goto[state]
+	if row == nil {
+		return 0, false
+	}
+	target, ok := row[symbol]
+	return target, ok
 }
 
-func sortedStringIntKeys(values map[string]int) []string {
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
+func (v parserTableViewAdapter) States() []int {
+	stateSet := make(map[int]bool)
+	for state := range v.table.Action {
+		stateSet[state] = true
 	}
-	sort.Strings(keys)
-	return keys
+	for state := range v.table.Goto {
+		stateSet[state] = true
+	}
+	result := make([]int, 0, len(stateSet))
+	for state := range stateSet {
+		result = append(result, state)
+	}
+	sort.Ints(result)
+	return result
+}
+
+func (v parserTableViewAdapter) Terminals() []string {
+	if v.grammar == nil {
+		return nil
+	}
+	return sortedBoolKeys(v.grammar.Terminals)
+}
+
+func (v parserTableViewAdapter) NonTerminals() []string {
+	if v.grammar == nil {
+		return nil
+	}
+	result := make([]string, 0, len(v.grammar.NonTerminals))
+	for symbol := range v.grammar.NonTerminals {
+		if symbol == v.grammar.Augmented {
+			continue
+		}
+		result = append(result, symbol)
+	}
+	sort.Strings(result)
+	return result
 }
 
 const parserTemplate = `// Code generated by yapar. DO NOT EDIT.
