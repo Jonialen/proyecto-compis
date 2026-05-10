@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -220,6 +221,91 @@ opt : B | ;
 	}
 	if !strings.Contains(out, "LL1 Table") {
 		t.Fatalf("stdout = %q, want LL1 rendered table", out)
+	}
+}
+
+func TestRunEmitsJSONVisualization(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := filepath.Join(dir, "parser.yalp")
+	if err := os.WriteFile(yalpPath, []byte(`%token ID PLUS
+%%
+expr : ID PLUS ID ;
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-format", "json"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v; stderr=%s", err, stderr.String())
+	}
+
+	var payload struct {
+		Method string `json:"method"`
+		States []struct {
+			Actions map[string]string `json:"actions"`
+		} `json:"states"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(stdout) error = %v\nstdout=%s\nstderr=%s", err, stdout.String(), stderr.String())
+	}
+	if payload.Method != "slr" {
+		t.Fatalf("method = %q, want slr", payload.Method)
+	}
+	if len(payload.States) == 0 {
+		t.Fatal("states = 0, want populated JSON table")
+	}
+	if !strings.Contains(stderr.String(), "Parser pipeline ready") {
+		t.Fatalf("stderr = %q, want pipeline summary", stderr.String())
+	}
+}
+
+func TestRunEmitsDOTVisualizationForLALR(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := filepath.Join(dir, "parser.yalp")
+	if err := os.WriteFile(yalpPath, []byte(`%token ID PLUS
+%%
+expr : ID PLUS ID ;
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-method", "lalr", "-format", "dot"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v; stderr=%s", err, stderr.String())
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "digraph LR0") {
+		t.Fatalf("stdout = %q, want DOT graph", out)
+	}
+	if !strings.Contains(out, "->") {
+		t.Fatalf("stdout = %q, want transitions", out)
+	}
+}
+
+func TestRunRejectsDOTForLL1(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := filepath.Join(dir, "parser.yalp")
+	if err := os.WriteFile(yalpPath, []byte(`%token A B
+%%
+s : A opt ;
+opt : B | ;
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-method", "ll1", "-format", "dot"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want unsupported DOT error")
+	}
+	if !strings.Contains(err.Error(), "not supported") || !strings.Contains(err.Error(), "ll1") {
+		t.Fatalf("error = %q, want explicit unsupported ll1 message", err.Error())
 	}
 }
 
