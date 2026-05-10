@@ -1,7 +1,6 @@
 package yapar
 
 import (
-	"errors"
 	"reflect"
 	"testing"
 
@@ -76,11 +75,11 @@ opt : B | ;
 	}
 
 	parser, err = BuildParser(g, ff, MethodLALR)
-	if parser != nil {
-		t.Fatalf("BuildParser() parser = %#v, want nil", parser)
+	if err != nil {
+		t.Fatalf("BuildParser() lalr error = %v", err)
 	}
-	if !errors.Is(err, ErrNotImplemented) {
-		t.Fatalf("BuildParser() error = %v, want ErrNotImplemented", err)
+	if parser == nil || parser.Table() == nil {
+		t.Fatal("BuildParser() lalr returned nil parser/table")
 	}
 }
 

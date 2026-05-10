@@ -126,7 +126,7 @@ expr : ID PLUS ID ;
 	}
 }
 
-func TestRunRejectsUnimplementedMethod(t *testing.T) {
+func TestRunBuildsLALRPipelineWithoutSource(t *testing.T) {
 	dir := t.TempDir()
 	yalpPath := filepath.Join(dir, "parser.yalp")
 	if err := os.WriteFile(yalpPath, []byte(`%token ID PLUS
@@ -139,11 +139,15 @@ expr : ID PLUS ID ;
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	err := run([]string{"-yalp", yalpPath, "-method", "lalr"}, &stdout, &stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want not implemented error")
+	if err != nil {
+		t.Fatalf("run() error = %v; stderr=%s", err, stderr.String())
 	}
-	if !strings.Contains(err.Error(), "not implemented") || !strings.Contains(err.Error(), "lalr") {
-		t.Fatalf("error = %q, want lalr not implemented message", err.Error())
+	out := stdout.String()
+	if !strings.Contains(out, "Parser pipeline ready") {
+		t.Fatalf("stdout = %q, want pipeline summary", out)
+	}
+	if !strings.Contains(out, "No source provided") {
+		t.Fatalf("stdout = %q, want no-source confirmation", out)
 	}
 }
 
@@ -167,6 +171,28 @@ opt : B | ;
 	}
 	if !strings.Contains(err.Error(), "ll1") || !strings.Contains(err.Error(), "not supported") {
 		t.Fatalf("error = %q, want ll1 not supported error", err.Error())
+	}
+}
+
+func TestRunRejectsLALRStandaloneGeneration(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := filepath.Join(dir, "parser.yalp")
+	outPath := filepath.Join(dir, "parser.go")
+	if err := os.WriteFile(yalpPath, []byte(`%token ID PLUS
+%%
+expr : ID PLUS ID ;
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-method", "lalr", "-out", outPath}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want unsupported lalr codegen error")
+	}
+	if !strings.Contains(err.Error(), "lalr") || !strings.Contains(err.Error(), "not supported") {
+		t.Fatalf("error = %q, want lalr not supported error", err.Error())
 	}
 }
 
@@ -251,5 +277,49 @@ expr : ID PLUS ID ;
 	}
 	if !strings.Contains(out, "No source provided") {
 		t.Fatalf("stdout = %q, want no-source confirmation", out)
+	}
+}
+
+func TestRunParsesTokenizedSourceWithLALR(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := filepath.Join(dir, "parser.yalp")
+	yalPath := filepath.Join(dir, "lexer.yal")
+	srcPath := filepath.Join(dir, "input.txt")
+
+	if err := os.WriteFile(yalpPath, []byte(`%token INT PLUS WS
+IGNORE WS
+%%
+expr : INT PLUS INT ;
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(yalp) error = %v", err)
+	}
+
+	if err := os.WriteFile(yalPath, []byte(`let DIGIT = [0-9]
+
+rule tokens =
+  | [' ' '\t' '\n']+ { WS }
+  | DIGIT+ { INT }
+  | '+' { PLUS }
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(yal) error = %v", err)
+	}
+
+	if err := os.WriteFile(srcPath, []byte("12 + 34\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(src) error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-yal", yalPath, "-src", srcPath, "-method", "lalr", "-table"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v; stderr=%s", err, stderr.String())
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "LALR Table") {
+		t.Fatalf("stdout = %q, want LALR rendered table", out)
+	}
+	if !strings.Contains(out, "Input accepted.") {
+		t.Fatalf("stdout = %q, want accepted parse", out)
 	}
 }

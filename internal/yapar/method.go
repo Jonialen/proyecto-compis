@@ -48,7 +48,7 @@ func BuildParser(g *Grammar, ff *FirstFollow, method Method) (ExecutableParser, 
 	case MethodLL1:
 		return buildLL1Parser(g, ff)
 	case MethodLALR:
-		return nil, fmt.Errorf("%w: method %s", ErrNotImplemented, method)
+		return buildLALRParser(g, ff)
 	default:
 		return nil, fmt.Errorf("invalid parser method %q: valid options are %s", method, strings.Join(methodNames(), ", "))
 	}
