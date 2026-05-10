@@ -2,6 +2,7 @@ package yapar
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"genanalex/internal/shared"
@@ -80,6 +81,14 @@ opt : B | ;
 	}
 	if parser == nil || parser.Table() == nil {
 		t.Fatal("BuildParser() lalr returned nil parser/table")
+	}
+
+	_, err = BuildParser(g, ff, Method("lr2"))
+	if err == nil {
+		t.Fatal("BuildParser() unsupported method error = nil, want error")
+	}
+	if got := err.Error(); !strings.Contains(got, "not implemented yet") {
+		t.Fatalf("BuildParser() unsupported method error = %q, want message containing %q", got, "not implemented yet")
 	}
 }
 

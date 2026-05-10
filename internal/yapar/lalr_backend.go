@@ -77,10 +77,16 @@ func (v *lalrTableView) States() []int {
 }
 
 func (v *lalrTableView) Terminals() []string {
+	if v == nil {
+		return nil
+	}
 	return sortedGrammarTerminals(v.grammar)
 }
 
 func (v *lalrTableView) NonTerminals() []string {
+	if v == nil {
+		return nil
+	}
 	return sortedGrammarNonTerminals(v.grammar)
 }
 

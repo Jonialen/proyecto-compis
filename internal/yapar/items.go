@@ -2,6 +2,7 @@
 package yapar
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -229,7 +230,7 @@ func BuildLR1Collection(g *Grammar, ff *FirstFollow) ([]LR1State, map[int]map[st
 		return nil, transitions, nil
 	}
 	if ff == nil {
-		return nil, nil, nil
+		return nil, nil, fmt.Errorf("yapar: first/follow data is required to build LR1 collection")
 	}
 
 	initial := ClosureLR1(g, ff, []LR1Item{{ProductionID: 0, Dot: 0, Lookahead: EndMarker}})

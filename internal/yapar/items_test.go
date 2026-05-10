@@ -255,3 +255,24 @@ c : C c | D ;
 		t.Fatalf("state on c = %#v, want shifted lookahead-aware continuation", got)
 	}
 }
+
+func TestBuildLR1CollectionRejectsNilFirstFollow(t *testing.T) {
+	g := mustBuildGrammar(t, `%token A
+%%
+s : A ;
+`)
+
+	states, transitions, err := BuildLR1Collection(g, nil)
+	if err == nil {
+		t.Fatal("BuildLR1Collection(g, nil) error = nil, want error")
+	}
+	if states != nil {
+		t.Fatalf("BuildLR1Collection(g, nil) states = %#v, want nil", states)
+	}
+	if transitions != nil {
+		t.Fatalf("BuildLR1Collection(g, nil) transitions = %#v, want nil", transitions)
+	}
+	if got, want := err.Error(), "yapar: first/follow data is required to build LR1 collection"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+}
