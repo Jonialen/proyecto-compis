@@ -147,6 +147,42 @@ func TestRenderTableText(t *testing.T) {
 	}
 }
 
+func TestRenderTableTextNilSafety(t *testing.T) {
+	tests := []struct {
+		name   string
+		report *VisualizationReport
+		want   string
+	}{
+		{
+			name:   "nil report returns empty table marker",
+			report: nil,
+			want:   "<empty table>\n",
+		},
+		{
+			name:   "nil table returns empty table marker",
+			report: &VisualizationReport{Method: MethodSLR},
+			want:   "<empty table>\n",
+		},
+		{
+			name: "empty action and goto rows render placeholders",
+			report: &VisualizationReport{Table: visualizerStubTable{
+				states:       []int{3},
+				terminals:    []string{"ID"},
+				nonTerminals: []string{"expr"},
+			}},
+			want: "State\tACTION\tGOTO\n3\t-\t-\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := RenderTableText(tt.report); got != tt.want {
+				t.Fatalf("RenderTableText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRenderTableJSON(t *testing.T) {
 	report := &VisualizationReport{
 		Method: MethodSLR,
@@ -202,6 +238,47 @@ func TestRenderTableJSON(t *testing.T) {
 	}
 }
 
+func TestRenderTableJSONNilSafety(t *testing.T) {
+	tests := []struct {
+		name   string
+		report *VisualizationReport
+	}{
+		{name: "nil report", report: nil},
+		{name: "nil table", report: &VisualizationReport{Method: MethodLALR}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := RenderTableJSON(tt.report)
+			if err != nil {
+				t.Fatalf("RenderTableJSON() error = %v", err)
+			}
+
+			var payload struct {
+				Method       string            `json:"method"`
+				Terminals    []string          `json:"terminals"`
+				NonTerminals []string          `json:"non_terminals"`
+				States       []json.RawMessage `json:"states"`
+			}
+			if err := json.Unmarshal(raw, &payload); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v\nraw=%s", err, string(raw))
+			}
+			if payload.Method != "" {
+				t.Fatalf("method = %q, want empty method for nil-safe payload", payload.Method)
+			}
+			if len(payload.Terminals) != 0 {
+				t.Fatalf("terminals len = %d, want 0", len(payload.Terminals))
+			}
+			if len(payload.NonTerminals) != 0 {
+				t.Fatalf("non_terminals len = %d, want 0", len(payload.NonTerminals))
+			}
+			if len(payload.States) != 0 {
+				t.Fatalf("states len = %d, want 0", len(payload.States))
+			}
+		})
+	}
+}
+
 func TestRenderAutomatonDOT(t *testing.T) {
 	report := &VisualizationReport{
 		Method: MethodSLR,
@@ -238,4 +315,51 @@ expr : ID PLUS ID ;
 	if !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("RenderAutomatonDOT(ll1) error = %v, want ErrUnsupported", err)
 	}
+}
+
+func TestRenderAutomatonDOTNilSafety(t *testing.T) {
+	t.Run("nil report is unsupported", func(t *testing.T) {
+		_, err := RenderAutomatonDOT(nil)
+		if !errors.Is(err, ErrUnsupported) {
+			t.Fatalf("RenderAutomatonDOT(nil) error = %v, want ErrUnsupported", err)
+		}
+	})
+
+	t.Run("nil grammar with lr0 states is rejected", func(t *testing.T) {
+		_, err := RenderAutomatonDOT(&VisualizationReport{
+			Method:    MethodSLR,
+			LR0States: []State{{ID: 0}},
+		})
+		if err == nil {
+			t.Fatal("RenderAutomatonDOT() error = nil, want grammar error")
+		}
+		if got, want := err.Error(), "yapar: grammar is required to render LR(0) automaton"; got != want {
+			t.Fatalf("error = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("nil transition rows still render node-only graph", func(t *testing.T) {
+		report := &VisualizationReport{
+			Method: MethodSLR,
+			Grammar: mustBuildGrammar(t, `%token ID
+%%
+expr : ID ;
+`),
+			LR0States: []State{{
+				ID:    4,
+				Items: []Item{{ProductionID: 0, Dot: 0}},
+			}},
+		}
+
+		dot, err := RenderAutomatonDOT(report)
+		if err != nil {
+			t.Fatalf("RenderAutomatonDOT() error = %v", err)
+		}
+		if !strings.Contains(dot, "I4") {
+			t.Fatalf("DOT = %q, want rendered node", dot)
+		}
+		if strings.Contains(dot, "->") {
+			t.Fatalf("DOT = %q, want no transitions for nil LR0Trans", dot)
+		}
+	})
 }
