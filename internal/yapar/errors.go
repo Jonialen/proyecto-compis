@@ -65,3 +65,41 @@ func (e *SyntaxError) Error() string {
 	}
 	return fmt.Sprintf("syntax error at line %d: got %q (%q), expected %v", e.Line, e.GotType, e.Lexeme, e.Expected)
 }
+
+// LL1ConflictError representa conflictos predict/predict al llenar la tabla LL(1).
+type LL1ConflictError struct {
+	NonTerminal  string
+	Terminal     string
+	ExistingProd int
+	ConflictProd int
+}
+
+func (e *LL1ConflictError) Error() string {
+	if e == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf(
+		"yapar ll1 conflict at non-terminal %q with lookahead %q: existing production=%d conflicting production=%d",
+		e.NonTerminal,
+		e.Terminal,
+		e.ExistingProd,
+		e.ConflictProd,
+	)
+}
+
+// LeftRecursionError representa recursión izquierda directa incompatible con LL(1).
+type LeftRecursionError struct {
+	NonTerminal  string
+	ProductionID int
+}
+
+func (e *LeftRecursionError) Error() string {
+	if e == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf(
+		"yapar ll1 left recursion at non-terminal %q in production %d",
+		e.NonTerminal,
+		e.ProductionID,
+	)
+}

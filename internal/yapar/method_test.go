@@ -58,16 +58,29 @@ expr : ID PLUS ID ;
 		t.Fatal("parser.Table() = nil, want table view")
 	}
 
-	for _, method := range []Method{MethodLL1, MethodLALR} {
-		t.Run(string(method), func(t *testing.T) {
-			parser, err := BuildParser(g, ff, method)
-			if parser != nil {
-				t.Fatalf("BuildParser() parser = %#v, want nil", parser)
-			}
-			if !errors.Is(err, ErrNotImplemented) {
-				t.Fatalf("BuildParser() error = %v, want ErrNotImplemented", err)
-			}
-		})
+	ll1Grammar := mustBuildGrammar(t, `%token A B
+%%
+s : A opt ;
+opt : B | ;
+`)
+	ll1FF, err := ComputeFirstFollow(ll1Grammar)
+	if err != nil {
+		t.Fatalf("ComputeFirstFollow() ll1 error = %v", err)
+	}
+	ll1Parser, err := BuildParser(ll1Grammar, ll1FF, MethodLL1)
+	if err != nil {
+		t.Fatalf("BuildParser() ll1 error = %v", err)
+	}
+	if ll1Parser == nil || ll1Parser.Table() == nil {
+		t.Fatal("BuildParser() ll1 returned nil parser/table")
+	}
+
+	parser, err = BuildParser(g, ff, MethodLALR)
+	if parser != nil {
+		t.Fatalf("BuildParser() parser = %#v, want nil", parser)
+	}
+	if !errors.Is(err, ErrNotImplemented) {
+		t.Fatalf("BuildParser() error = %v, want ErrNotImplemented", err)
 	}
 }
 

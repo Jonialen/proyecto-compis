@@ -77,6 +77,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 
 	if cfg.outFile != "" {
+		if cfg.method == yapar.MethodLL1 {
+			return fmt.Errorf("standalone parser generation is not supported for method %s", cfg.method)
+		}
 		fmt.Fprintf(stdout, "[*] Generating standalone parser: %s\n", cfg.outFile)
 		if err := generator.GenerateParserSourceFromTableView(cfg.outFile, grammar, table); err != nil {
 			return fmt.Errorf("generate standalone parser: %w", err)
