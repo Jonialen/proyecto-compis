@@ -92,6 +92,19 @@ opt : B | ;
 	}
 }
 
+func TestValidMethodsReturnsDefensiveCopy(t *testing.T) {
+	got := ValidMethods()
+	want := []Method{MethodSLR, MethodLL1, MethodLALR}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ValidMethods() = %v, want %v", got, want)
+	}
+
+	got[0] = Method("mutated")
+	if fresh := ValidMethods(); !reflect.DeepEqual(fresh, want) {
+		t.Fatalf("ValidMethods() defensive copy = %v, want %v", fresh, want)
+	}
+}
+
 func TestExecutableParserParseMatchesParseTokens(t *testing.T) {
 	g, table := mustBuildParsingTable(t, `%token ID PLUS WS
 IGNORE WS

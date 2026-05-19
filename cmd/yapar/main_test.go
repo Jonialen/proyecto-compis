@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -408,4 +409,148 @@ rule tokens =
 	if !strings.Contains(out, "Input accepted.") {
 		t.Fatalf("stdout = %q, want accepted parse", out)
 	}
+}
+
+func TestRunCompareTextRendersAllMethods(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := writeTempFile(t, dir, "parser.yalp", `%token ID PLUS
+%%
+expr : ID PLUS ID ;
+`)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-compare", "-format", "text"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v; stderr=%s", err, stderr.String())
+	}
+
+	out := stdout.String()
+	for _, label := range []string{"Comparison Summary", "SLR(1)", "LL1", "LALR"} {
+		if !strings.Contains(out, label) {
+			t.Fatalf("stdout = %q, want label %q", out, label)
+		}
+	}
+}
+
+func TestRunCompareJSONRendersResultsArray(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := writeTempFile(t, dir, "parser.yalp", `%token ID PLUS
+%%
+expr : ID PLUS ID ;
+`)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-compare", "-format", "json"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v; stderr=%s", err, stderr.String())
+	}
+
+	var payload struct {
+		Results []struct {
+			Method string `json:"method"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(stdout) error = %v\nstdout=%s\nstderr=%s", err, stdout.String(), stderr.String())
+	}
+	got := make([]string, len(payload.Results))
+	for i, result := range payload.Results {
+		got[i] = result.Method
+	}
+	if want := []string{"slr", "ll1", "lalr"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("results methods = %v, want %v", got, want)
+	}
+	if !strings.Contains(stderr.String(), "Building comparison report") {
+		t.Fatalf("stderr = %q, want compare pipeline log", stderr.String())
+	}
+}
+
+func TestRunCompareRejectsDOTFormat(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := writeTempFile(t, dir, "parser.yalp", `%token ID PLUS
+%%
+expr : ID PLUS ID ;
+`)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-compare", "-format", "dot"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want incompatible dot error")
+	}
+	if !strings.Contains(err.Error(), "DOT format incompatible") {
+		t.Fatalf("error = %q, want DOT incompatibility", err.Error())
+	}
+}
+
+func TestRunCompareWarnsAndIgnoresMethodFlag(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := writeTempFile(t, dir, "parser.yalp", `%token ID PLUS
+%%
+expr : ID PLUS ID ;
+`)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-compare", "-method", "ll1", "-format", "json"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v; stderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ignoring -method because -compare runs all methods") {
+		t.Fatalf("stderr = %q, want warning about ignored method", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "\"method\":\"slr\"") || !strings.Contains(stdout.String(), "\"method\":\"lalr\"") {
+		t.Fatalf("stdout = %q, want all comparison methods", stdout.String())
+	}
+}
+
+func TestRunCompareRejectsStandaloneGeneration(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := writeTempFile(t, dir, "parser.yalp", `%token ID PLUS
+%%
+expr : ID PLUS ID ;
+`)
+	outPath := filepath.Join(dir, "generated.go")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-compare", "-out", outPath}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want incompatible out error")
+	}
+	if !strings.Contains(err.Error(), "standalone parser generation is incompatible with -compare") {
+		t.Fatalf("error = %q, want compare out incompatibility", err.Error())
+	}
+}
+
+func TestRunCompareContinuesAfterLL1Failure(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := writeTempFile(t, dir, "parser.yalp", `%token A B
+%%
+s : A | A B ;
+`)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-compare", "-format", "json"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v; stderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "ll1 conflict") {
+		t.Fatalf("stdout = %q, want ll1 conflict entry", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "\"method\":\"slr\"") || !strings.Contains(stdout.String(), "\"method\":\"lalr\"") {
+		t.Fatalf("stdout = %q, want successful slr/lalr entries", stdout.String())
+	}
+}
+
+func writeTempFile(t *testing.T, dir, name, content string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", name, err)
+	}
+	return path
 }

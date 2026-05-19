@@ -18,6 +18,10 @@ const (
 
 var validMethods = []Method{MethodSLR, MethodLL1, MethodLALR}
 
+func ValidMethods() []Method {
+	return append([]Method(nil), validMethods...)
+}
+
 type ExecutableParser interface {
 	Parse(tokens []shared.Token) (*ParseResult, error)
 	Table() TableView
