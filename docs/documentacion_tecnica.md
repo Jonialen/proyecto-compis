@@ -11,114 +11,94 @@
 
 ---
 
-## 1. Resumen ejecutivo
+## 1. Estado real del proyecto
 
-El proyecto ya implementa las dos partes del laboratorio:
+### Respuesta corta
 
-- **Parte 1 — YALex:** generador y simulador de analizadores léxicos basados en DFA.
-- **Parte 2 — YAPar:** parser de especificaciones `.yalp`, construcción de gramática formal, cálculo de **FIRST/FOLLOW**, colección **LR(0)**, tabla **SLR(1)**, simulador LR e **generador standalone** del parser.
+El repositorio YA NO es solo YALex + un parser SLR aislado.
 
-La integración entre ambas partes ocurre mediante un **contrato de tokens compartido**, no mediante dependencias entre detalles internos del lexer y del parser.
+Hoy el estado real es este:
 
----
+- **YALex está funcional** para compilar `.yal`, tokenizar entradas y generar lexer standalone.
+- **YAPar soporta tres backends ejecutables**: **LL(1)**, **SLR(1)** y **LALR**.
+- **La arquitectura de YAPar es multi-método y table-centric**: distintos backends exponen una vista común de tabla.
+- **La visualización/exportación es común**: tabla en `text`, tabla en `json` y **DOT del autómata cuando aplica**.
+- **Existe una CLI comparativa** (`-compare`) para contrastar `ll1`, `lr0`, `slr`, `lr1`, `lalr`.
+- **`lr0` y `lr1` NO están implementados como parsers ejecutables**: son placeholders explícitos para comparación/reporting.
+- **El generador standalone del parser sigue orientado al camino LR/SLR existente**; no debe asumirse cobertura completa para todos los métodos.
 
-## 2. Alcance actual del repositorio
+## 2. Alcance actual
 
 ### Incluye
 
-- Parsing completo de archivos `.yal`.
-- Expansión de macros y construcción directa de DFA.
-- Minimización de DFA y tokenización con **Maximal Munch**.
+#### YALex
+
+- Parsing de archivos `.yal`.
+- Expansión de macros.
+- Construcción y minimización de DFA.
+- Tokenización con estrategia **Maximal Munch**.
 - Generación de lexer standalone en Go.
-- Parsing de archivos `.yalp` con `%token`, `IGNORE`, `%%`, `:`, `|` y `;`.
-- Construcción de gramática aumentada.
-- Cálculo de **nullable**, **FIRST** y **FOLLOW**.
-- Construcción de colección canónica **LR(0)**.
-- Construcción de tabla **SLR(1)** con detección de conflictos.
-- Simulación sintáctica sobre `[]Token`.
-- CLI separadas para lexer y parser: `cmd/yalex` y `cmd/yapar`.
-- Generación de parser standalone en Go a partir de gramática y tabla LR.
+
+#### YAPar
+
+- Parsing de archivos `.yalp`.
+- Construcción de gramática formal aumentada.
+- Cálculo de `nullable`, `FIRST` y `FOLLOW`.
+- Construcción de colección **LR(0)**.
+- Construcción de colección **LR(1)** como insumo para LALR.
+- Backend **LL(1)**.
+- Backend **SLR(1)**.
+- Backend **LALR**.
+- Simulación sintáctica sobre `[]shared.Token`.
+- Visualización/exportación común en texto y JSON.
+- Exportación **DOT** del autómata cuando el método provee estados/transiciones LR.
+- CLI de comparación entre métodos.
+- Generación de parser standalone basada en una `TableView`.
 
 ### No incluye
 
-- Construcción LR(1) completa o LALR.
-- Resolución automática de conflictos shift/reduce o reduce/reduce.
+- Backend ejecutable **LR(0)**.
+- Backend ejecutable **LR(1)** canónico.
+- Soporte standalone garantizado para **todos** los métodos disponibles en la CLI.
+- Resolución general por precedencia/asociatividad para conflictos.
 - AST semántico o acciones semánticas embebidas en `.yalp`.
-- Un formato automático de interoperabilidad entre **lexer standalone generado** y **parser standalone generado**; el parser standalone consume tokens vía JSON.
+- IDE/interfaz gráfica final.
+- Interoperabilidad automática completa entre lexer standalone generado y parser standalone generado; el parser standalone consume tokens vía JSON.
 
----
-
-## 3. Estructura final del repositorio
+## 3. Mapa rápido del repositorio
 
 ```text
 cmd/
-  yalex/
-    main.go                # CLI del lexer
-  yapar/
-    main.go                # CLI del parser
+  yalex/                    # CLI del lexer
+  yapar/                    # CLI del parser y comparador
 
 internal/
-  dfa/                     # Árbol sintáctico, followpos, DFA, minimización
-  generator/
-    generator.go           # Generador standalone del lexer
-    parser_gen.go          # Generador standalone del parser
-  lexbuild/
-    pipeline.go            # Pipeline reutilizable para compilar .yal y tokenizar
-  lexer/                   # Simulador léxico sobre DFAEntries
-  regex/                   # Normalización y postfix para regex
-  shared/
-    token.go               # Contrato compartido Token
-  yalex/                   # Parser y expansor de YALex
-  yapar/                   # Parser .yalp, gramática, FIRST/FOLLOW, LR(0), SLR, simulador
+  dfa/                      # Árbol sintáctico, followpos, DFA, minimización
+  generator/                # Generadores standalone
+  lexbuild/                 # Pipeline reutilizable de YALex
+  lexer/                    # Simulador léxico
+  regex/                    # Normalización y postfix para regex
+  shared/                   # Tipos compartidos (Token)
+  yalex/                    # Parser y expansor de YALex
+  yapar/                    # Gramática, tablas, backends, visualización, comparación
 
 docs/
-  documentacion_tecnica.md
-  parte2/
-    planeacion_tecnica_yapar.md
-    backlog_tecnico_yapar.md
-    structs_interfaces_base_yapar.md
+  documentacion_tecnica.md  # Este documento
+  parte2/                   # Planeación e historial de implementación
 ```
 
----
+## 4. Arquitectura
 
-## 4. Arquitectura general
-
-### 4.1 Parte 1 — pipeline léxico
+### 4.1 Vista general
 
 ```text
-.yal
-  -> internal/yalex
-  -> internal/regex
-  -> internal/dfa
-  -> DFAEntries
-  -> internal/lexer (simulación)
-  -> internal/generator/generator.go (standalone)
+.yal   -> YALex -> DFA -> tokenización -> []shared.Token
+.yalp  -> YAPar -> gramática -> backend -> tabla/vista -> parseo
 ```
 
-### 4.2 Parte 2 — pipeline sintáctico
+### 4.2 Contrato de integración
 
-```text
-.yalp
-  -> internal/yapar/parser.go
-  -> internal/yapar/grammar.go
-  -> internal/yapar/first_follow.go
-  -> internal/yapar/items.go
-  -> internal/yapar/table.go
-  -> internal/yapar/simulator.go
-  -> internal/generator/parser_gen.go
-```
-
-### 4.3 Integración lexer → parser
-
-La integración real del repositorio sigue este flujo:
-
-```text
-.yal --CompileYALFile--> DFAEntries
-src --TokenizeFile-----> []shared.Token
-[]shared.Token --------> yapar.ParseTokens(grammar, table, tokens)
-```
-
-Punto CLAVE: el parser consume `[]shared.Token`, definido en `internal/shared/token.go`:
+La integración real entre lexer y parser ocurre mediante `internal/shared/token.go`:
 
 ```go
 type Token struct {
@@ -128,27 +108,83 @@ type Token struct {
 }
 ```
 
-Esto mantiene desacoplamiento entre:
+Eso desacopla:
 
-- implementación interna del lexer,
-- runtime LR del parser,
-- y código generado standalone.
+- la implementación interna del lexer,
+- el runtime del parser,
+- y el código standalone generado.
 
----
+### 4.3 Arquitectura multi-método en YAPar
 
-## 5. Diseño de la Parte 2 (YAPar)
+La idea central NO es “un parser SLR con extras”, sino una capa común para varios métodos.
 
-### 5.1 Parser de especificación `.yalp`
+Piezas clave:
+
+| Pieza | Rol |
+|---|---|
+| `internal/yapar/method.go` | Registro de métodos (`ll1`, `lr0`, `slr`, `lr1`, `lalr`) y factory de backends |
+| `ExecutableParser` | Contrato común para parsear tokens |
+| `TableView` | Vista común para inspección, exportación y generación |
+| `internal/yapar/visualizer.go` | Render común a texto/JSON/DOT |
+| `internal/yapar/comparison.go` | Reporte comparativo entre métodos |
+| `internal/generator/parser_gen.go` | Generador standalone a partir de `TableView` |
+
+### 4.4 Por qué “table-centric” importa
+
+El proyecto normaliza la salida de los backends hacia una interfaz compartida:
+
+```go
+type TableView interface {
+    ActionAt(state int, symbol string) (ActionKind, int, bool)
+    GotoAt(state int, symbol string) (int, bool)
+    States() []int
+    Terminals() []string
+    NonTerminals() []string
+}
+```
+
+Eso permite reutilizar una misma capa para:
+
+- imprimir tablas,
+- serializar JSON,
+- generar standalone,
+- y comparar métodos sin acoplar la CLI a una implementación concreta.
+
+## 5. Pipeline actual de YAPar
+
+### Happy path
+
+1. `cmd/yapar` carga el `.yalp`.
+2. `internal/yapar/parser.go` construye `YaparSpec`.
+3. `internal/yapar/grammar.go` construye la gramática formal aumentada.
+4. `internal/yapar/first_follow.go` calcula `nullable`, `FIRST` y `FOLLOW`.
+5. `internal/yapar/method.go` selecciona backend según `-method` o `-compare`.
+6. El backend expone `Parse(tokens)` y `Table()`.
+7. `visualizer.go` o `comparison.go` producen la salida visible.
+
+### Detalle por backend
+
+| Método | Construcción principal | Runtime |
+|---|---|---|
+| `ll1` | `BuildLL1Table` | simulación predictiva con stack |
+| `slr` | `BuildCanonicalCollection` + `BuildSLRTable` | simulación LR sobre ACTION/GOTO |
+| `lalr` | `BuildLR1Collection` + `MergeLR1States` + `BuildLALRTable` | simulación LR sobre tabla fusionada |
+| `lr0` | placeholder | no implementado |
+| `lr1` | placeholder | no implementado |
+
+## 6. Componentes técnicos principales
+
+### 6.1 Parser de `.yalp`
 
 `internal/yapar/parser.go` interpreta:
 
 - comentarios de bloque `/* ... */`,
 - declaraciones `%token`,
 - directiva `IGNORE`,
-- separación por `%%`,
+- separador `%%`,
 - producciones con `:`, `|` y `;`.
 
-La salida base es:
+Salida base:
 
 ```go
 type YaparSpec struct {
@@ -159,96 +195,82 @@ type YaparSpec struct {
 }
 ```
 
-### 5.2 Modelo formal de gramática
+### 6.2 Gramática formal
 
-`internal/yapar/grammar.go` transforma la especificación cruda en una gramática formal validada.
+`internal/yapar/grammar.go`:
 
-Puntos importantes:
-
-- crea producción aumentada `S' -> S`,
+- crea producción aumentada,
 - reserva `$` como fin de entrada,
-- representa epsilon como **alternativa vacía**, no como símbolo explícito en la gramática fuente,
-- prohíbe usar tokens ignorados dentro de producciones.
+- maneja epsilon como alternativa vacía,
+- impide usar tokens ignorados dentro de producciones.
 
-Estructuras principales:
+### 6.3 FIRST/FOLLOW
 
-```go
-type Symbol struct {
-    Name     string
-    Terminal bool
-}
+`internal/yapar/first_follow.go` implementa iteración a punto fijo para:
 
-type Production struct {
-    ID   int
-    Head string
-    Body []Symbol
-}
+- `Nullable`
+- `First`
+- `Follow`
 
-type Grammar struct {
-    Start        string
-    Augmented    string
-    Terminals    map[string]bool
-    NonTerminals map[string]bool
-    Productions  []Production
-    IgnoreSet    map[string]bool
-}
-```
+### 6.4 Backend LL(1)
 
-### 5.3 FIRST, FOLLOW y nullable
+`internal/yapar/ll1_backend.go`:
 
-`internal/yapar/first_follow.go` implementa iteración a punto fijo sobre la gramática formal.
+- construye tabla LL(1) con `BuildLL1Table`,
+- detecta recursión izquierda inmediata,
+- detecta conflictos LL(1),
+- ejecuta parsing predictivo con stack,
+- adapta la tabla a `TableView` para exportación común.
 
-Resultado principal:
+### 6.5 Backend SLR(1)
 
-```go
-type FirstFollow struct {
-    First    map[string]Set
-    Follow   map[string]Set
-    Nullable map[string]bool
-}
-```
+El camino SLR sigue siendo importante y estable:
 
-Nota importante: **FOLLOW de gramática** y **followpos del lexer** NO son la misma cosa.
+- `BuildCanonicalCollection` construye estados LR(0),
+- `BuildSLRTable` llena ACTION/GOTO usando `FOLLOW`,
+- `ParseTokens` ejecuta shift/reduce/accept,
+- la tabla SLR puede exportarse por la misma capa común.
 
-### 5.4 Colección LR(0)
+### 6.6 Backend LALR
 
-`internal/yapar/items.go` implementa:
+`internal/yapar/lalr_backend.go`:
 
-- `Closure`
-- `Goto`
-- `BuildCanonicalCollection`
+- construye colección LR(1),
+- fusiona estados con mismo core mediante `MergeLR1States`,
+- genera tabla LALR con `BuildLALRTable`,
+- reutiliza el runtime LR basado en tabla,
+- expone `TableView` compatible con la capa común.
 
-La colección canónica se representa como estados con items LR(0) y un mapa de transiciones por símbolo.
+Nota importante: la implementación actual puede resolver algunos conflictos `reduce/reduce` conservando la producción de menor ID y registrando un warning. Eso NO equivale a un sistema general de precedencia.
 
-### 5.5 Tabla SLR(1)
+## 7. Visualización y exportación
 
-`internal/yapar/table.go` construye:
+### Respuesta corta
 
-- **ACTION** para terminales,
-- **GOTO** para no terminales,
-- **accept** sobre la producción aumentada,
-- **reduce** usando `FOLLOW(head)`.
+La visualización ya NO está atada a SLR.
 
-Si la gramática no es SLR(1), el sistema devuelve `GrammarConflictError` con el estado, símbolo y tipo de conflicto detectado.
+Hoy existe una capa común en `internal/yapar/visualizer.go`.
 
-### 5.6 Simulador LR
+### Formatos soportados
 
-`internal/yapar/simulator.go` ejecuta el parsing sobre `[]shared.Token`.
+| Formato | Estado | Observaciones |
+|---|---|---|
+| `text` | Sí | imprime tabla legible en consola |
+| `json` | Sí | serializa método, terminales, no terminales y estados |
+| `dot` | Sí, cuando aplica | requiere estados/transiciones LR en el reporte |
 
-Comportamiento real:
+### Cuándo aplica DOT
 
-1. filtra tokens declarados en `IGNORE`,
-2. agrega el marcador `$`,
-3. ejecuta acciones **shift / reduce / accept**,
-4. reporta `SyntaxError` con línea, token recibido y esperados cuando falla.
+- **SLR**: sí, usando la colección LR(0).
+- **LALR**: sí, reutilizando la vista LR(0) para el autómata visible.
+- **LL(1)**: no aplica como autómata LR; la capa devuelve operación no soportada.
+- **`-compare`**: no admite `dot`.
 
----
+## 8. CLI reales del repositorio
 
-## 6. CLIs actuales
+### 8.1 `cmd/yalex`
 
-### 6.1 CLI léxica — `cmd/yalex`
-
-Uso actual:
+Uso práctico:
 
 ```bash
 go run ./cmd/yalex -yal testdata/lexer.yal -src testdata/test.lisp
@@ -256,54 +278,89 @@ go run ./cmd/yalex -yal testdata/lexer.yal -out lexer_gen.go
 go run ./cmd/yalex -yal testdata/lexer.yal -tree
 ```
 
-Flags:
+Reglas verificadas en código:
 
-- `-yal` **obligatorio**
-- `-src` tokeniza una entrada
-- `-out` genera lexer standalone
-- `-tree` genera `tree.dot`
+- `-yal` es obligatorio.
+- Debe existir al menos uno de `-src`, `-out` o `-tree`.
+- `-tree` escribe `tree.dot`.
 
-### 6.2 CLI sintáctica — `cmd/yapar`
+### 8.2 `cmd/yapar`
 
-Uso actual:
+Uso práctico:
 
 ```bash
-go run ./cmd/yapar -yalp parser.yalp -table
-go run ./cmd/yapar -yalp parser.yalp -out parser_gen.go
+go run ./cmd/yapar -yalp parser.yalp
+go run ./cmd/yapar -yalp parser.yalp -method slr -table
+go run ./cmd/yapar -yalp parser.yalp -method ll1 -format json
+go run ./cmd/yapar -yalp parser.yalp -method lalr -format dot
 go run ./cmd/yapar -yalp parser.yalp -yal lexer.yal -src input.txt
+go run ./cmd/yapar -yalp parser.yalp -compare
+go run ./cmd/yapar -yalp parser.yalp -compare -format json
 ```
 
-Flags:
+### Flags relevantes de `cmd/yapar`
 
-- `-yalp` **obligatorio**
-- `-table` imprime la tabla SLR(1)
-- `-out` genera parser standalone
-- `-yal` y `-src` deben aparecer **juntos** para ejecutar análisis léxico + sintáctico de punta a punta
+| Flag | Tipo | Estado real |
+|---|---|---|
+| `-yalp` | string | ruta del parser `.yalp`; **obligatorio** |
+| `-yal` | string | ruta del lexer `.yal`; debe ir junto con `-src` |
+| `-src` | string | archivo fuente a tokenizar y parsear; debe ir junto con `-yal` |
+| `-out` | string | genera parser standalone |
+| `-method` | string | `ll1`, `lr0`, `slr`, `lr1`, `lalr` |
+| `-compare` | bool | corre todos los métodos válidos y compara |
+| `-table` | bool | fuerza visualización en texto |
+| `-format` | string | `text`, `json`, `dot` |
 
-Si se usa solo `-yalp`, la CLI construye el pipeline sintáctico y valida que la gramática llegue hasta tabla SLR(1).
+### Reglas de compatibilidad importantes
 
----
+| Combinación | Resultado |
+|---|---|
+| `-compare` + `-method` | `-method` se ignora con warning |
+| `-compare` + `-out` | inválido |
+| `-compare` + `-format dot` | inválido |
+| `-yal` sin `-src` | inválido |
+| `-src` sin `-yal` | inválido |
+| `-method ll1` + `-out` | no soportado |
+| `-method lalr` + `-out` | no soportado |
 
-## 7. Generador standalone del parser
+## 9. Comparación entre métodos
 
-`internal/generator/parser_gen.go` serializa dentro del archivo generado:
+`internal/yapar/comparison.go` construye un reporte por método con:
 
-- símbolo inicial,
-- símbolo inicial aumentado,
+- método,
+- tabla/render asociado cuando existe,
+- duración,
+- aceptación/rechazo si hubo tokens,
+- error si el backend no existe o falla.
+
+Eso permite dos cosas útiles:
+
+1. comparar comportamiento de backends implementados,
+2. mantener visibles los placeholders `lr0` y `lr1` sin fingir soporte real.
+
+## 10. Standalone del parser
+
+### Qué hace hoy
+
+`internal/generator/parser_gen.go` genera un parser autónomo a partir de:
+
+- gramática,
 - `IgnoreSet`,
 - producciones,
-- tabla ACTION,
-- tabla GOTO.
+- filas ACTION,
+- filas GOTO.
 
-El parser generado es autónomo y expone una CLI mínima:
+La generación se apoya en `TableView`, pero la CLI `cmd/yapar` restringe explícitamente algunos métodos.
+
+### Contrato real
+
+El parser generado consume tokens por JSON:
 
 ```bash
 go run parser_gen.go -tokens tokens.json
 ```
 
-### 7.1 Contrato de entrada JSON
-
-El archivo indicado por `-tokens` debe contener un JSON con `[]Token`:
+Ejemplo:
 
 ```json
 [
@@ -313,59 +370,53 @@ El archivo indicado por `-tokens` debe contener un JSON con `[]Token`:
 ]
 ```
 
-Campos esperados:
+### Límite importante
 
-- `type`: nombre del token reconocido por la gramática
-- `lexeme`: lexema original
-- `line`: línea de origen
+Aunque el generador recibe una `TableView`, la CLI actual NO ofrece soporte standalone completo para todos los métodos. En particular:
 
-Comportamiento:
+- `ll1` con `-out` devuelve error explícito.
+- `lalr` con `-out` devuelve error explícito.
+- el camino operativo sigue alineado con el runtime de tabla LR/SLR ya consolidado.
 
-- los tokens incluidos en `IGNORE` se filtran antes del parsing,
-- el parser agrega internamente `$`,
-- si la entrada es válida imprime aceptación,
-- si falla devuelve error sintáctico con línea y tokens esperados.
+NO hay que documentar esto como “standalone multi-método completo”, porque hoy sería falso.
 
-### 7.2 Implicación práctica
+## 11. Limitaciones vigentes
 
-El **parser standalone** no recompila ni ejecuta el `.yal`; consume un stream de tokens ya materializado. Por eso, para conectarlo con un lexer externo o con el lexer standalone generado, se necesita un paso adaptador que produzca ese JSON.
+### Técnicas
 
----
+- `lr0` y `lr1` siguen como **placeholders compare-only**.
+- No existe resolución general de conflictos por precedencia/asociatividad.
+- El standalone del parser no cubre uniformemente todos los métodos visibles en CLI.
+- El parser standalone requiere un adaptador externo si se quiere conectar con otro lexer por JSON.
 
-## 8. Relación entre documentos
+### De producto
 
-Los documentos de `docs/parte2/` quedan como soporte de diseño e implementación incremental.  
-Este archivo describe el **estado final real del repositorio** y debe tomarse como referencia principal.
+- La **IDE/interfaz gráfica** sigue pendiente.
+- La experiencia visual actual se concentra en CLI + exportación textual/JSON/DOT.
 
----
+## 12. Verificación estática usada para esta documentación
 
-## 9. Estado de verificación
+Se verificó contra código fuente, no contra supuestos históricos.
 
-El repositorio contiene cobertura automatizada tanto para la parte léxica como para YAPar. A nivel de estructura actual destacan:
+### Evidencia revisada
 
-- tests para `cmd/yapar`,
-- tests para parser `.yalp`, gramática, FIRST/FOLLOW, LR(0), tabla SLR(1) y simulador,
-- tests para el generador standalone del parser,
-- tests existentes de YALex, regex, DFA, lexer y generador léxico.
+| Archivo | Qué confirmó |
+|---|---|
+| `cmd/yapar/main.go` | flags reales, reglas de compatibilidad, `-compare`, `-format`, `-table`, restricciones de `-out` |
+| `internal/yapar/method.go` | métodos válidos `ll1`, `lr0`, `slr`, `lr1`, `lalr` |
+| `internal/yapar/ll1_backend.go` | backend LL(1) real |
+| `internal/yapar/lalr_backend.go` | backend LALR real |
+| `internal/yapar/visualizer.go` | exportación común text/json/dot y DOT solo cuando aplica |
+| `internal/yapar/comparison.go` | reporte comparativo multi-método |
+| `internal/generator/parser_gen.go` | generación standalone basada en `TableView` |
+| `cmd/yalex/main.go` | uso real de la CLI léxica |
 
-La base actual contiene **166 tests** detectables por nombre `func Test...` en archivos Go del repositorio.
+## 13. Conclusión
 
----
+El proyecto hoy puede describirse con precisión así:
 
-## 10. Limitaciones y decisiones vigentes
+1. **YALex**: funcional para construir, simular y generar un lexer.
+2. **YAPar**: multi-método, con backends **LL(1)**, **SLR(1)** y **LALR**, visualización/export común y modo comparativo.
+3. **Límites reales**: `lr0`/`lr1` son placeholders, la IDE aún no existe y el standalone del parser no debe venderse como soporte completo para todos los métodos.
 
-- YAPar implementa hoy el camino **SLR(1)**, no LR(1) canónico.
-- Los conflictos se detectan y reportan; no se resuelven automáticamente por precedencia.
-- La integración más directa entre lexer y parser ocurre en memoria dentro de `cmd/yapar` mediante `internal/lexbuild` y `shared.Token`.
-- El parser standalone trabaja con JSON de tokens porque su objetivo es desacoplar el runtime sintáctico del proceso de construcción léxica.
-
----
-
-## 11. Conclusión
-
-El proyecto ya no es solo un generador léxico. Su estado actual es un toolkit dividido en dos subsistemas:
-
-1. **YALex** para construir y ejecutar analizadores léxicos.
-2. **YAPar** para construir y ejecutar analizadores sintácticos SLR(1), incluyendo generación standalone.
-
-La documentación queda alineada con la estructura real del repositorio, las CLIs actuales (`cmd/yalex`, `cmd/yapar`) y el pipeline sintáctico ya implementado en la Parte 2.
+Este documento reemplaza cualquier afirmación obsoleta de que YAPar “solo soporta SLR(1)” o “todavía no tiene LALR”.

@@ -1,13 +1,18 @@
 # genAnaLex + YAPar
 
-Toolkit en Go para construir y ejecutar analizadores de compiladores en dos capas:
+Toolkit en Go para la parte léxica y sintáctica del proyecto.
 
-- **YALex**: compila especificaciones `.yal`, genera DFA, tokeniza entradas y puede generar un lexer standalone.
-- **YAPar**: compila especificaciones `.yalp`, construye gramática + tabla **SLR(1)**, simula parsing y puede generar un parser standalone.
+## Respuesta corta
 
-La referencia técnica completa está en `docs/documentacion_tecnica.md`. Este README solo cubre el uso rápido real del repositorio.
+- **YALex sí está funcional**: compila `.yal`, tokeniza archivos y puede generar lexer standalone.
+- **YAPar ya es multi-método**: soporta backends **LL(1)**, **SLR(1)** y **LALR**.
+- **La CLI de YAPar también tiene modo comparativo** con `-compare` para `ll1`, `lr0`, `slr`, `lr1`, `lalr`.
+- **`lr0` y `lr1` NO están implementados como backends ejecutables**: hoy existen como placeholders comparables y reportan error explícito.
+- **El standalone del parser NO debe asumirse universal**: el camino real sigue orientado a la tabla LR/SLR existente; `ll1` y `lalr` no están soportados para `-out`.
 
-## Estructura actual
+La referencia técnica principal está en `docs/documentacion_tecnica.md`.
+
+## Estructura mínima
 
 ```text
 cmd/
@@ -30,12 +35,12 @@ testdata/
 
 ## Requisitos
 
-- Go 1.26+
-- Graphviz opcional, solo si quieres visualizar `tree.dot`
+- Go **1.26.1+**
+- Graphviz opcional si quieres renderizar DOT generado
 
 ## Uso rápido
 
-### 1) YALex: generar o simular lexer
+### 1) YALex
 
 ```bash
 go run ./cmd/yalex -yal testdata/lexer.yal -src testdata/test.lisp
@@ -43,44 +48,64 @@ go run ./cmd/yalex -yal testdata/lexer.yal -out lexer_gen.go
 go run ./cmd/yalex -yal testdata/lexer.yal -tree
 ```
 
-Notas:
+Checklist real:
 
 - `-yal` es obligatorio.
-- Debes usar al menos uno de `-src`, `-out` o `-tree`.
-- `-tree` genera `tree.dot` en el directorio actual.
+- Debes pasar al menos uno de `-src`, `-out` o `-tree`.
+- `-tree` escribe `tree.dot` en el directorio actual.
 
-### 2) YAPar: construir tabla, simular parser o generar parser standalone
+### 2) YAPar — construir backend, visualizar, comparar o ejecutar
+
+#### Camino normal
 
 ```bash
-go run ./cmd/yapar -yalp parser.yalp -table
-go run ./cmd/yapar -yalp parser.yalp -out parser_gen.go
+go run ./cmd/yapar -yalp parser.yalp
+go run ./cmd/yapar -yalp parser.yalp -method slr -table
+go run ./cmd/yapar -yalp parser.yalp -method lalr -format dot
+go run ./cmd/yapar -yalp parser.yalp -method ll1 -format json
 go run ./cmd/yapar -yalp parser.yalp -yal lexer.yal -src input.txt
 ```
 
-Notas:
+#### Modo comparativo
 
-- `-yalp` es obligatorio.
-- `-yal` y `-src` deben usarse juntos para ejecutar el flujo completo lexer → parser.
-- Si usas solo `-yalp`, la CLI valida el pipeline sintáctico hasta la tabla SLR(1).
-
-## Flujo básico del proyecto
-
-```text
-.yal  -> YALex -> tokens
-.yalp -> YAPar -> tabla SLR(1)
-tokens + tabla -> simulación sintáctica
+```bash
+go run ./cmd/yapar -yalp parser.yalp -compare
+go run ./cmd/yapar -yalp parser.yalp -compare -format json
+go run ./cmd/yapar -yalp parser.yalp -yal lexer.yal -src input.txt -compare
 ```
 
-Flujo de punta a punta desde las CLIs:
+#### Flags relevantes de `cmd/yapar`
 
-1. Compilas el lexer desde `.yal`.
-2. Tokenizas el archivo fuente.
-3. Compilas la gramática desde `.yalp`.
-4. Ejecutas el parsing SLR(1) sobre esos tokens.
+| Flag | Qué hace | Notas reales |
+|---|---|---|
+| `-yalp` | Ruta del parser `.yalp` | **Obligatorio** |
+| `-method` | Método solicitado | `ll1`, `lr0`, `slr`, `lr1`, `lalr` |
+| `-compare` | Ejecuta comparación entre métodos | Ignora `-method`; no permite `-out` ni `-format dot` |
+| `-format` | Salida de visualización | `text`, `json`, `dot` |
+| `-table` | Atajo para tabla en texto | Equivale a salida `text` |
+| `-yal` | Lexer `.yal` | Debe usarse junto con `-src` |
+| `-src` | Archivo fuente a tokenizar y parsear | Debe usarse junto con `-yal` |
+| `-out` | Genera parser standalone | No usar con `-compare`; `ll1` y `lalr` no soportados |
+
+## Qué sí exporta YAPar hoy
+
+| Salida | Estado |
+|---|---|
+| Tabla en texto | Sí |
+| Tabla en JSON | Sí |
+| DOT del autómata cuando aplica | Sí |
+| Comparación entre métodos | Sí |
+
+## Limitaciones actuales IMPORTANTES
+
+- La **IDE/interfaz gráfica** sigue pendiente.
+- `lr0` y `lr1` aparecen en la comparación y en `-method`, pero hoy son **placeholders no implementados**.
+- El **parser standalone** no representa soporte completo para todos los métodos.
+- `-format dot` no aplica al modo comparativo y no todos los métodos tienen autómata exportable.
 
 ## Parser standalone
 
-El parser generado con `-out` es autónomo y recibe tokens por JSON:
+El parser generado con `-out` consume tokens por JSON:
 
 ```bash
 go run parser_gen.go -tokens tokens.json
@@ -94,13 +119,7 @@ Contrato esperado:
 ]
 ```
 
-Campos:
+## Más detalle
 
-- `type`: token reconocido por la gramática
-- `lexeme`: lexema original
-- `line`: línea de origen
-
-## Documentación adicional
-
-- `docs/documentacion_tecnica.md`: estado técnico real del repositorio
-- `docs/parte2/`: planeación e implementación de YAPar
+- `docs/documentacion_tecnica.md`: documentación técnica principal y estado real.
+- `docs/parte2/`: planeación y backlogs históricos.
