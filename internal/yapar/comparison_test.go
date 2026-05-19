@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"genanalex/internal/shared"
 )
@@ -186,5 +187,25 @@ expr : ID PLUS ID ;
 	}
 	if len(decoded.Methods[0].States) == 0 {
 		t.Fatal("decoded.Methods[0].States = 0, want serialized table states")
+	}
+}
+
+func TestRenderComparisonJSONSerializesTotalTimeMS(t *testing.T) {
+	payload, err := RenderComparisonJSON(&ComparisonReport{
+		TotalTime: 3500 * time.Microsecond,
+		Methods:   []MethodResult{{Method: MethodSLR, Duration: 2 * time.Millisecond}},
+	})
+	if err != nil {
+		t.Fatalf("RenderComparisonJSON() error = %v", err)
+	}
+
+	var decoded struct {
+		TotalTimeMS float64 `json:"total_time_ms"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\npayload=%s", err, payload)
+	}
+	if got, want := decoded.TotalTimeMS, 3.5; got != want {
+		t.Fatalf("decoded.TotalTimeMS = %v, want %v", got, want)
 	}
 }

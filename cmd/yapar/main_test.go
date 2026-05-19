@@ -578,6 +578,58 @@ rule tokens =
 	}
 }
 
+func TestMainExitsOneWhenCompareFailsForAllMethods(t *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") == "1" {
+		os.Args = []string{
+			"yapar",
+			"-yalp", os.Getenv("GO_HELPER_YALP"),
+			"-yal", os.Getenv("GO_HELPER_YAL"),
+			"-src", os.Getenv("GO_HELPER_SRC"),
+			"-compare",
+			"-format", "json",
+		}
+		main()
+		return
+	}
+
+	dir := t.TempDir()
+	yalpPath := writeTempFile(t, dir, "parser.yalp", `%token INT PLUS WS
+IGNORE WS
+%%
+expr : INT PLUS INT ;
+`)
+	yalPath := writeTempFile(t, dir, "lexer.yal", `let DIGIT = [0-9]
+
+rule tokens =
+  | [' ' '\t' '\n']+ { WS }
+  | DIGIT+ { INT }
+  | '+' { PLUS }
+`)
+	srcPath := writeTempFile(t, dir, "input.txt", "12\n")
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestMainExitsOneWhenCompareFailsForAllMethods$")
+	cmd.Env = append(os.Environ(),
+		"GO_WANT_HELPER_PROCESS=1",
+		"GO_HELPER_YALP="+yalpPath,
+		"GO_HELPER_YAL="+yalPath,
+		"GO_HELPER_SRC="+srcPath,
+	)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("helper process error = nil, want exit status 1\noutput=%s", output)
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("helper process error type = %T, want *exec.ExitError", err)
+	}
+	if got, want := exitErr.ExitCode(), 1; got != want {
+		t.Fatalf("helper process exit code = %d, want %d\noutput=%s", got, want, output)
+	}
+	if !strings.Contains(string(output), "comparison failed for all methods") {
+		t.Fatalf("helper process output = %q, want all-method failure message", string(output))
+	}
+}
+
 func writeTempFile(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
