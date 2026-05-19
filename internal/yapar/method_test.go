@@ -17,6 +17,8 @@ func TestParseMethod(t *testing.T) {
 	}{
 		{name: "slr", input: "slr", want: MethodSLR},
 		{name: "ll1", input: "ll1", want: MethodLL1},
+		{name: "lr0", input: "lr0", want: MethodLR0},
+		{name: "lr1", input: "lr1", want: MethodLR1},
 		{name: "lalr", input: "lalr", want: MethodLALR},
 		{name: "invalid", input: "foo", wantErr: true},
 	}
@@ -94,7 +96,7 @@ opt : B | ;
 
 func TestValidMethodsReturnsDefensiveCopy(t *testing.T) {
 	got := ValidMethods()
-	want := []Method{MethodSLR, MethodLL1, MethodLALR}
+	want := []Method{MethodLL1, MethodLR0, MethodSLR, MethodLR1, MethodLALR}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ValidMethods() = %v, want %v", got, want)
 	}

@@ -80,6 +80,8 @@ func BuildVisReport(g *Grammar, ff *FirstFollow, method Method) (*VisualizationR
 		report.LR0States = lr0States
 		report.LR0Trans = cloneTransitions(lr0Transitions)
 		return report, nil
+	case MethodLR0, MethodLR1:
+		return nil, fmt.Errorf("parser method %q not implemented yet: valid options are %s", method, strings.Join(methodNames(), ", "))
 	default:
 		return nil, fmt.Errorf("parser method %q not implemented yet: valid options are %s", method, strings.Join(methodNames(), ", "))
 	}

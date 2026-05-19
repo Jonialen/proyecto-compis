@@ -11,12 +11,14 @@ import (
 type Method string
 
 const (
+	MethodLR0  Method = "lr0"
+	MethodLR1  Method = "lr1"
 	MethodSLR  Method = "slr"
 	MethodLL1  Method = "ll1"
 	MethodLALR Method = "lalr"
 )
 
-var validMethods = []Method{MethodSLR, MethodLL1, MethodLALR}
+var validMethods = []Method{MethodLL1, MethodLR0, MethodSLR, MethodLR1, MethodLALR}
 
 func ValidMethods() []Method {
 	return append([]Method(nil), validMethods...)
@@ -51,6 +53,8 @@ func BuildParser(g *Grammar, ff *FirstFollow, method Method) (ExecutableParser, 
 		return buildSLRParser(g, ff)
 	case MethodLL1:
 		return buildLL1Parser(g, ff)
+	case MethodLR0, MethodLR1:
+		return nil, fmt.Errorf("parser method %q not implemented yet: valid options are %s", method, strings.Join(methodNames(), ", "))
 	case MethodLALR:
 		return buildLALRParser(g, ff)
 	default:

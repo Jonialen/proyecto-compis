@@ -157,7 +157,7 @@ func parseFlags(args []string, stderr io.Writer) (*config, error) {
 	fs.StringVar(&cfg.srcFile, "src", "", "path to the source file to tokenize and parse")
 	method := string(yapar.MethodSLR)
 	format := string(outputFormatNone)
-	fs.StringVar(&method, "method", method, "parser method: slr, ll1, lalr")
+	fs.StringVar(&method, "method", method, "parser method: ll1, lr0, slr, lr1, lalr")
 	fs.BoolVar(&cfg.compare, "compare", false, "run all supported parser methods and compare the results")
 	fs.BoolVar(&cfg.printTable, "table", false, "print the generated SLR(1) parsing table")
 	fs.StringVar(&format, "format", format, "visualization output format: text, json, dot")
@@ -269,7 +269,7 @@ func renderComparisonText(report *yapar.ComparisonReport) string {
 	var builder strings.Builder
 	builder.WriteString("Comparison Summary\n")
 	builder.WriteString("Method\tStatus\tDuration(ms)\n")
-	for _, result := range report.Results {
+	for _, result := range report.Methods {
 		builder.WriteString(strings.ToUpper(methodDisplayName(result.Method)))
 		builder.WriteByte('\t')
 		builder.WriteString(comparisonStatus(result))
@@ -277,7 +277,7 @@ func renderComparisonText(report *yapar.ComparisonReport) string {
 		builder.WriteString(fmt.Sprintf("%.3f", float64(result.Duration)/float64(1e6)))
 		builder.WriteByte('\n')
 	}
-	for _, result := range report.Results {
+	for _, result := range report.Methods {
 		builder.WriteString("\n--- ")
 		builder.WriteString(methodDisplayName(result.Method))
 		builder.WriteString(" ---\n")
@@ -312,6 +312,10 @@ func methodDisplayName(method yapar.Method) string {
 	switch method {
 	case yapar.MethodSLR:
 		return "SLR(1)"
+	case yapar.MethodLR0:
+		return "LR0"
+	case yapar.MethodLR1:
+		return "LR1"
 	case yapar.MethodLALR:
 		return "LALR"
 	case yapar.MethodLL1:

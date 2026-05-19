@@ -17,15 +17,15 @@ type MethodResult struct {
 }
 
 type ComparisonReport struct {
-	Results  []MethodResult
-	Duration time.Duration
+	Methods   []MethodResult
+	TotalTime time.Duration
 }
 
 func (r *ComparisonReport) HasSuccess() bool {
 	if r == nil {
 		return false
 	}
-	for _, result := range r.Results {
+	for _, result := range r.Methods {
 		if result.Error == "" {
 			return true
 		}
@@ -35,7 +35,7 @@ func (r *ComparisonReport) HasSuccess() bool {
 
 func BuildComparisonReport(g *Grammar, ff *FirstFollow, tokens []shared.Token, methods []Method) *ComparisonReport {
 	started := time.Now()
-	report := &ComparisonReport{Results: make([]MethodResult, 0, len(methods))}
+	report := &ComparisonReport{Methods: make([]MethodResult, 0, len(methods))}
 
 	for _, method := range methods {
 		result := MethodResult{Method: method}
@@ -45,7 +45,7 @@ func BuildComparisonReport(g *Grammar, ff *FirstFollow, tokens []shared.Token, m
 		if err != nil {
 			result.Error = err.Error()
 			result.Duration = time.Since(methodStarted)
-			report.Results = append(report.Results, result)
+			report.Methods = append(report.Methods, result)
 			continue
 		}
 		result.Report = visReport
@@ -55,7 +55,7 @@ func BuildComparisonReport(g *Grammar, ff *FirstFollow, tokens []shared.Token, m
 			if err != nil {
 				result.Error = err.Error()
 				result.Duration = time.Since(methodStarted)
-				report.Results = append(report.Results, result)
+				report.Methods = append(report.Methods, result)
 				continue
 			}
 			parseResult, err := parser.Parse(tokens)
@@ -73,10 +73,10 @@ func BuildComparisonReport(g *Grammar, ff *FirstFollow, tokens []shared.Token, m
 		}
 
 		result.Duration = time.Since(methodStarted)
-		report.Results = append(report.Results, result)
+		report.Methods = append(report.Methods, result)
 	}
 
-	report.Duration = time.Since(started)
+	report.TotalTime = time.Since(started)
 	return report
 }
 
@@ -98,16 +98,16 @@ func RenderComparisonJSON(report *ComparisonReport) ([]byte, error) {
 	}
 
 	type payload struct {
-		DurationMS float64      `json:"duration_ms"`
-		Results    []jsonResult `json:"results"`
+		TotalTimeMS float64      `json:"total_time_ms"`
+		Methods     []jsonResult `json:"methods"`
 	}
 
 	if report == nil {
 		return json.Marshal(payload{})
 	}
 
-	out := payload{DurationMS: durationMilliseconds(report.Duration), Results: make([]jsonResult, 0, len(report.Results))}
-	for _, result := range report.Results {
+	out := payload{TotalTimeMS: durationMilliseconds(report.TotalTime), Methods: make([]jsonResult, 0, len(report.Methods))}
+	for _, result := range report.Methods {
 		jsonResult := jsonResult{
 			Method:     string(result.Method),
 			Accepted:   result.Accepted,
@@ -134,7 +134,7 @@ func RenderComparisonJSON(report *ComparisonReport) ([]byte, error) {
 				jsonResult.States = append(jsonResult.States, row)
 			}
 		}
-		out.Results = append(out.Results, jsonResult)
+		out.Methods = append(out.Methods, jsonResult)
 	}
 
 	return json.Marshal(out)

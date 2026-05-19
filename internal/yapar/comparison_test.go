@@ -26,23 +26,29 @@ expr : ID PLUS ID ;
 	if !report.HasSuccess() {
 		t.Fatal("HasSuccess() = false, want true")
 	}
-	if len(report.Results) != len(ValidMethods()) {
-		t.Fatalf("len(report.Results) = %d, want %d", len(report.Results), len(ValidMethods()))
+	if len(report.Methods) != len(ValidMethods()) {
+		t.Fatalf("len(report.Methods) = %d, want %d", len(report.Methods), len(ValidMethods()))
 	}
 
 	for i, method := range ValidMethods() {
-		result := report.Results[i]
+		result := report.Methods[i]
 		if result.Method != method {
-			t.Fatalf("report.Results[%d].Method = %q, want %q", i, result.Method, method)
+			t.Fatalf("report.Methods[%d].Method = %q, want %q", i, result.Method, method)
+		}
+		if method == MethodLR0 || method == MethodLR1 {
+			if got := result.Error; !strings.Contains(got, "not implemented yet") {
+				t.Fatalf("report.Methods[%d].Error = %q, want not implemented yet", i, got)
+			}
+			continue
 		}
 		if result.Report == nil {
-			t.Fatalf("report.Results[%d].Report = nil, want visualization report", i)
+			t.Fatalf("report.Methods[%d].Report = nil, want visualization report", i)
 		}
 		if result.Accepted == nil || !*result.Accepted {
-			t.Fatalf("report.Results[%d].Accepted = %v, want true", i, result.Accepted)
+			t.Fatalf("report.Methods[%d].Accepted = %v, want true", i, result.Accepted)
 		}
 		if result.Error != "" {
-			t.Fatalf("report.Results[%d].Error = %q, want empty", i, result.Error)
+			t.Fatalf("report.Methods[%d].Error = %q, want empty", i, result.Error)
 		}
 	}
 }
@@ -65,20 +71,35 @@ s : A | A B ;
 		t.Fatal("HasSuccess() = false, want true when at least one method succeeds")
 	}
 
-	if got, want := report.Results[0].Method, MethodSLR; got != want {
-		t.Fatalf("report.Results[0].Method = %q, want %q", got, want)
+	if got, want := report.Methods[0].Method, MethodLL1; got != want {
+		t.Fatalf("report.Methods[0].Method = %q, want %q", got, want)
 	}
-	if report.Results[0].Error != "" {
-		t.Fatalf("report.Results[0].Error = %q, want empty", report.Results[0].Error)
+	if got := report.Methods[0].Error; !strings.Contains(got, "ll1 conflict") {
+		t.Fatalf("report.Methods[0].Error = %q, want LL1 conflict", got)
 	}
-	if got, want := report.Results[1].Method, MethodLL1; got != want {
-		t.Fatalf("report.Results[1].Method = %q, want %q", got, want)
+	if got, want := report.Methods[1].Method, MethodLR0; got != want {
+		t.Fatalf("report.Methods[1].Method = %q, want %q", got, want)
 	}
-	if got := report.Results[1].Error; !strings.Contains(got, "ll1 conflict") {
-		t.Fatalf("report.Results[1].Error = %q, want LL1 conflict", got)
+	if got := report.Methods[1].Error; !strings.Contains(got, "not implemented yet") {
+		t.Fatalf("report.Methods[1].Error = %q, want not implemented yet", got)
 	}
-	if report.Results[2].Error != "" {
-		t.Fatalf("report.Results[2].Error = %q, want empty", report.Results[2].Error)
+	if got, want := report.Methods[2].Method, MethodSLR; got != want {
+		t.Fatalf("report.Methods[2].Method = %q, want %q", got, want)
+	}
+	if report.Methods[2].Error != "" {
+		t.Fatalf("report.Methods[2].Error = %q, want empty", report.Methods[2].Error)
+	}
+	if got, want := report.Methods[3].Method, MethodLR1; got != want {
+		t.Fatalf("report.Methods[3].Method = %q, want %q", got, want)
+	}
+	if got := report.Methods[3].Error; !strings.Contains(got, "not implemented yet") {
+		t.Fatalf("report.Methods[3].Error = %q, want not implemented yet", got)
+	}
+	if got, want := report.Methods[4].Method, MethodLALR; got != want {
+		t.Fatalf("report.Methods[4].Method = %q, want %q", got, want)
+	}
+	if report.Methods[4].Error != "" {
+		t.Fatalf("report.Methods[4].Error = %q, want empty", report.Methods[4].Error)
 	}
 }
 
@@ -96,9 +117,9 @@ expr : ID PLUS ID ;
 	if report == nil {
 		t.Fatal("BuildComparisonReport() = nil, want report")
 	}
-	for i, result := range report.Results {
+	for i, result := range report.Methods {
 		if result.Accepted != nil {
-			t.Fatalf("report.Results[%d].Accepted = %v, want nil", i, *result.Accepted)
+			t.Fatalf("report.Methods[%d].Accepted = %v, want nil", i, *result.Accepted)
 		}
 	}
 }
@@ -120,14 +141,14 @@ expr : ID PLUS ID ;
 	if report.HasSuccess() {
 		t.Fatal("HasSuccess() = true, want false when all methods fail")
 	}
-	for i, result := range report.Results {
+	for i, result := range report.Methods {
 		if result.Error == "" {
-			t.Fatalf("report.Results[%d].Error = empty, want failure message", i)
+			t.Fatalf("report.Methods[%d].Error = empty, want failure message", i)
 		}
 	}
 }
 
-func TestRenderComparisonJSONIncludesResultsAndNullAccepted(t *testing.T) {
+func TestRenderComparisonJSONIncludesMethodsAndNullAccepted(t *testing.T) {
 	g := mustBuildGrammar(t, `%token ID PLUS
 %%
 expr : ID PLUS ID ;
@@ -143,27 +164,27 @@ expr : ID PLUS ID ;
 	}
 
 	var decoded struct {
-		DurationMS float64 `json:"duration_ms"`
-		Results    []struct {
+		TotalTimeMS float64 `json:"total_time_ms"`
+		Methods     []struct {
 			Method   string     `json:"method"`
 			Accepted *bool      `json:"accepted"`
 			Error    string     `json:"error"`
 			States   []struct{} `json:"states"`
-		} `json:"results"`
+		} `json:"methods"`
 	}
 	if err := json.Unmarshal(payload, &decoded); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v\npayload=%s", err, payload)
 	}
-	if len(decoded.Results) != len(ValidMethods()) {
-		t.Fatalf("len(decoded.Results) = %d, want %d", len(decoded.Results), len(ValidMethods()))
+	if len(decoded.Methods) != len(ValidMethods()) {
+		t.Fatalf("len(decoded.Methods) = %d, want %d", len(decoded.Methods), len(ValidMethods()))
 	}
-	if decoded.Results[0].Method != string(MethodSLR) {
-		t.Fatalf("decoded.Results[0].Method = %q, want %q", decoded.Results[0].Method, MethodSLR)
+	if decoded.Methods[0].Method != string(MethodLL1) {
+		t.Fatalf("decoded.Methods[0].Method = %q, want %q", decoded.Methods[0].Method, MethodLL1)
 	}
-	if decoded.Results[0].Accepted != nil {
-		t.Fatalf("decoded.Results[0].Accepted = %v, want nil", *decoded.Results[0].Accepted)
+	if decoded.Methods[0].Accepted != nil {
+		t.Fatalf("decoded.Methods[0].Accepted = %v, want nil", *decoded.Methods[0].Accepted)
 	}
-	if len(decoded.Results[0].States) == 0 {
-		t.Fatal("decoded.Results[0].States = 0, want serialized table states")
+	if len(decoded.Methods[0].States) == 0 {
+		t.Fatal("decoded.Methods[0].States = 0, want serialized table states")
 	}
 }

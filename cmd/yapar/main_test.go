@@ -426,14 +426,14 @@ expr : ID PLUS ID ;
 	}
 
 	out := stdout.String()
-	for _, label := range []string{"Comparison Summary", "SLR(1)", "LL1", "LALR"} {
+	for _, label := range []string{"Comparison Summary", "LL1", "LR0", "SLR(1)", "LR1", "LALR"} {
 		if !strings.Contains(out, label) {
 			t.Fatalf("stdout = %q, want label %q", out, label)
 		}
 	}
 }
 
-func TestRunCompareJSONRendersResultsArray(t *testing.T) {
+func TestRunCompareJSONRendersMethodsArray(t *testing.T) {
 	dir := t.TempDir()
 	yalpPath := writeTempFile(t, dir, "parser.yalp", `%token ID PLUS
 %%
@@ -448,19 +448,19 @@ expr : ID PLUS ID ;
 	}
 
 	var payload struct {
-		Results []struct {
+		Methods []struct {
 			Method string `json:"method"`
-		} `json:"results"`
+		} `json:"methods"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("json.Unmarshal(stdout) error = %v\nstdout=%s\nstderr=%s", err, stdout.String(), stderr.String())
 	}
-	got := make([]string, len(payload.Results))
-	for i, result := range payload.Results {
+	got := make([]string, len(payload.Methods))
+	for i, result := range payload.Methods {
 		got[i] = result.Method
 	}
-	if want := []string{"slr", "ll1", "lalr"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("results methods = %v, want %v", got, want)
+	if want := []string{"ll1", "lr0", "slr", "lr1", "lalr"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("methods = %v, want %v", got, want)
 	}
 	if !strings.Contains(stderr.String(), "Building comparison report") {
 		t.Fatalf("stderr = %q, want compare pipeline log", stderr.String())
@@ -501,7 +501,7 @@ expr : ID PLUS ID ;
 	if !strings.Contains(stderr.String(), "ignoring -method because -compare runs all methods") {
 		t.Fatalf("stderr = %q, want warning about ignored method", stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "\"method\":\"slr\"") || !strings.Contains(stdout.String(), "\"method\":\"lalr\"") {
+	if !strings.Contains(stdout.String(), "\"method\":\"ll1\"") || !strings.Contains(stdout.String(), "\"method\":\"lr1\"") || !strings.Contains(stdout.String(), "\"method\":\"lalr\"") {
 		t.Fatalf("stdout = %q, want all comparison methods", stdout.String())
 	}
 }
@@ -541,8 +541,40 @@ s : A | A B ;
 	if !strings.Contains(stdout.String(), "ll1 conflict") {
 		t.Fatalf("stdout = %q, want ll1 conflict entry", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "\"method\":\"slr\"") || !strings.Contains(stdout.String(), "\"method\":\"lalr\"") {
-		t.Fatalf("stdout = %q, want successful slr/lalr entries", stdout.String())
+	if !strings.Contains(stdout.String(), "\"method\":\"slr\"") || !strings.Contains(stdout.String(), "\"method\":\"lr0\"") || !strings.Contains(stdout.String(), "\"method\":\"lalr\"") {
+		t.Fatalf("stdout = %q, want mixed successful and not-implemented entries", stdout.String())
+	}
+}
+
+func TestRunCompareReturnsExitOneWhenAllMethodsFail(t *testing.T) {
+	dir := t.TempDir()
+	yalpPath := writeTempFile(t, dir, "parser.yalp", `%token INT PLUS WS
+IGNORE WS
+%%
+expr : INT PLUS INT ;
+`)
+	yalPath := writeTempFile(t, dir, "lexer.yal", `let DIGIT = [0-9]
+
+rule tokens =
+  | [' ' '\t' '\n']+ { WS }
+  | DIGIT+ { INT }
+  | '+' { PLUS }
+`)
+	srcPath := writeTempFile(t, dir, "input.txt", "12\n")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run([]string{"-yalp", yalpPath, "-yal", yalPath, "-src", srcPath, "-compare", "-format", "json"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want all-method failure")
+	}
+	if got := err.Error(); !strings.Contains(got, "comparison failed for all methods") {
+		t.Fatalf("error = %q, want all-method failure message", got)
+	}
+	for _, needle := range []string{"\"method\":\"ll1\"", "\"method\":\"lr0\"", "\"method\":\"slr\"", "\"method\":\"lr1\"", "\"method\":\"lalr\""} {
+		if !strings.Contains(stdout.String(), needle) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), needle)
+		}
 	}
 }
 
