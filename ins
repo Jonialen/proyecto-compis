@@ -1,0 +1,9 @@
+go run ./cmd/yalex -yal testdata/yapar/arithmetic.yal -src testdata/yapar/valid.expr
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -compare
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method ll1 -table
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method slr -table
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method lalr -table
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method slr -format dot > lr0.dot
+dot -Tpng lr0.dot -o lr0.png
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -yal testdata/yapar/arithmetic.yal -src testdata/yapar/valid.expr
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -yal testdata/yapar/arithmetic.yal -src testdata/yapar/invalid.expr
