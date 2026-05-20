@@ -56,23 +56,32 @@ Checklist real:
 
 ### 2) YAPar — construir backend, visualizar, comparar o ejecutar
 
+Fixtures reales listos para copiar/pegar:
+
+- Parser: `testdata/yapar/arithmetic.yalp`
+- Lexer: `testdata/yapar/arithmetic.yal`
+- Entrada válida: `testdata/yapar/valid.expr`
+- Entrada inválida: `testdata/yapar/invalid.expr`
+
 #### Camino normal
 
 ```bash
-go run ./cmd/yapar -yalp parser.yalp
-go run ./cmd/yapar -yalp parser.yalp -method slr -table
-go run ./cmd/yapar -yalp parser.yalp -method lalr -format dot
-go run ./cmd/yapar -yalp parser.yalp -method ll1 -format json
-go run ./cmd/yapar -yalp parser.yalp -yal lexer.yal -src input.txt
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method slr -table
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method lalr -format dot
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method ll1 -format json
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -yal testdata/yapar/arithmetic.yal -src testdata/yapar/valid.expr
 ```
 
 #### Modo comparativo
 
 ```bash
-go run ./cmd/yapar -yalp parser.yalp -compare
-go run ./cmd/yapar -yalp parser.yalp -compare -format json
-go run ./cmd/yapar -yalp parser.yalp -yal lexer.yal -src input.txt -compare
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -compare
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -compare -format json
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -yal testdata/yapar/arithmetic.yal -src testdata/yapar/valid.expr -compare
 ```
+
+Si ves rutas como `mi_parser.yalp` o `entrada.txt` en notas históricas, trátalas como **placeholders**. Los comandos anteriores usan archivos **reales** que sí existen en el repo.
 
 #### Flags relevantes de `cmd/yapar`
 

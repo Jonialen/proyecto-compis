@@ -1,0 +1,7 @@
+%token INT PLUS TIMES LPAREN RPAREN
+%%
+expr : term expr_tail ;
+expr_tail : PLUS term expr_tail | ;
+term : factor term_tail ;
+term_tail : TIMES factor term_tail | ;
+factor : INT | LPAREN expr RPAREN ;

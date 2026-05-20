@@ -1,0 +1,11 @@
+(* Lexer real para arithmetic.yalp *)
+
+let DIGIT = [0-9]
+
+rule tokens =
+  | [' ' '\t' '\n' '\r']+ { skip }
+  | DIGIT+                  { INT }
+  | '+'                     { PLUS }
+  | '*'                     { TIMES }
+  | '('                     { LPAREN }
+  | ')'                     { RPAREN }

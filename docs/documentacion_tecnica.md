@@ -268,6 +268,20 @@ Hoy existe una capa común en `internal/yapar/visualizer.go`.
 
 ## 8. CLI reales del repositorio
 
+### Convención de paths en esta documentación
+
+- `testdata/yapar/...` = ejemplo real que existe en el repositorio.
+- `archivo.yalp`, `archivo.yal`, `entrada.txt` = placeholder genérico, solo cuando se diga explícitamente.
+
+Fixtures reales disponibles:
+
+| Archivo | Uso |
+|---|---|
+| `testdata/yapar/arithmetic.yalp` | Gramática aritmética compatible con LL(1), SLR(1) y LALR |
+| `testdata/yapar/arithmetic.yal` | Lexer compatible con los tokens `INT`, `PLUS`, `TIMES`, `LPAREN`, `RPAREN` |
+| `testdata/yapar/valid.expr` | Entrada válida para pruebas end-to-end |
+| `testdata/yapar/invalid.expr` | Entrada inválida para validar rechazo sintáctico |
+
 ### 8.1 `cmd/yalex`
 
 Uso práctico:
@@ -289,13 +303,19 @@ Reglas verificadas en código:
 Uso práctico:
 
 ```bash
-go run ./cmd/yapar -yalp parser.yalp
-go run ./cmd/yapar -yalp parser.yalp -method slr -table
-go run ./cmd/yapar -yalp parser.yalp -method ll1 -format json
-go run ./cmd/yapar -yalp parser.yalp -method lalr -format dot
-go run ./cmd/yapar -yalp parser.yalp -yal lexer.yal -src input.txt
-go run ./cmd/yapar -yalp parser.yalp -compare
-go run ./cmd/yapar -yalp parser.yalp -compare -format json
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method slr -table
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method ll1 -format json
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method lalr -format dot
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -yal testdata/yapar/arithmetic.yal -src testdata/yapar/valid.expr
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -compare
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -compare -format json
+```
+
+Prueba de rechazo real:
+
+```bash
+go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -yal testdata/yapar/arithmetic.yal -src testdata/yapar/invalid.expr
 ```
 
 ### Flags relevantes de `cmd/yapar`
