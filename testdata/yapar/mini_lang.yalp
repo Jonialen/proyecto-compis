@@ -1,0 +1,79 @@
+%token LET IF ELSE WHILE PRINT RETURN TRUE FALSE
+%token ID INT STRING
+%token ASSIGN PLUS MINUS TIMES DIVIDE
+%token EQ NE LT LE GT GE AND OR NOT
+%token LPAREN RPAREN LBRACE RBRACE SEMI COMMA
+%%
+program : stmt_list ;
+
+stmt_list : stmt stmt_list | ;
+
+stmt : decl SEMI
+     | assign SEMI
+     | print_stmt SEMI
+     | return_stmt SEMI
+     | if_stmt
+     | while_stmt
+     | block
+     ;
+
+block : LBRACE stmt_list RBRACE ;
+
+decl : LET ID decl_init ;
+decl_init : ASSIGN expr | ;
+
+assign : ID ASSIGN expr ;
+
+print_stmt : PRINT LPAREN arg_list RPAREN ;
+return_stmt : RETURN expr ;
+
+if_stmt : IF LPAREN expr RPAREN block else_part ;
+else_part : ELSE block | ;
+
+while_stmt : WHILE LPAREN expr RPAREN block ;
+
+arg_list : expr arg_tail | ;
+arg_tail : COMMA expr arg_tail | ;
+
+expr : or_expr ;
+or_expr : and_expr or_tail ;
+or_tail : OR and_expr or_tail | ;
+
+and_expr : equality and_tail ;
+and_tail : AND equality and_tail | ;
+
+equality : relation equality_tail ;
+equality_tail : EQ relation equality_tail | NE relation equality_tail | ;
+
+relation : additive relation_tail ;
+relation_tail : LT additive relation_tail
+              | LE additive relation_tail
+              | GT additive relation_tail
+              | GE additive relation_tail
+              |
+              ;
+
+additive : multiplicative additive_tail ;
+additive_tail : PLUS multiplicative additive_tail
+              | MINUS multiplicative additive_tail
+              |
+              ;
+
+multiplicative : unary multiplicative_tail ;
+multiplicative_tail : TIMES unary multiplicative_tail
+                    | DIVIDE unary multiplicative_tail
+                    |
+                    ;
+
+unary : NOT unary
+      | MINUS unary
+      | primary
+      ;
+
+primary : INT
+        | STRING
+        | TRUE
+        | FALSE
+        | ID
+        | LPAREN expr RPAREN
+        ;

@@ -1,0 +1,7 @@
+let x = 10;
+
+if (x > 3) {
+  print("ok");
+} else {
+  x = x + ;
+}

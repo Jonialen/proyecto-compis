@@ -1,0 +1,60 @@
+(* Lexer para mini_lang.yalp: lenguaje imperativo chico para demo *)
+
+let DIGIT = [0-9]
+let LETTER = ['a'-'z''A'-'Z''_']
+let IDREST = LETTER | DIGIT
+
+let WS = [' ' '\t' '\n' '\r']+
+let IDENT = LETTER IDREST*
+let NUMBER = DIGIT+
+let TEXT = '"' (LETTER | DIGIT | ' ' | '.' | ',' | '!' | '?')* '"'
+
+let EQ_OP = '=''='
+let NE_OP = '!''='
+let LE_OP = '<''='
+let GE_OP = '>''='
+let AND_OP = '&''&'
+let OR_OP = '|''|'
+
+let LET_KW = let
+let IF_KW = if
+let ELSE_KW = else
+let WHILE_KW = while
+let PRINT_KW = print
+let RETURN_KW = return
+let TRUE_KW = true
+let FALSE_KW = false
+
+rule tokens =
+  | WS          { skip }
+  | LET_KW      { LET }
+  | IF_KW       { IF }
+  | ELSE_KW     { ELSE }
+  | WHILE_KW    { WHILE }
+  | PRINT_KW    { PRINT }
+  | RETURN_KW   { RETURN }
+  | TRUE_KW     { TRUE }
+  | FALSE_KW    { FALSE }
+  | EQ_OP       { EQ }
+  | NE_OP       { NE }
+  | LE_OP       { LE }
+  | GE_OP       { GE }
+  | AND_OP      { AND }
+  | OR_OP       { OR }
+  | '='         { ASSIGN }
+  | '+'         { PLUS }
+  | '-'         { MINUS }
+  | '*'         { TIMES }
+  | '/'         { DIVIDE }
+  | '<'         { LT }
+  | '>'         { GT }
+  | '!'         { NOT }
+  | '('         { LPAREN }
+  | ')'         { RPAREN }
+  | '{'         { LBRACE }
+  | '}'         { RBRACE }
+  | ';'         { SEMI }
+  | ','         { COMMA }
+  | NUMBER      { INT }
+  | TEXT        { STRING }
+  | IDENT       { ID }

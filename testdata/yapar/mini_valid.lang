@@ -1,0 +1,20 @@
+let x = 10;
+let y = 20;
+let ok = true;
+
+print("inicio", x, y);
+
+if ((x + y * 2) >= 50 && ok) {
+  print("rama if", x + y);
+  x = x + 1;
+} else {
+  print("rama else");
+  y = y - 1;
+}
+
+while (x < y) {
+  print("loop", x);
+  x = x + 2;
+}
+
+return x;
