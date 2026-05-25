@@ -55,6 +55,13 @@ Hoy el estado real es este:
 - CLI de comparación entre métodos.
 - Generación de parser standalone basada en una `TableView`.
 
+#### IDE web
+
+- Servidor local en `cmd/ide`.
+- Interfaz gráfica en `web/`.
+- Edición/carga de `.yal`, `.yalp` y entrada de prueba.
+- Visualización de tokens, tablas, aceptación y autómata cuando aplica.
+
 ### No incluye
 
 - Backend ejecutable **LR(0)**.
@@ -62,13 +69,13 @@ Hoy el estado real es este:
 - Soporte standalone garantizado para **todos** los métodos disponibles en la CLI.
 - Resolución general por precedencia/asociatividad para conflictos.
 - AST semántico o acciones semánticas embebidas en `.yalp`.
-- IDE/interfaz gráfica final.
 - Interoperabilidad automática completa entre lexer standalone generado y parser standalone generado; el parser standalone consume tokens vía JSON.
 
 ## 3. Mapa rápido del repositorio
 
 ```text
 cmd/
+  ide/                      # Servidor web de la interfaz gráfica
   yalex/                    # CLI del lexer
   yapar/                    # CLI del parser y comparador
 
@@ -85,6 +92,8 @@ internal/
 docs/
   documentacion_tecnica.md  # Este documento
   parte2/                   # Planeación e historial de implementación
+
+web/                        # Interfaz gráfica Furlantran
 ```
 
 ## 4. Arquitectura
@@ -411,8 +420,8 @@ NO hay que documentar esto como “standalone multi-método completo”, porque 
 
 ### De producto
 
-- La **IDE/interfaz gráfica** sigue pendiente.
-- La experiencia visual actual se concentra en CLI + exportación textual/JSON/DOT.
+- La **IDE/interfaz gráfica** ya existe como aplicación web local.
+- La experiencia visual depende de `cmd/ide` y de los assets estáticos en `web/`.
 
 ## 12. Verificación estática usada para esta documentación
 
@@ -430,6 +439,8 @@ Se verificó contra código fuente, no contra supuestos históricos.
 | `internal/yapar/comparison.go` | reporte comparativo multi-método |
 | `internal/generator/parser_gen.go` | generación standalone basada en `TableView` |
 | `cmd/yalex/main.go` | uso real de la CLI léxica |
+| `cmd/ide/main.go` | servidor web local, APIs `/api/process` y `/api/health`, integración lexer/parser para la IDE |
+| `web/index.html`, `web/app.js`, `web/style.css` | interfaz gráfica, editores, carga de archivos, resultados y render de autómata |
 
 ## 13. Conclusión
 
@@ -437,6 +448,7 @@ El proyecto hoy puede describirse con precisión así:
 
 1. **YALex**: funcional para construir, simular y generar un lexer.
 2. **YAPar**: multi-método, con backends **LL(1)**, **SLR(1)** y **LALR**, visualización/export común y modo comparativo.
-3. **Límites reales**: `lr0`/`lr1` son placeholders, la IDE aún no existe y el standalone del parser no debe venderse como soporte completo para todos los métodos.
+3. **IDE web**: disponible mediante `go run ./cmd/ide`, con carga de archivos, ejecución de análisis y visualización de resultados.
+4. **Límites reales**: `lr0`/`lr1` son placeholders y el standalone del parser no debe venderse como soporte completo para todos los métodos.
 
 Este documento reemplaza cualquier afirmación obsoleta de que YAPar “solo soporta SLR(1)” o “todavía no tiene LALR”.
