@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ParserIDE</title>
+
+  <!-- CodeMirror 5 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css" />
+
+  <!-- Google Fonts (loaded lazily for UWU mode) -->
+  <link id="uwu-font" rel="preload" as="style"
+    href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap"
+    onload="this.onload=null;this.rel='stylesheet'" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ─── HEADER ─────────────────────────────────────────────────── -->
+  <header id="header">
+    <div class="hdr-brand">
+      <span class="hdr-logo" id="logo">⚙️</span>
+      <span class="hdr-title">ParserIDE</span>
+    </div>
+
+    <div class="hdr-actions">
+      <button id="btn-run" class="btn btn-primary" title="Run analysis (Ctrl+Enter)">
+        <span class="btn-icon">▶</span> Run
+      </button>
+      <button id="btn-save" class="btn btn-secondary" title="Download current file">
+        <span class="btn-icon">💾</span> Save
+      </button>
+      <button id="btn-uwu" class="btn btn-uwu" title="Toggle UWU mode OwO">
+        ✨ UWU
+      </button>
+    </div>
+  </header>
+
+  <!-- ─── MAIN LAYOUT ────────────────────────────────────────────── -->
+  <div id="main">
+
+    <!-- LEFT SIDEBAR -->
+    <aside id="sidebar">
+      <section class="sb-section">
+        <div class="sb-label">FILES</div>
+        <button class="sb-btn" id="load-yal">📂 Load .yal</button>
+        <button class="sb-btn" id="load-yalp">📂 Load .yalp</button>
+        <button class="sb-btn" id="load-input">📂 Load Input</button>
+      </section>
+
+      <section class="sb-section">
+        <div class="sb-label">METHODS</div>
+        <label class="sb-check">
+          <input type="checkbox" value="ll1" checked /> LL(1)
+        </label>
+        <label class="sb-check">
+          <input type="checkbox" value="slr" checked /> SLR(1)
+        </label>
+        <label class="sb-check">
+          <input type="checkbox" value="lalr" checked /> LALR
+        </label>
+      </section>
+
+      <section class="sb-section sb-section--grow">
+        <div class="sb-label">FILES LOADED</div>
+        <div class="file-status" id="file-status-yal">
+          <span class="fs-dot"></span> .yal — <em>none</em>
+        </div>
+        <div class="file-status" id="file-status-yalp">
+          <span class="fs-dot"></span> .yalp — <em>none</em>
+        </div>
+        <div class="file-status" id="file-status-input">
+          <span class="fs-dot"></span> input — <em>none</em>
+        </div>
+      </section>
+    </aside>
+
+    <!-- CENTER EDITOR -->
+    <div id="editor-pane">
+      <div class="tab-bar" id="editor-tabs">
+        <button class="tab" data-editor="yal">.yal</button>
+        <button class="tab active" data-editor="yalp">.yalp</button>
+        <button class="tab" data-editor="input">Input</button>
+      </div>
+      <div id="editor-wrapper">
+        <div class="editor-panel" id="ep-yal"></div>
+        <div class="editor-panel active" id="ep-yalp"></div>
+        <div class="editor-panel" id="ep-input"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT RESULTS -->
+    <div id="results-pane">
+      <div class="tab-bar" id="results-tabs">
+        <button class="tab active" data-result="summary">Summary</button>
+        <button class="tab" data-result="tokens">Tokens</button>
+        <button class="tab" data-result="ll1">LL(1)</button>
+        <button class="tab" data-result="slr">SLR(1)</button>
+        <button class="tab" data-result="lalr">LALR</button>
+        <button class="tab" data-result="automaton">Automaton</button>
+      </div>
+      <div id="results-content">
+        <div class="result-panel active" id="rp-summary">
+          <div class="empty-state">
+            <div class="empty-icon">🔬</div>
+            <div>Load a <strong>.yalp</strong> file and press <strong>Run</strong> to start analysis.</div>
+          </div>
+        </div>
+        <div class="result-panel" id="rp-tokens">
+          <div class="empty-state"><div class="empty-icon">🏷️</div>No tokens yet.</div>
+        </div>
+        <div class="result-panel" id="rp-ll1">
+          <div class="empty-state"><div class="empty-icon">📊</div>LL(1) table will appear here.</div>
+        </div>
+        <div class="result-panel" id="rp-slr">
+          <div class="empty-state"><div class="empty-icon">📊</div>SLR(1) table will appear here.</div>
+        </div>
+        <div class="result-panel" id="rp-lalr">
+          <div class="empty-state"><div class="empty-icon">📊</div>LALR table will appear here.</div>
+        </div>
+        <div class="result-panel" id="rp-automaton">
+          <div class="empty-state"><div class="empty-icon">🔵</div>LR(0) automaton will appear here.</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /#main -->
+
+  <!-- ─── STATUS BAR ──────────────────────────────────────────────── -->
+  <footer id="status-bar">
+    <span id="status-text">Ready</span>
+    <span id="status-right"></span>
+  </footer>
+
+  <!-- Hidden file input -->
+  <input type="file" id="file-input" style="display:none" />
+
+  <!-- ─── PAYMENT MODAL ───────────────────────────────────────────── -->
+  <div id="payment-overlay" aria-hidden="true">
+    <div id="payment-modal">
+
+      <div class="pm-header">
+        <div class="pm-logo">💳</div>
+        <div>
+          <div class="pm-title">ParserIDE Pro™</div>
+          <div class="pm-subtitle">Results are a <em>premium feature</em></div>
+        </div>
+      </div>
+
+      <div class="pm-price-tag">$0.99 <span class="pm-per">/ parse</span></div>
+      <div class="pm-tagline">🔒 Secure checkout powered by ParsePay™</div>
+
+      <form id="payment-form" novalidate autocomplete="off">
+
+        <div class="pm-field">
+          <label for="cc-name">Name on card</label>
+          <input id="cc-name" type="text" placeholder="Linus Torvalds" maxlength="40" />
+          <span class="pm-err" id="err-name"></span>
+        </div>
+
+        <div class="pm-field">
+          <label for="cc-number">Card number</label>
+          <div class="pm-card-row">
+            <input id="cc-number" type="text" placeholder="1234 5678 9012 3456"
+                   maxlength="19" inputmode="numeric" />
+            <span class="pm-card-brand" id="card-brand">💳</span>
+          </div>
+          <span class="pm-err" id="err-number"></span>
+        </div>
+
+        <div class="pm-row">
+          <div class="pm-field">
+            <label for="cc-expiry">Expiry</label>
+            <input id="cc-expiry" type="text" placeholder="MM/YY" maxlength="5" inputmode="numeric" />
+            <span class="pm-err" id="err-expiry"></span>
+          </div>
+          <div class="pm-field">
+            <label for="cc-cvv">CVV</label>
+            <input id="cc-cvv" type="text" placeholder="123" maxlength="4" inputmode="numeric" />
+            <span class="pm-err" id="err-cvv"></span>
+          </div>
+        </div>
+
+        <button type="submit" id="pm-pay-btn" class="btn btn-primary pm-pay-btn">
+          Pay $0.99 and see my results 🚀
+        </button>
+
+        <div class="pm-fine-print">
+          * Not actually charging you lol &nbsp;|&nbsp;
+          This is a joke. No real data is stored.<br>
+          By clicking Pay you agree to our <u>Terms of Silliness</u>.
+        </div>
+
+      </form>
+
+      <button id="pm-close" class="pm-close-btn" title="I'm too poor (skip payment)">
+        ✕ I don't want results
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ─── UWU SPARKLES CONTAINER ──────────────────────────────────── -->
+  <div id="sparkle-container" aria-hidden="true"></div>
+
+  <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/viz.js/2.1.2/viz.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/viz.js/2.1.2/full.render.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
