@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   ParserIDE — Frontend
+   Furlantran — Frontend
    ═══════════════════════════════════════════════════════════════ */
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -661,14 +661,28 @@ function toggleUWU() {
   state.uwuMode = !state.uwuMode;
   document.body.classList.toggle('uwu-mode', state.uwuMode);
 
-  const runBtn = document.getElementById('btn-run');
+  const runBtn  = document.getElementById('btn-run');
+  const title   = document.getElementById('hdr-title');
+  const music   = document.getElementById('uwu-music');
+
   if (state.uwuMode) {
-    runBtn.innerHTML = UWU_RUN_TEXTS[Math.floor(Math.random() * UWU_RUN_TEXTS.length)];
-    setStatus('UWU mode activated! (≧◡≦) ♡', 'ok');
+    runBtn.innerHTML   = UWU_RUN_TEXTS[Math.floor(Math.random() * UWU_RUN_TEXTS.length)];
+    title.textContent  = 'Dennis Kun-piler';
+    document.title     = 'Dennis Kun-piler';
+    music.currentTime  = 0;
+    music.play().then(() => {
+      setStatus('UWU mode activated! (≧◡≦) ♡', 'ok');
+    }).catch(err => {
+      setStatus('UWU mode activated! (≧◡≦) ♡  [audio blocked: ' + err.message + ']', 'ok');
+    });
     startSparkles();
     applyUWUEditorTheme();
   } else {
-    runBtn.innerHTML = `<span class="btn-icon">▶</span> ${NORM_RUN_TEXT}`;
+    runBtn.innerHTML   = `<span class="btn-icon">▶</span> ${NORM_RUN_TEXT}`;
+    title.textContent  = 'Furlantran';
+    document.title     = 'Furlantran';
+    music.pause();
+    music.currentTime  = 0;
     setStatus('Back to normal mode.', 'ok');
     stopSparkles();
     applyNormalEditorTheme();

@@ -20,7 +20,7 @@ func main() {
 	mux.HandleFunc("/api/health", cors(handleHealth))
 
 	addr := ":8080"
-	fmt.Printf("[*] ParserIDE running at http://localhost%s\n", addr)
+	fmt.Printf("[*] Furlantran running at http://localhost%s\n", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
