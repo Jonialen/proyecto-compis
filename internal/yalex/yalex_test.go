@@ -208,6 +208,23 @@ func TestParse_PriorityOrder(t *testing.T) {
 	}
 }
 
+func TestParse_NormalizesReturnActions(t *testing.T) {
+	input := "rule t =\n| ' ' { return lexbuf }\n| 'a' { return IDENT }"
+
+	res, err := Parse(input)
+	requireNoError(t, err)
+
+	if len(res.Rules) != 2 {
+		t.Fatalf("expected 2 rules, got %d", len(res.Rules))
+	}
+	if got, want := res.Rules[0].Action, "skip"; got != want {
+		t.Errorf("space action = %q, want %q", got, want)
+	}
+	if got, want := res.Rules[1].Action, "IDENT"; got != want {
+		t.Errorf("identifier action = %q, want %q", got, want)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // splitByPipe tests (unexported)
 // ---------------------------------------------------------------------------

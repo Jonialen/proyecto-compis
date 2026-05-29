@@ -264,7 +264,7 @@ func parseRules(body string) ([]TokenRule, error) {
 			// Este segmento tiene accion -> asignar la accion a todos los patrones pendientes
 			pending = append(pending, seg)
 			_, action, _ := extractPatternAction(pending[len(pending)-1])
-			action = strings.TrimSpace(action)
+			action = normalizeAction(action)
 
 			// Crear una regla para cada patron pendiente con la misma accion
 			for _, p := range pending {
@@ -295,6 +295,18 @@ func parseRules(body string) ([]TokenRule, error) {
 	}
 
 	return rules, nil
+}
+
+func normalizeAction(action string) string {
+	action = strings.TrimSpace(action)
+	fields := strings.Fields(action)
+	if len(fields) == 2 && fields[0] == "return" {
+		if fields[1] == "lexbuf" {
+			return "skip"
+		}
+		return fields[1]
+	}
+	return action
 }
 
 // splitByPipe divide el cuerpo de reglas por caracteres pipe (|) de nivel superior.
