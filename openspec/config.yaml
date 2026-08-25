@@ -1,0 +1,49 @@
+schema: spec-driven
+
+context: |
+  Project: genAnaLex + YAPar, a Go compiler-construction toolkit.
+  Current stack: Go 1.26.1, standard library, YALex, YAPar, and a web IDE.
+  Architecture: small decoupled packages with stable contracts between compiler phases and interfaces.
+  Current delivery focus: Compiscript syntax and semantic analysis from the ANTLR grammar.
+  Principles: KISS; avoid speculative abstractions; preserve reusable phase boundaries.
+  Persistence: hybrid OpenSpec plus Engram.
+  Delivery: interactive execution with automatic chained delivery above 400 review lines.
+
+strict_tdd: true
+
+testing:
+  runner: go test ./...
+  framework: Go testing package
+  unit: true
+  integration: true
+  e2e: false
+  coverage_command: go test -cover ./...
+  linter: unavailable
+  type_checker: go test ./...
+  formatter: gofmt -l .
+
+rules:
+  proposal:
+    - Include rollback planning for risky changes.
+    - Keep ANTLR, AST, semantic domain, CLI, and IDE contracts decoupled.
+  specs:
+    - Use Given/When/Then scenarios.
+    - Use RFC 2119 keywords where normative behavior is described.
+  design:
+    - Prefer the smallest design that supports current and foreseeable compiler phases.
+    - Document boundary contracts and rationale for architecture decisions.
+  tasks:
+    - Group tasks by independently verifiable work unit.
+    - Forecast authored review lines and auto-chain work above 400 lines.
+  apply:
+    tdd: true
+    test_command: go test ./...
+    guidelines:
+      - Preserve pre-existing worktree changes.
+      - Keep tests with the behavior they verify.
+  verify:
+    test_command: go test ./...
+    build_command: go build ./...
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas.

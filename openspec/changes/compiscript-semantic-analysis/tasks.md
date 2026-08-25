@@ -1,0 +1,40 @@
+# Tasks: Compiscript Semantic Analysis
+
+Tracker only: create each child after its prerequisite is verified. Each slice targets `main`, preserves unrelated work/YALex/YAPar, and excludes SQL DSL work.
+
+## Review Workload Forecast
+
+| Field | Value |
+|---|---|
+| Estimated authored lines | 2,850–3,350 total; 250–400 per unit |
+| Generated ANTLR volume | 4,000–8,000 lines; budget-exempt |
+| Suggested split | 9 ordered child changes/PRs |
+| Delivery / chain | `auto-chain` / `stacked-to-main` |
+
+Decision needed before apply: No
+Chained PRs recommended: Yes
+Chain strategy: stacked-to-main
+400-line budget risk: High
+
+## Phase 1: Stable Contracts and Frontend
+
+Every semantic item below requires RED valid/invalid located fixtures and GREEN implementation plus evidence in `testdata/compiscript/` and `docs/semestre2/entrega1/evidence/`.
+
+- [ ] 1.1 `compiscript-contracts-ast` (parent): source spans, concrete AST, stable `AnalysisReport`, ordered scopes/symbols, `[]` serialization in `internal/compiscript/{ast,model}`. **Status:** child verified and archived; 591 authored additions/0 deletions under the approved child-only `size:exception` (650 maximum, 59 headroom); parent tracker remains open. **Test:** `go test ./internal/compiscript/ast ./internal/compiscript/model && go test ./...`. **Harness:** N/A—contracts only. **Rollback:** packages/evidence.
+- [ ] 1.2 `compiscript-antlr-frontend` (1.1): valid/recoverable parsing, float/current `for`, located lexer/syntax errors, stable reruns; RED subprocess spaces, missing Java, bad checksum without replacing output. Pin ANTLR 4.13.2 in grammar, `scripts/`, modules, dependency guard, `frontend/`, generated tree. **Lines:** 350–400 authored. **Test:** `go test ./internal/compiscript/frontend -run 'Test(Parse|Generate|Recovery)' && go test ./...`. **Harness:** `./scripts/generate-compiscript.sh`. **Rollback:** frontend/tool/runtime; generated tree separately.
+
+## Phase 2: Semantic Behavior
+
+- [ ] 2.1 `compiscript-names-types` (1.2): nested/global resolution, shadowing, same-scope variable/function/parameter duplicates, unresolved names, function/block scopes; numeric promotion/float division, string `+`, arithmetic/logical/comparison/assignment rules, null, constants, invalid function operands, `ErrorType` suppression in `semantic/` and facade. **Lines:** 380–400. **Test:** `go test ./internal/compiscript/semantic -run 'Test(Names|Types)' && go test ./...`. **Harness:** N/A—library. **Rollback:** pass/evidence.
+- [ ] 2.2 `compiscript-functions-flow` (2.1): recursion, closures/capture, arity/positional/return types, external/all-path returns; boolean conditions, valid `for`, compatible unique non-fallthrough switch, transfer contexts, every unreachable statement in `semantic/`. **Lines:** 360–400. **Test:** `go test ./internal/compiscript/semantic -run 'Test(Functions|Flow)' && go test ./...`. **Harness:** N/A—library. **Rollback:** pass/evidence.
+- [ ] 2.3 `compiscript-collections` (2.2): homogeneous lists/matrices, ragged/contextual-empty validity, mixed-level failure; integer indices, provable bounds errors, uncertain-bounds silence in `semantic/`. **Lines:** 250–320. **Test:** `go test ./internal/compiscript/semantic -run TestCollections && go test ./...`. **Harness:** N/A—library. **Rollback:** rules/evidence.
+- [ ] 2.4 `compiscript-classes-exceptions` (2.3): class scopes, members, constructor arguments, class-only `this`, inheritance/lookup/cycles, inherited-name ban, non-inherited constructors; catch-only exception binding, both blocks analyzed, no `throw` in `semantic/`. **Lines:** 360–400. **Test:** `go test ./internal/compiscript/semantic -run 'Test(Classes|Catch)' && go test ./...`. **Harness:** N/A—library. **Rollback:** pass/evidence.
+
+## Phase 3: Consumers
+
+- [ ] 3.1 `compiscript-cli` (2.4): `.cps` input and deterministic facade-equivalent JSON in `cmd/compiscript/`; document valid/invalid runs. **Lines:** 250–320. **Test:** `go test ./cmd/compiscript && go test ./...`. **Harness:** `go run ./cmd/compiscript testdata/compiscript/valid/types.cps`. **Rollback:** command/docs.
+- [ ] 3.2 `compiscript-ide` (3.1): method/body/status and report-equivalence tests for `POST /api/compiscript/analyze`; render source, AST, diagnostics, environments while preserving `/api/process` in `cmd/ide/`, `web/`, docs. **Lines:** 350–400. **Test:** `go test ./cmd/ide && go test ./...`. **Harness:** run IDE; POST `{ "source": "let x: integer = 1;" }`. **Rollback:** route/UI/docs.
+
+## Phase 4: Acceptance
+
+- [ ] 4.1 `compiscript-acceptance-evidence` (3.2): map every spec/rubric rule to located valid/invalid evidence; golden CLI/IDE equality, deterministic recovery/tree/scopes, YALex/YAPar regression, runbook, no SQL/plugin surface in corpus, acceptance tests, docs. **Lines:** 250–330. **Test:** `go test ./...`. **Harness:** analyze identical CLI/IDE corpus; diff JSON. **Rollback:** corpus/docs/tests.
