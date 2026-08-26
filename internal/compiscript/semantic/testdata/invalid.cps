@@ -1,0 +1,1 @@
+let value: integer = 1; let value: float = true; const fixed: integer = 2; fixed = 3; function calculate(item: integer, item: float): float { print(missing + 1); value = "wrong"; return value; } function calculate(): float { return 1; }
