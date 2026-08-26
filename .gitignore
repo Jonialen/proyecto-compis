@@ -1,3 +1,5 @@
 .claude
 # Local AI runtime state
 .atl/
+# Local ANTLR tool cache; the verified checksum remains tracked.
+tools/antlr/*.jar

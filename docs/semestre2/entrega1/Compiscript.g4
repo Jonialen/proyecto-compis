@@ -48,7 +48,7 @@ assignment
 expressionStatement: expression ';';
 printStatement: 'print' '(' expression ')' ';';
 
-ifStatement: 'if' '(' expression ')' block ('else' block)?;
+ifStatement: 'if' '(' expression ')' (block | statement) ('else' (block | statement))?;
 whileStatement: 'while' '(' expression ')' block;
 doWhileStatement: 'do' block 'while' '(' expression ')' ';';
 forStatement: 'for' '(' (variableDeclaration | assignment | ';') expression? ';' expression? ')' block;
@@ -154,17 +154,19 @@ arrayLiteral: '[' (expression (',' expression)*)? ']';
 // ------------------
 
 type: baseType ('[' ']')*;
-baseType: 'boolean' | 'integer' | 'string' | Identifier;
+baseType: 'boolean' | 'integer' | 'float' | 'string' | Identifier;
 
 // ------------------
 // Lexer Rules
 // ------------------
 
 Literal
-  : IntegerLiteral
+  : FloatLiteral
+  | IntegerLiteral
   | StringLiteral
   ;
 
+FloatLiteral: [0-9]+ '.' [0-9]+;
 IntegerLiteral: [0-9]+;
 StringLiteral: '"' (~["\r\n])* '"';
 
