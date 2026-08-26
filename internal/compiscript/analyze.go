@@ -13,7 +13,7 @@ func Analyze(source []byte) model.AnalysisReport {
 	diagnostics := append(model.Diagnostics{}, frontendDiagnostics...)
 	diagnostics = append(diagnostics, semanticDiagnostics...)
 	return model.AnalysisReport{
-		AST:         model.ASTView{Kind: "program", Label: "Program", Span: program.Span, Children: model.ASTViews{}},
+		AST:         astView(program),
 		Diagnostics: diagnostics,
 		Scopes:      scopes,
 	}

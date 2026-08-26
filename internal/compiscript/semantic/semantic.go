@@ -104,6 +104,34 @@ func (a *analyzer) statement(s *scope, statement ast.Statement) {
 		a.expression(s, n.Condition)
 		a.block(s, n.Then)
 		a.block(s, n.Else)
+	case ast.WhileStmt:
+		a.expression(s, n.Condition)
+		a.block(s, n.Body)
+	case ast.DoWhileStmt:
+		a.block(s, n.Body)
+		a.expression(s, n.Condition)
+	case ast.ForStmt:
+		loop := a.newScope(s, model.ScopeBlock, n.Span)
+		if n.Init != nil {
+			a.statement(loop, n.Init)
+		}
+		a.expression(loop, n.Condition)
+		a.expression(loop, n.Post)
+		a.block(loop, n.Body)
+	case ast.ForeachStmt:
+		a.expression(s, n.Iterable)
+		a.block(s, n.Body)
+	case ast.TryCatchStmt:
+		a.block(s, n.Try)
+		a.block(s, n.Catch)
+	case ast.SwitchStmt:
+		a.expression(s, n.Value)
+		for _, switchCase := range n.Cases {
+			a.expression(s, switchCase.Value)
+			a.statements(s, switchCase.Statements)
+		}
+	case ast.ClassDeclStmt:
+		a.statements(a.newScope(s, model.ScopeBlock, n.Span), n.Members)
 	}
 }
 
@@ -186,6 +214,48 @@ func (a *analyzer) expression(s *scope, expression ast.Expression) model.Type {
 		return a.binary(s, n)
 	case ast.AssignExpr:
 		return a.assignment(s, n.Target, n.Value, n.Span)
+	case ast.ArrayExpr:
+		for _, element := range n.Elements {
+			a.expression(s, element)
+		}
+		return errorType()
+	case ast.NewExpr:
+		for _, argument := range n.Arguments {
+			a.expression(s, argument)
+		}
+		return model.Type{Kind: model.TypeClass, Name: n.ClassName, Params: model.Types{}}
+	case ast.TernaryExpr:
+		a.expression(s, n.Condition)
+		left, right := a.expression(s, n.Then), a.expression(s, n.Else)
+		if compatible(left, right) {
+			return left
+		}
+		if compatible(right, left) {
+			return right
+		}
+		return errorType()
+	case ast.PropertyAssignExpr:
+		a.expression(s, n.Receiver)
+		a.expression(s, n.Value)
+		return errorType()
+	case ast.CallExpr:
+		callee := a.expression(s, n.Callee)
+		for _, argument := range n.Arguments {
+			a.expression(s, argument)
+		}
+		if callee.Kind == model.TypeFunction && callee.Result != nil {
+			return *callee.Result
+		}
+		return errorType()
+	case ast.IndexExpr:
+		a.expression(s, n.Collection)
+		a.expression(s, n.Index)
+		return errorType()
+	case ast.PropertyAccessExpr:
+		a.expression(s, n.Receiver)
+		return errorType()
+	case ast.ThisExpr:
+		return errorType()
 	case ast.BadExpr:
 		return errorType()
 	default:
