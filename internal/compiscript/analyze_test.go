@@ -63,6 +63,22 @@ func TestAnalyzePreservesFrontendDiagnostics(t *testing.T) {
 	}
 }
 
+func TestAnalyzeOrdersMixedDiagnostics(t *testing.T) {
+	report := Analyze([]byte("print(missing); let value: integer = ;"))
+	semanticIndex, syntaxIndex := -1, -1
+	for i, diagnostic := range report.Diagnostics {
+		if diagnostic.Code == "SEM_UNRESOLVED" {
+			semanticIndex = i
+		}
+		if diagnostic.Phase == model.PhaseSyntax {
+			syntaxIndex = i
+		}
+	}
+	if semanticIndex < 0 || syntaxIndex < 0 || semanticIndex >= syntaxIndex {
+		t.Fatalf("diagnostics are not in global source order: %+v", report.Diagnostics)
+	}
+}
+
 func TestAnalyzeVisualASTAllStatements(t *testing.T) {
 	source := []byte(`const fixed: integer = 1; let values: integer[] = [1]; fixed = 2; while (true) { break; } do { continue; } while (false); for (let i: integer = 0; true; i = i + 1) { print(i); } foreach (item in [1]) { print(item); } try { print(1); } catch (err) { print(err); } switch (1) { case 1: print(1); default: print(0); } class Box: Parent { let field: integer = 1; }`)
 	report := Analyze(source)

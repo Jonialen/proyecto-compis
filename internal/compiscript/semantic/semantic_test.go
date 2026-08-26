@@ -69,6 +69,8 @@ func TestTypesOperatorsAssignmentsAndErrorSuppression(t *testing.T) {
 		{"valid operators", `let s: string = "a" + "b"; let b: boolean = 1 < 2.0 && true;`, nil},
 		{"invalid operators and assignments", `let i: integer = 1.5; let b: boolean = 1 && true; let s: string = "a" - "b";`, []string{"SEM_TYPE", "SEM_OPERATOR", "SEM_OPERATOR"}},
 		{"function operand", `function f(): integer { return 1; } let x: integer = f + 1;`, []string{"SEM_OPERATOR"}},
+		{"function equality", `function f(): integer { return 1; } let x: boolean = f == f;`, []string{"SEM_OPERATOR"}},
+		{"function null equality", `function f(): integer { return 1; } let x: boolean = f == null;`, []string{"SEM_OPERATOR"}},
 		{"error suppression", `let x: integer = absent + "x";`, []string{"SEM_UNRESOLVED"}},
 	}
 	for _, tt := range tests {

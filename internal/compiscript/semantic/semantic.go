@@ -290,7 +290,7 @@ func (a *analyzer) binary(s *scope, n ast.BinaryExpr) model.Type {
 			return primitive(model.TypeBoolean)
 		}
 	case "==", "!=":
-		if compatible(left, right) || compatible(right, left) {
+		if left.Kind != model.TypeFunction && right.Kind != model.TypeFunction && (compatible(left, right) || compatible(right, left)) {
 			return primitive(model.TypeBoolean)
 		}
 	}
@@ -357,5 +357,5 @@ func compatible(target, value model.Type) bool {
 	if target.Kind == model.TypeFloat && value.Kind == model.TypeInteger {
 		return true
 	}
-	return value.Kind == model.TypeNull && (target.Kind == model.TypeString || target.Kind == model.TypeList || target.Kind == model.TypeClass || target.Kind == model.TypeFunction)
+	return value.Kind == model.TypeNull && (target.Kind == model.TypeString || target.Kind == model.TypeList || target.Kind == model.TypeClass)
 }
