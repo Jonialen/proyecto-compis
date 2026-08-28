@@ -16,7 +16,11 @@ type scope struct {
 	symbols    model.Symbols
 	outer      *scope
 	function   *scope
+	shapes     map[string]*collectionShape
+	constants  map[string]int
 }
+
+type collectionShape struct{ elements []*collectionShape }
 
 type analyzer struct {
 	scopes                                []*scope
@@ -51,7 +55,7 @@ func Analyze(program ast.Program) (model.ScopeSnapshots, model.Diagnostics) {
 }
 
 func (a *analyzer) newScope(outer *scope, kind model.ScopeKind, span ast.Span) *scope {
-	s := &scope{id: len(a.scopes) + 1, kind: kind, span: span, symbols: model.Symbols{}, outer: outer}
+	s := &scope{id: len(a.scopes) + 1, kind: kind, span: span, symbols: model.Symbols{}, shapes: map[string]*collectionShape{}, constants: map[string]int{}, outer: outer}
 	if outer != nil {
 		s.parent = outer.id
 		s.function = outer.function
@@ -82,16 +86,23 @@ func (a *analyzer) statements(s *scope, statements ast.Statements) {
 func (a *analyzer) statement(s *scope, statement ast.Statement) {
 	switch n := statement.(type) {
 	case ast.VarDeclStmt:
-		inferred := a.expression(s, n.Initializer)
+		expected := declaredType(n.Type, errorType())
+		inferred := a.expressionExpected(s, n.Initializer, typePointer(n.Type, expected))
 		typeOf := declaredType(n.Type, inferred)
 		a.declare(s, model.Symbol{Name: n.Name, Kind: model.SymbolVariable, Type: typeOf, Mutable: true, Span: n.Span})
+		s.shapes[n.Name] = a.staticShape(s, n.Initializer)
 		if n.Type != nil && !compatible(typeOf, inferred) {
 			a.problem("SEM_TYPE", "initializer is not assignable to "+typeOf.Name, n.Span)
 		}
 	case ast.ConstDeclStmt:
-		value := a.expression(s, n.Value)
+		expected := declaredType(n.Type, errorType())
+		value := a.expressionExpected(s, n.Value, typePointer(n.Type, expected))
 		typeOf := declaredType(n.Type, value)
 		a.declare(s, model.Symbol{Name: n.Name, Kind: model.SymbolConstant, Type: typeOf, Span: n.Span})
+		s.shapes[n.Name] = a.staticShape(s, n.Value)
+		if constant, ok := a.constantIndex(s, n.Value); ok && typeOf.Kind == model.TypeInteger {
+			s.constants[n.Name] = constant
+		}
 		if n.Type != nil && !compatible(typeOf, value) {
 			a.problem("SEM_TYPE", "constant value is not assignable to "+typeOf.Name, n.Span)
 		}
@@ -122,7 +133,7 @@ func (a *analyzer) statement(s *scope, statement ast.Statement) {
 	case ast.ReturnStmt:
 		value := primitive(model.TypeNull)
 		if n.Value != nil {
-			value = a.expression(s, n.Value)
+			value = a.expressionExpected(s, n.Value, a.returnType)
 		}
 		if a.functionDepth == 0 {
 			a.problem("SEM_TRANSFER", "return outside function", n.Span)
@@ -334,29 +345,55 @@ func (a *analyzer) resolve(s *scope, name string) (*model.Symbol, bool) {
 }
 
 func (a *analyzer) assignment(s *scope, target, value ast.Expression, span ast.Span) model.Type {
-	right := a.expression(s, value)
-	identifier, ok := target.(ast.IdentifierExpr)
-	if !ok {
+	identifier, direct := target.(ast.IdentifierExpr)
+	root, found := rootIdentifier(target)
+	if !found {
 		a.expression(s, target)
+		a.expression(s, value)
 		return errorType()
 	}
-	symbol, found := a.resolve(s, identifier.Name)
+	symbol, found := a.resolve(s, root.Name)
 	if !found {
-		a.problem("SEM_UNRESOLVED", "unresolved name "+identifier.Name, identifier.Span)
+		a.problem("SEM_UNRESOLVED", "unresolved name "+root.Name, root.Span)
+		a.expression(s, value)
 		return errorType()
 	}
 	if !symbol.Mutable {
-		a.problem("SEM_CONSTANT_ASSIGNMENT", "cannot assign to constant "+identifier.Name, span)
+		a.problem("SEM_CONSTANT_ASSIGNMENT", "cannot assign to constant "+root.Name, span)
+		a.expression(s, value)
 		return errorType()
 	}
-	if !compatible(symbol.Type, right) {
-		a.problem("SEM_TYPE", "value is not assignable to "+symbol.Type.Name, span)
+	targetType := symbol.Type
+	if !direct {
+		targetType = a.expression(s, target)
+	}
+	right := a.expressionExpected(s, value, &targetType)
+	if targetType.Kind == model.TypeError {
 		return errorType()
 	}
-	return symbol.Type
+	if right.Kind == model.TypeError {
+		return errorType()
+	}
+	if !compatible(targetType, right) {
+		a.problem("SEM_TYPE", "value is not assignable to "+targetType.Name, span)
+		return errorType()
+	}
+	owner := a.scopeContaining(s, root.Name)
+	if direct {
+		owner.shapes[identifier.Name] = a.staticShape(s, value)
+	} else {
+		for _, current := range a.scopes {
+			current.shapes = map[string]*collectionShape{}
+		}
+	}
+	return targetType
 }
 
 func (a *analyzer) expression(s *scope, expression ast.Expression) model.Type {
+	return a.expressionExpected(s, expression, nil)
+}
+
+func (a *analyzer) expressionExpected(s *scope, expression ast.Expression, expected *model.Type) model.Type {
 	if expression == nil {
 		return errorType()
 	}
@@ -370,7 +407,7 @@ func (a *analyzer) expression(s *scope, expression ast.Expression) model.Type {
 		a.problem("SEM_UNRESOLVED", "unresolved name "+n.Name, n.Span)
 		return errorType()
 	case ast.GroupExpr:
-		return a.expression(s, n.Expression)
+		return a.expressionExpected(s, n.Expression, expected)
 	case ast.UnaryExpr:
 		operand := a.expression(s, n.Operand)
 		if operand.Kind == model.TypeError {
@@ -386,10 +423,7 @@ func (a *analyzer) expression(s *scope, expression ast.Expression) model.Type {
 	case ast.AssignExpr:
 		return a.assignment(s, n.Target, n.Value, n.Span)
 	case ast.ArrayExpr:
-		for _, element := range n.Elements {
-			a.expression(s, element)
-		}
-		return errorType()
+		return a.collection(s, n, expected)
 	case ast.NewExpr:
 		for _, argument := range n.Arguments {
 			a.expression(s, argument)
@@ -397,7 +431,7 @@ func (a *analyzer) expression(s *scope, expression ast.Expression) model.Type {
 		return model.Type{Kind: model.TypeClass, Name: n.ClassName, Params: model.Types{}}
 	case ast.TernaryExpr:
 		a.expression(s, n.Condition)
-		left, right := a.expression(s, n.Then), a.expression(s, n.Else)
+		left, right := a.expressionExpected(s, n.Then, expected), a.expressionExpected(s, n.Else, expected)
 		if compatible(left, right) {
 			return left
 		}
@@ -413,7 +447,11 @@ func (a *analyzer) expression(s *scope, expression ast.Expression) model.Type {
 		callee := a.expression(s, n.Callee)
 		arguments := make(model.Types, len(n.Arguments))
 		for i, argument := range n.Arguments {
-			arguments[i] = a.expression(s, argument)
+			var parameter *model.Type
+			if callee.Kind == model.TypeFunction && i < len(callee.Params) {
+				parameter = &callee.Params[i]
+			}
+			arguments[i] = a.expressionExpected(s, argument, parameter)
 		}
 		if callee.Kind == model.TypeFunction && callee.Result != nil {
 			if len(arguments) != len(callee.Params) {
@@ -428,9 +466,25 @@ func (a *analyzer) expression(s *scope, expression ast.Expression) model.Type {
 		}
 		return errorType()
 	case ast.IndexExpr:
-		a.expression(s, n.Collection)
-		a.expression(s, n.Index)
-		return errorType()
+		collection, index := a.expression(s, n.Collection), a.expression(s, n.Index)
+		if collection.Kind == model.TypeError || index.Kind == model.TypeError {
+			return errorType()
+		}
+		if index.Kind != model.TypeInteger {
+			a.problem("SEM_INDEX", "collection index must be integer", n.Index.SourceSpan())
+			return errorType()
+		}
+		if collection.Kind != model.TypeList || collection.Element == nil {
+			a.problem("SEM_INDEX", "cannot index non-list value", n.Collection.SourceSpan())
+			return errorType()
+		}
+		shape := a.staticShape(s, n.Collection)
+		value, constant := a.constantIndex(s, n.Index)
+		if shape != nil && constant && (value < 0 || value >= len(shape.elements)) {
+			a.problem("SEM_BOUNDS", "collection index is provably out of bounds", n.Index.SourceSpan())
+			return errorType()
+		}
+		return *collection.Element
 	case ast.PropertyAccessExpr:
 		a.expression(s, n.Receiver)
 		return errorType()
@@ -441,6 +495,165 @@ func (a *analyzer) expression(s *scope, expression ast.Expression) model.Type {
 	default:
 		return errorType()
 	}
+}
+
+func (a *analyzer) collection(s *scope, array ast.ArrayExpr, expected *model.Type) model.Type {
+	var context, element *model.Type
+	if expected != nil && expected.Kind == model.TypeList {
+		context = expected.Element
+	}
+	if len(array.Elements) == 0 {
+		if expected != nil && expected.Kind == model.TypeError {
+			return errorType()
+		}
+		if context == nil {
+			a.problem("SEM_EMPTY_COLLECTION", "empty collection requires an element type", array.Span)
+			return errorType()
+		}
+		return model.Type{Kind: model.TypeList, Name: "list", Element: context, Params: model.Types{}}
+	}
+	pending := ast.Expressions{}
+	childError, mismatch := false, false
+	for _, expression := range array.Elements {
+		if nested, ok := expression.(ast.ArrayExpr); ok && len(nested.Elements) == 0 {
+			pending = append(pending, expression)
+			continue
+		}
+		value := a.expressionExpected(s, expression, context)
+		if value.Kind == model.TypeError {
+			childError = true
+			continue
+		}
+		if element == nil {
+			element = &value
+		} else if unified, ok := unifiedType(*element, value); ok {
+			element = &unified
+		} else {
+			mismatch = true
+		}
+	}
+	if element == nil {
+		if context == nil {
+			a.problem("SEM_EMPTY_COLLECTION", "empty collection requires an element type", array.Span)
+			return errorType()
+		}
+		element = context
+	}
+	for _, expression := range pending {
+		if element.Kind != model.TypeList {
+			mismatch = true
+			continue
+		}
+		if a.expressionExpected(s, expression, element).Kind == model.TypeError {
+			childError = true
+		}
+	}
+	if mismatch {
+		a.problem("SEM_COLLECTION", "collection elements must have one homogeneous type", array.Span)
+		return errorType()
+	}
+	if childError {
+		return errorType()
+	}
+	return model.Type{Kind: model.TypeList, Name: "list", Element: element, Params: model.Types{}}
+}
+
+func unifiedType(left, right model.Type) (model.Type, bool) {
+	if compatible(left, right) {
+		return left, true
+	}
+	if compatible(right, left) {
+		return right, true
+	}
+	return model.Type{}, false
+}
+
+func (a *analyzer) staticShape(s *scope, expression ast.Expression) *collectionShape {
+	switch n := expression.(type) {
+	case ast.ArrayExpr:
+		shape := &collectionShape{elements: make([]*collectionShape, len(n.Elements))}
+		for i, element := range n.Elements {
+			shape.elements[i] = a.staticShape(s, element)
+		}
+		return shape
+	case ast.IdentifierExpr:
+		if owner := a.scopeContaining(s, n.Name); owner != nil {
+			return owner.shapes[n.Name]
+		}
+	case ast.IndexExpr:
+		shape := a.staticShape(s, n.Collection)
+		index, ok := a.constantIndex(s, n.Index)
+		if shape != nil && ok && index >= 0 && index < len(shape.elements) {
+			return shape.elements[index]
+		}
+	}
+	return nil
+}
+
+func (a *analyzer) constantIndex(s *scope, expression ast.Expression) (int, bool) {
+	switch n := expression.(type) {
+	case ast.LiteralExpr:
+		value, err := strconv.Atoi(n.Lexeme)
+		return value, err == nil
+	case ast.IdentifierExpr:
+		if owner := a.scopeContaining(s, n.Name); owner != nil {
+			value, ok := owner.constants[n.Name]
+			return value, ok
+		}
+	case ast.GroupExpr:
+		return a.constantIndex(s, n.Expression)
+	case ast.UnaryExpr:
+		value, ok := a.constantIndex(s, n.Operand)
+		return -value, ok && n.Operator == "-"
+	case ast.BinaryExpr:
+		left, leftOK := a.constantIndex(s, n.Left)
+		right, rightOK := a.constantIndex(s, n.Right)
+		if !leftOK || !rightOK {
+			return 0, false
+		}
+		switch n.Operator {
+		case "+":
+			return left + right, true
+		case "-":
+			return left - right, true
+		case "*":
+			return left * right, true
+		case "%":
+			if right != 0 {
+				return left % right, true
+			}
+		}
+	}
+	return 0, false
+}
+
+func rootIdentifier(expression ast.Expression) (ast.IdentifierExpr, bool) {
+	switch n := expression.(type) {
+	case ast.IdentifierExpr:
+		return n, true
+	case ast.IndexExpr:
+		return rootIdentifier(n.Collection)
+	default:
+		return ast.IdentifierExpr{}, false
+	}
+}
+
+func (a *analyzer) scopeContaining(s *scope, name string) *scope {
+	for current := s; current != nil; current = current.outer {
+		for i := range current.symbols {
+			if current.symbols[i].Name == name {
+				return current
+			}
+		}
+	}
+	return nil
+}
+
+func typePointer(ref *ast.TypeRef, value model.Type) *model.Type {
+	if ref == nil {
+		return nil
+	}
+	return &value
 }
 
 func (a *analyzer) binary(s *scope, n ast.BinaryExpr) model.Type {
@@ -531,7 +744,13 @@ func functionType(function ast.FunctionDeclStmt) model.Type {
 }
 
 func compatible(target, value model.Type) bool {
-	if target.Kind == model.TypeError || value.Kind == model.TypeError || target.Kind == value.Kind {
+	if target.Kind == model.TypeError || value.Kind == model.TypeError {
+		return true
+	}
+	if target.Kind == model.TypeList && value.Kind == model.TypeList {
+		return target.Element != nil && value.Element != nil && compatible(*target.Element, *value.Element)
+	}
+	if target.Kind == value.Kind {
 		return true
 	}
 	if target.Kind == model.TypeFloat && value.Kind == model.TypeInteger {
