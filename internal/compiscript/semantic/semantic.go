@@ -22,17 +22,25 @@ type scope struct {
 
 type collectionShape struct{ elements []*collectionShape }
 
+type classInfo struct {
+	declaration ast.ClassDeclStmt
+	members     map[string]model.Symbol
+}
+
 type analyzer struct {
 	scopes                                []*scope
 	diagnostics                           model.Diagnostics
 	functionDepth, loopDepth, switchDepth int
 	returnType                            *model.Type
+	classes                               map[string]*classInfo
+	className                             string
 }
 
 // Analyze resolves lexical names and checks expression and assignment types.
 func Analyze(program ast.Program) (model.ScopeSnapshots, model.Diagnostics) {
-	a := &analyzer{diagnostics: model.Diagnostics{}}
+	a := &analyzer{diagnostics: model.Diagnostics{}, classes: map[string]*classInfo{}}
 	global := a.newScope(nil, model.ScopeGlobal, program.Span)
+	a.registerClasses(global, program.Statements)
 	a.statements(global, program.Statements)
 	snapshots := make(model.ScopeSnapshots, len(a.scopes))
 	for i, current := range a.scopes {
@@ -91,7 +99,7 @@ func (a *analyzer) statement(s *scope, statement ast.Statement) {
 		typeOf := declaredType(n.Type, inferred)
 		a.declare(s, model.Symbol{Name: n.Name, Kind: model.SymbolVariable, Type: typeOf, Mutable: true, Span: n.Span})
 		s.shapes[n.Name] = a.staticShape(s, n.Initializer)
-		if n.Type != nil && !compatible(typeOf, inferred) {
+		if n.Type != nil && !a.compatible(typeOf, inferred) {
 			a.problem("SEM_TYPE", "initializer is not assignable to "+typeOf.Name, n.Span)
 		}
 	case ast.ConstDeclStmt:
@@ -103,27 +111,13 @@ func (a *analyzer) statement(s *scope, statement ast.Statement) {
 		if constant, ok := a.constantIndex(s, n.Value); ok && typeOf.Kind == model.TypeInteger {
 			s.constants[n.Name] = constant
 		}
-		if n.Type != nil && !compatible(typeOf, value) {
+		if n.Type != nil && !a.compatible(typeOf, value) {
 			a.problem("SEM_TYPE", "constant value is not assignable to "+typeOf.Name, n.Span)
 		}
 	case ast.AssignStmt:
 		a.assignment(s, n.Target, n.Value, n.Span)
 	case ast.FunctionDeclStmt:
-		fn := a.newScope(s, model.ScopeFunction, n.Span)
-		for _, parameter := range n.Parameters {
-			a.declare(fn, model.Symbol{Name: parameter.Name, Kind: model.SymbolParameter, Type: declaredType(parameter.Type, errorType()), Mutable: true, Span: parameter.Span})
-		}
-		if n.Body == nil {
-			break
-		}
-		depth, loops, switches, result := a.functionDepth, a.loopDepth, a.switchDepth, a.returnType
-		functionResult := declaredType(n.Result, primitive(model.TypeNull))
-		a.functionDepth, a.loopDepth, a.switchDepth, a.returnType = depth+1, 0, 0, &functionResult
-		a.statements(fn, n.Body.Statements)
-		if functionResult.Kind != model.TypeNull && !allReturns(n.Body.Statements) {
-			a.problem("SEM_MISSING_RETURN", "function "+n.Name+" does not return on every path", n.Span)
-		}
-		a.functionDepth, a.loopDepth, a.switchDepth, a.returnType = depth, loops, switches, result
+		a.function(s, n)
 	case ast.BlockStmt:
 		a.statements(a.newScope(s, model.ScopeBlock, n.Span), n.Statements)
 	case ast.ExprStmt:
@@ -137,7 +131,7 @@ func (a *analyzer) statement(s *scope, statement ast.Statement) {
 		}
 		if a.functionDepth == 0 {
 			a.problem("SEM_TRANSFER", "return outside function", n.Span)
-		} else if !compatible(*a.returnType, value) {
+		} else if !a.compatible(*a.returnType, value) {
 			a.problem("SEM_RETURN", "return value is not assignable to "+a.returnType.Name, n.Span)
 		}
 	case ast.IfStmt:
@@ -171,14 +165,18 @@ func (a *analyzer) statement(s *scope, statement ast.Statement) {
 		a.block(s, n.Body)
 	case ast.TryCatchStmt:
 		a.block(s, n.Try)
-		a.block(s, n.Catch)
+		if n.Catch != nil {
+			caught := a.newScope(s, model.ScopeCatch, n.Catch.Span)
+			a.declare(caught, model.Symbol{Name: n.Name, Kind: model.SymbolCatch, Type: primitive(model.TypeException), Span: n.Catch.Span})
+			a.statements(caught, n.Catch.Statements)
+		}
 	case ast.SwitchStmt:
 		value := a.expression(s, n.Value)
 		seen := map[string]bool{}
 		a.switchDepth++
 		for _, switchCase := range n.Cases {
 			caseType := a.expression(s, switchCase.Value)
-			if !switchCase.Default && !compatible(value, caseType) && !compatible(caseType, value) {
+			if !switchCase.Default && !a.compatible(value, caseType) && !a.compatible(caseType, value) {
 				a.problem("SEM_CASE_TYPE", "case is incompatible with switch expression", switchCase.Span)
 			}
 			if key, ok := caseKey(switchCase.Value); ok {
@@ -199,8 +197,138 @@ func (a *analyzer) statement(s *scope, statement ast.Statement) {
 			a.problem("SEM_TRANSFER", "continue outside loop", n.Span)
 		}
 	case ast.ClassDeclStmt:
-		a.statements(a.newScope(s, model.ScopeBlock, n.Span), n.Members)
+		a.class(s, n)
 	}
+}
+
+func (a *analyzer) function(s *scope, n ast.FunctionDeclStmt) {
+	fn := a.newScope(s, model.ScopeFunction, n.Span)
+	for _, parameter := range n.Parameters {
+		a.declare(fn, model.Symbol{Name: parameter.Name, Kind: model.SymbolParameter, Type: declaredType(parameter.Type, errorType()), Mutable: true, Span: parameter.Span})
+	}
+	if n.Body == nil {
+		return
+	}
+	depth, loops, switches, result := a.functionDepth, a.loopDepth, a.switchDepth, a.returnType
+	functionResult := declaredType(n.Result, primitive(model.TypeNull))
+	a.functionDepth, a.loopDepth, a.switchDepth, a.returnType = depth+1, 0, 0, &functionResult
+	a.statements(fn, n.Body.Statements)
+	if functionResult.Kind != model.TypeNull && !allReturns(n.Body.Statements) {
+		a.problem("SEM_MISSING_RETURN", "function "+n.Name+" does not return on every path", n.Span)
+	}
+	a.functionDepth, a.loopDepth, a.switchDepth, a.returnType = depth, loops, switches, result
+}
+
+func (a *analyzer) registerClasses(global *scope, statements ast.Statements) {
+	for _, statement := range statements {
+		if declaration, ok := statement.(ast.ClassDeclStmt); ok {
+			a.declare(global, model.Symbol{Name: declaration.Name, Kind: model.SymbolClass, Type: model.Type{Kind: model.TypeClass, Name: declaration.Name, Params: model.Types{}}, Span: declaration.Span})
+			if _, exists := a.classes[declaration.Name]; !exists {
+				a.classes[declaration.Name] = &classInfo{declaration: declaration, members: map[string]model.Symbol{}}
+			}
+		}
+	}
+	cycles := map[string]bool{}
+	for _, statement := range statements {
+		declaration, ok := statement.(ast.ClassDeclStmt)
+		if !ok || a.classes[declaration.Name].declaration.Span != declaration.Span {
+			continue
+		}
+		info := a.classes[declaration.Name]
+		if declaration.Parent != "" {
+			if _, exists := a.classes[declaration.Parent]; !exists {
+				a.problem("SEM_UNKNOWN_BASE", "unknown base class "+declaration.Parent, declaration.Span)
+			}
+		}
+		for _, member := range declaration.Members {
+			var symbol model.Symbol
+			switch n := member.(type) {
+			case ast.VarDeclStmt:
+				symbol = model.Symbol{Name: n.Name, Kind: model.SymbolField, Type: declaredType(n.Type, errorType()), Mutable: true, Span: n.Span}
+			case ast.ConstDeclStmt:
+				symbol = model.Symbol{Name: n.Name, Kind: model.SymbolField, Type: declaredType(n.Type, errorType()), Span: n.Span}
+			case ast.FunctionDeclStmt:
+				symbol = model.Symbol{Name: n.Name, Kind: model.SymbolMethod, Type: functionType(n), Span: n.Span}
+			}
+			if _, duplicate := info.members[symbol.Name]; duplicate {
+				a.problem("SEM_DUPLICATE", "duplicate declaration of "+symbol.Name, symbol.Span)
+			} else {
+				info.members[symbol.Name] = symbol
+			}
+		}
+		path, positions := []string{}, map[string]int{}
+		for name := declaration.Name; name != "" && a.classes[name] != nil; name = a.classes[name].declaration.Parent {
+			if at, seen := positions[name]; seen {
+				for _, cyclic := range path[at:] {
+					cycles[cyclic] = true
+				}
+				break
+			}
+			positions[name], path = len(path), append(path, name)
+		}
+	}
+	for _, statement := range statements {
+		declaration, ok := statement.(ast.ClassDeclStmt)
+		if !ok {
+			continue
+		}
+		if cycles[declaration.Name] {
+			a.problem("SEM_INHERITANCE_CYCLE", "inheritance cycle involving "+declaration.Name, declaration.Span)
+			continue
+		}
+		for _, member := range declaration.Members {
+			name := memberName(member)
+			if inherited, _ := a.lookupMember(declaration.Parent, name); name != "constructor" && inherited != nil {
+				a.problem("SEM_INHERITED_MEMBER", "member "+name+" redeclares an inherited name", member.SourceSpan())
+			}
+		}
+	}
+}
+
+func memberName(statement ast.Statement) string {
+	switch n := statement.(type) {
+	case ast.VarDeclStmt:
+		return n.Name
+	case ast.ConstDeclStmt:
+		return n.Name
+	case ast.FunctionDeclStmt:
+		return n.Name
+	}
+	return ""
+}
+
+func (a *analyzer) class(s *scope, declaration ast.ClassDeclStmt) {
+	info := a.classes[declaration.Name]
+	if info == nil || info.declaration.Span != declaration.Span {
+		return
+	}
+	classScope := a.newScope(s, model.ScopeClass, declaration.Span)
+	for _, member := range declaration.Members {
+		if symbol, ok := info.members[memberName(member)]; ok && symbol.Span == member.SourceSpan() {
+			classScope.symbols = append(classScope.symbols, symbol)
+		}
+	}
+	previous := a.className
+	a.className = declaration.Name
+	for _, member := range declaration.Members {
+		switch n := member.(type) {
+		case ast.VarDeclStmt:
+			if n.Initializer != nil {
+				value := a.expressionExpected(classScope, n.Initializer, typePointer(n.Type, declaredType(n.Type, errorType())))
+				if n.Type != nil && !a.compatible(declaredType(n.Type, errorType()), value) {
+					a.problem("SEM_TYPE", "initializer is not assignable to "+n.Type.Name, n.Span)
+				}
+			}
+		case ast.ConstDeclStmt:
+			value := a.expressionExpected(classScope, n.Value, typePointer(n.Type, declaredType(n.Type, errorType())))
+			if n.Type != nil && !a.compatible(declaredType(n.Type, errorType()), value) {
+				a.problem("SEM_TYPE", "constant value is not assignable to "+n.Type.Name, n.Span)
+			}
+		case ast.FunctionDeclStmt:
+			a.function(classScope, n)
+		}
+	}
+	a.className = previous
 }
 
 func (a *analyzer) block(s *scope, block *ast.BlockStmt) {
@@ -345,6 +473,9 @@ func (a *analyzer) resolve(s *scope, name string) (*model.Symbol, bool) {
 }
 
 func (a *analyzer) assignment(s *scope, target, value ast.Expression, span ast.Span) model.Type {
+	if property, ok := target.(ast.PropertyAccessExpr); ok {
+		return a.assignMember(s, property.Receiver, property.Name, value, span)
+	}
 	identifier, direct := target.(ast.IdentifierExpr)
 	root, found := rootIdentifier(target)
 	if !found {
@@ -374,7 +505,7 @@ func (a *analyzer) assignment(s *scope, target, value ast.Expression, span ast.S
 	if right.Kind == model.TypeError {
 		return errorType()
 	}
-	if !compatible(targetType, right) {
+	if !a.compatible(targetType, right) {
 		a.problem("SEM_TYPE", "value is not assignable to "+targetType.Name, span)
 		return errorType()
 	}
@@ -425,24 +556,33 @@ func (a *analyzer) expressionExpected(s *scope, expression ast.Expression, expec
 	case ast.ArrayExpr:
 		return a.collection(s, n, expected)
 	case ast.NewExpr:
-		for _, argument := range n.Arguments {
-			a.expression(s, argument)
+		info := a.classes[n.ClassName]
+		if info == nil {
+			for _, argument := range n.Arguments {
+				a.expression(s, argument)
+			}
+			a.problem("SEM_UNKNOWN_CLASS", "unknown class "+n.ClassName, n.Span)
+			return errorType()
 		}
+		constructor, hasConstructor := info.members["constructor"]
+		parameters := model.Types{}
+		if hasConstructor && constructor.Kind == model.SymbolMethod {
+			parameters = constructor.Type.Params
+		}
+		a.arguments(s, n.Arguments, parameters, n.Span)
 		return model.Type{Kind: model.TypeClass, Name: n.ClassName, Params: model.Types{}}
 	case ast.TernaryExpr:
 		a.expression(s, n.Condition)
 		left, right := a.expressionExpected(s, n.Then, expected), a.expressionExpected(s, n.Else, expected)
-		if compatible(left, right) {
+		if a.compatible(left, right) {
 			return left
 		}
-		if compatible(right, left) {
+		if a.compatible(right, left) {
 			return right
 		}
 		return errorType()
 	case ast.PropertyAssignExpr:
-		a.expression(s, n.Receiver)
-		a.expression(s, n.Value)
-		return errorType()
+		return a.assignMember(s, n.Receiver, n.Name, n.Value, n.Span)
 	case ast.CallExpr:
 		callee := a.expression(s, n.Callee)
 		arguments := make(model.Types, len(n.Arguments))
@@ -458,7 +598,7 @@ func (a *analyzer) expressionExpected(s *scope, expression ast.Expression, expec
 				a.problem("SEM_ARITY", "wrong number of arguments", n.Span)
 			}
 			for i := 0; i < len(arguments) && i < len(callee.Params); i++ {
-				if !compatible(callee.Params[i], arguments[i]) {
+				if !a.compatible(callee.Params[i], arguments[i]) {
 					a.problem("SEM_ARGUMENT", "argument is not assignable to "+callee.Params[i].Name, n.Arguments[i].SourceSpan())
 				}
 			}
@@ -486,15 +626,91 @@ func (a *analyzer) expressionExpected(s *scope, expression ast.Expression, expec
 		}
 		return *collection.Element
 	case ast.PropertyAccessExpr:
-		a.expression(s, n.Receiver)
+		if member := a.member(s, n.Receiver, n.Name, n.Span); member != nil {
+			return member.Type
+		}
 		return errorType()
 	case ast.ThisExpr:
-		return errorType()
+		if a.className == "" {
+			a.problem("SEM_THIS", "this is only valid in a class member body", n.Span)
+			return errorType()
+		}
+		return model.Type{Kind: model.TypeClass, Name: a.className, Params: model.Types{}}
 	case ast.BadExpr:
 		return errorType()
 	default:
 		return errorType()
 	}
+}
+
+func (a *analyzer) arguments(s *scope, expressions ast.Expressions, parameters model.Types, span ast.Span) {
+	if len(expressions) != len(parameters) {
+		a.problem("SEM_ARITY", "wrong number of arguments", span)
+	}
+	for i, expression := range expressions {
+		var expected *model.Type
+		if i < len(parameters) {
+			expected = &parameters[i]
+		}
+		value := a.expressionExpected(s, expression, expected)
+		if expected != nil && !a.compatible(*expected, value) {
+			a.problem("SEM_ARGUMENT", "argument is not assignable to "+expected.Name, expression.SourceSpan())
+		}
+	}
+}
+
+func (a *analyzer) member(s *scope, receiver ast.Expression, name string, span ast.Span) *model.Symbol {
+	typeOf := a.expression(s, receiver)
+	if typeOf.Kind == model.TypeError {
+		return nil
+	}
+	if typeOf.Kind != model.TypeClass {
+		a.problem("SEM_MEMBER", "member access requires a class value", span)
+		return nil
+	}
+	member, _ := a.lookupMember(typeOf.Name, name)
+	if member == nil {
+		a.problem("SEM_MEMBER", "unknown member "+name+" on "+typeOf.Name, span)
+	}
+	return member
+}
+
+func (a *analyzer) assignMember(s *scope, receiver ast.Expression, name string, value ast.Expression, span ast.Span) model.Type {
+	member := a.member(s, receiver, name, span)
+	if member == nil {
+		a.expression(s, value)
+		return errorType()
+	}
+	right := a.expressionExpected(s, value, &member.Type)
+	if !member.Mutable {
+		a.problem("SEM_CONSTANT_ASSIGNMENT", "cannot assign to member "+name, span)
+		return errorType()
+	}
+	if !a.compatible(member.Type, right) {
+		a.problem("SEM_TYPE", "value is not assignable to "+member.Type.Name, span)
+		return errorType()
+	}
+	return member.Type
+}
+
+func (a *analyzer) lookupMember(className, name string) (*model.Symbol, bool) {
+	seen := map[string]bool{}
+	for className != "" && !seen[className] {
+		seen[className] = true
+		info := a.classes[className]
+		if info == nil {
+			break
+		}
+		if member, ok := info.members[name]; ok {
+			copy := member
+			return &copy, className == info.declaration.Name
+		}
+		if name == "constructor" {
+			break
+		}
+		className = info.declaration.Parent
+	}
+	return nil, false
 }
 
 func (a *analyzer) collection(s *scope, array ast.ArrayExpr, expected *model.Type) model.Type {
@@ -526,7 +742,7 @@ func (a *analyzer) collection(s *scope, array ast.ArrayExpr, expected *model.Typ
 		}
 		if element == nil {
 			element = &value
-		} else if unified, ok := unifiedType(*element, value); ok {
+		} else if unified, ok := a.unifiedType(*element, value); ok {
 			element = &unified
 		} else {
 			mismatch = true
@@ -558,11 +774,11 @@ func (a *analyzer) collection(s *scope, array ast.ArrayExpr, expected *model.Typ
 	return model.Type{Kind: model.TypeList, Name: "list", Element: element, Params: model.Types{}}
 }
 
-func unifiedType(left, right model.Type) (model.Type, bool) {
-	if compatible(left, right) {
+func (a *analyzer) unifiedType(left, right model.Type) (model.Type, bool) {
+	if a.compatible(left, right) {
 		return left, true
 	}
-	if compatible(right, left) {
+	if a.compatible(right, left) {
 		return right, true
 	}
 	return model.Type{}, false
@@ -683,7 +899,7 @@ func (a *analyzer) binary(s *scope, n ast.BinaryExpr) model.Type {
 			return primitive(model.TypeBoolean)
 		}
 	case "==", "!=":
-		if left.Kind != model.TypeFunction && right.Kind != model.TypeFunction && (compatible(left, right) || compatible(right, left)) {
+		if left.Kind != model.TypeFunction && right.Kind != model.TypeFunction && (a.compatible(left, right) || a.compatible(right, left)) {
 			return primitive(model.TypeBoolean)
 		}
 	}
@@ -743,12 +959,27 @@ func functionType(function ast.FunctionDeclStmt) model.Type {
 	return model.Type{Kind: model.TypeFunction, Name: function.Name, Params: params, Result: &result}
 }
 
-func compatible(target, value model.Type) bool {
+func (a *analyzer) compatible(target, value model.Type) bool {
 	if target.Kind == model.TypeError || value.Kind == model.TypeError {
 		return true
 	}
 	if target.Kind == model.TypeList && value.Kind == model.TypeList {
-		return target.Element != nil && value.Element != nil && compatible(*target.Element, *value.Element)
+		return target.Element != nil && value.Element != nil && a.compatible(*target.Element, *value.Element)
+	}
+	if target.Kind == model.TypeClass && value.Kind == model.TypeClass {
+		seen := map[string]bool{}
+		for name := value.Name; name != "" && !seen[name]; {
+			seen[name] = true
+			if name == target.Name {
+				return true
+			}
+			info := a.classes[name]
+			if info == nil {
+				break
+			}
+			name = info.declaration.Parent
+		}
+		return false
 	}
 	if target.Kind == value.Kind {
 		return true
