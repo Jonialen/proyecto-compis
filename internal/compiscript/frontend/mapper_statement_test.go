@@ -75,6 +75,17 @@ func TestMapStatementAlternatives(t *testing.T) {
 			t.Fatalf("outer=%#v inner=%#v diagnostics=%#v", outer.Parameters, inner.Parameters, diagnostics)
 		}
 	})
+
+	t.Run("property assignment keeps member target", func(t *testing.T) {
+		program, diagnostics := Parse([]byte(`value.field = "wrong";`))
+		assignment := program.Statements[0].(ast.AssignStmt)
+		property, ok := assignment.Target.(ast.PropertyAccessExpr)
+		if len(diagnostics) != 0 || !ok || property.Name != "field" {
+			t.Fatalf("assignment=%#v diagnostics=%#v", assignment, diagnostics)
+		}
+		assertIdentifier(t, property.Receiver, "value")
+		assertLiteral(t, assignment.Value, `"wrong"`)
+	})
 }
 
 func assertStatementContract(t *testing.T, source string, statement ast.Statement) {
@@ -128,7 +139,7 @@ func assertStatementContract(t *testing.T, source string, statement ast.Statemen
 			t.Fatalf("foreach = %#v", got)
 		}
 	case ast.TryCatchStmt:
-		if got.Name != "err" || got.Try == nil || got.Catch == nil {
+		if got.Name != "err" || got.NameSpan != testSpan(source, 14, 17) || got.Try == nil || got.Catch == nil {
 			t.Fatalf("try catch = %#v", got)
 		}
 	case ast.SwitchStmt:

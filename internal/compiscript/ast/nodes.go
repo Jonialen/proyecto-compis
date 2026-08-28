@@ -130,10 +130,11 @@ type ForeachStmt struct {
 	Body     *BlockStmt `json:"body"`
 }
 type TryCatchStmt struct {
-	Span  Span       `json:"span"`
-	Try   *BlockStmt `json:"try"`
-	Name  string     `json:"name"`
-	Catch *BlockStmt `json:"catch"`
+	Span     Span       `json:"span"`
+	Try      *BlockStmt `json:"try"`
+	Name     string     `json:"name"`
+	NameSpan Span       `json:"nameSpan"`
+	Catch    *BlockStmt `json:"catch"`
 }
 type SwitchStmt struct {
 	Span  Span        `json:"span"`

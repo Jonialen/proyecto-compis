@@ -42,7 +42,10 @@ func (m statementMapper) mapStatementTree(tree antlr.Tree) ast.Statement {
 		if len(expressions) == 1 {
 			return ast.AssignStmt{Span: m.span(ctx), Target: ast.IdentifierExpr{Span: m.span(ctx), Name: m.identifiers(ctx)[0]}, Value: expressions[0]}
 		}
-		return ast.AssignStmt{Span: m.span(ctx), Target: expressions[0], Value: expressions[1]}
+		name := ctx.Identifier()
+		targetSpan := expressions[0].SourceSpan()
+		targetSpan.End = m.terminalSpan(name).End
+		return ast.AssignStmt{Span: m.span(ctx), Target: ast.PropertyAccessExpr{Span: targetSpan, Receiver: expressions[0], Name: name.GetText()}, Value: expressions[1]}
 	case *generated.FunctionDeclarationContext:
 		return ast.FunctionDeclStmt{Span: m.span(ctx), Name: m.identifiers(ctx)[0], Parameters: m.parameters(ctx.Parameters()), Result: m.directType(ctx), Body: m.firstBlock(ctx)}
 	case *generated.ClassDeclarationContext:
@@ -96,7 +99,8 @@ func (m statementMapper) mapStatementTree(tree antlr.Tree) ast.Statement {
 		return ast.ForeachStmt{Span: m.span(ctx), Name: m.identifiers(ctx)[0], Iterable: m.firstExpression(ctx), Body: m.firstBlock(ctx)}
 	case *generated.TryCatchStatementContext:
 		blocks := m.blocks(ctx)
-		return ast.TryCatchStmt{Span: m.span(ctx), Try: blocks[0], Name: m.identifiers(ctx)[0], Catch: blocks[1]}
+		name := ctx.Identifier()
+		return ast.TryCatchStmt{Span: m.span(ctx), Try: blocks[0], Name: name.GetText(), NameSpan: m.terminalSpan(name), Catch: blocks[1]}
 	case *generated.SwitchStatementContext:
 		return ast.SwitchStmt{Span: m.span(ctx), Value: m.firstExpression(ctx), Cases: m.cases(ctx)}
 	case *generated.BreakStatementContext:
@@ -192,6 +196,11 @@ func (m statementMapper) identifiers(tree antlr.Tree) (identifiers []string) {
 		}
 	}
 	return identifiers
+}
+
+func (m statementMapper) terminalSpan(node antlr.TerminalNode) ast.Span {
+	token := node.GetSymbol()
+	return m.index.spanFromScalars(token.GetStart(), token.GetStop())
 }
 
 func (m statementMapper) parameters(tree antlr.Tree) (parameters ast.Parameters) {

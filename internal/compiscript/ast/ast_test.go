@@ -52,4 +52,7 @@ func TestTypedChildrenUseCategories(t *testing.T) {
 	if function.Body.Statements[0].SourceSpan() != span || call.Arguments[0].SourceSpan() != span {
 		t.Fatal("typed children did not retain category values")
 	}
+	if got := (TryCatchStmt{Name: "problem", NameSpan: span}).NameSpan; got != span {
+		t.Fatalf("catch identifier span = %#v, want %#v", got, span)
+	}
 }

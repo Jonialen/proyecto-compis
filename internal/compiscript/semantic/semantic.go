@@ -18,6 +18,7 @@ type scope struct {
 	function   *scope
 	shapes     map[string]*collectionShape
 	constants  map[string]int
+	classes    map[string]*classInfo
 }
 
 type collectionShape struct{ elements []*collectionShape }
@@ -25,6 +26,7 @@ type collectionShape struct{ elements []*collectionShape }
 type classInfo struct {
 	declaration ast.ClassDeclStmt
 	members     map[string]model.Symbol
+	owner       *scope
 }
 
 type analyzer struct {
@@ -34,13 +36,14 @@ type analyzer struct {
 	returnType                            *model.Type
 	classes                               map[string]*classInfo
 	className                             string
+	typeScope                             *scope
 }
 
 // Analyze resolves lexical names and checks expression and assignment types.
 func Analyze(program ast.Program) (model.ScopeSnapshots, model.Diagnostics) {
-	a := &analyzer{diagnostics: model.Diagnostics{}, classes: map[string]*classInfo{}}
+	a := &analyzer{diagnostics: model.Diagnostics{}}
 	global := a.newScope(nil, model.ScopeGlobal, program.Span)
-	a.registerClasses(global, program.Statements)
+	a.classes = global.classes
 	a.statements(global, program.Statements)
 	snapshots := make(model.ScopeSnapshots, len(a.scopes))
 	for i, current := range a.scopes {
@@ -63,7 +66,7 @@ func Analyze(program ast.Program) (model.ScopeSnapshots, model.Diagnostics) {
 }
 
 func (a *analyzer) newScope(outer *scope, kind model.ScopeKind, span ast.Span) *scope {
-	s := &scope{id: len(a.scopes) + 1, kind: kind, span: span, symbols: model.Symbols{}, shapes: map[string]*collectionShape{}, constants: map[string]int{}, outer: outer}
+	s := &scope{id: len(a.scopes) + 1, kind: kind, span: span, symbols: model.Symbols{}, shapes: map[string]*collectionShape{}, constants: map[string]int{}, classes: map[string]*classInfo{}, outer: outer}
 	if outer != nil {
 		s.parent = outer.id
 		s.function = outer.function
@@ -76,6 +79,7 @@ func (a *analyzer) newScope(outer *scope, kind model.ScopeKind, span ast.Span) *
 }
 
 func (a *analyzer) statements(s *scope, statements ast.Statements) {
+	a.registerClasses(s, statements)
 	for _, statement := range statements {
 		if function, ok := statement.(ast.FunctionDeclStmt); ok {
 			a.declare(s, model.Symbol{Name: function.Name, Kind: model.SymbolFunction, Type: functionType(function), Span: function.Span})
@@ -167,7 +171,7 @@ func (a *analyzer) statement(s *scope, statement ast.Statement) {
 		a.block(s, n.Try)
 		if n.Catch != nil {
 			caught := a.newScope(s, model.ScopeCatch, n.Catch.Span)
-			a.declare(caught, model.Symbol{Name: n.Name, Kind: model.SymbolCatch, Type: primitive(model.TypeException), Span: n.Catch.Span})
+			a.declare(caught, model.Symbol{Name: n.Name, Kind: model.SymbolCatch, Type: primitive(model.TypeException), Span: n.NameSpan})
 			a.statements(caught, n.Catch.Statements)
 		}
 	case ast.SwitchStmt:
@@ -219,24 +223,24 @@ func (a *analyzer) function(s *scope, n ast.FunctionDeclStmt) {
 	a.functionDepth, a.loopDepth, a.switchDepth, a.returnType = depth, loops, switches, result
 }
 
-func (a *analyzer) registerClasses(global *scope, statements ast.Statements) {
+func (a *analyzer) registerClasses(s *scope, statements ast.Statements) {
 	for _, statement := range statements {
 		if declaration, ok := statement.(ast.ClassDeclStmt); ok {
-			a.declare(global, model.Symbol{Name: declaration.Name, Kind: model.SymbolClass, Type: model.Type{Kind: model.TypeClass, Name: declaration.Name, Params: model.Types{}}, Span: declaration.Span})
-			if _, exists := a.classes[declaration.Name]; !exists {
-				a.classes[declaration.Name] = &classInfo{declaration: declaration, members: map[string]model.Symbol{}}
+			a.declare(s, model.Symbol{Name: declaration.Name, Kind: model.SymbolClass, Type: model.Type{Kind: model.TypeClass, Name: declaration.Name, Params: model.Types{}}, Span: declaration.Span})
+			if _, exists := s.classes[declaration.Name]; !exists {
+				s.classes[declaration.Name] = &classInfo{declaration: declaration, members: map[string]model.Symbol{}, owner: s}
 			}
 		}
 	}
 	cycles := map[string]bool{}
 	for _, statement := range statements {
 		declaration, ok := statement.(ast.ClassDeclStmt)
-		if !ok || a.classes[declaration.Name].declaration.Span != declaration.Span {
+		if !ok || s.classes[declaration.Name].declaration.Span != declaration.Span {
 			continue
 		}
-		info := a.classes[declaration.Name]
+		info := s.classes[declaration.Name]
 		if declaration.Parent != "" {
-			if _, exists := a.classes[declaration.Parent]; !exists {
+			if a.classInfo(s, declaration.Parent) == nil {
 				a.problem("SEM_UNKNOWN_BASE", "unknown base class "+declaration.Parent, declaration.Span)
 			}
 		}
@@ -257,7 +261,11 @@ func (a *analyzer) registerClasses(global *scope, statements ast.Statements) {
 			}
 		}
 		path, positions := []string{}, map[string]int{}
-		for name := declaration.Name; name != "" && a.classes[name] != nil; name = a.classes[name].declaration.Parent {
+		for name, search := declaration.Name, s; name != ""; {
+			current := a.classInfo(search, name)
+			if current == nil {
+				break
+			}
 			if at, seen := positions[name]; seen {
 				for _, cyclic := range path[at:] {
 					cycles[cyclic] = true
@@ -265,6 +273,7 @@ func (a *analyzer) registerClasses(global *scope, statements ast.Statements) {
 				break
 			}
 			positions[name], path = len(path), append(path, name)
+			name, search = current.declaration.Parent, current.owner
 		}
 	}
 	for _, statement := range statements {
@@ -278,7 +287,7 @@ func (a *analyzer) registerClasses(global *scope, statements ast.Statements) {
 		}
 		for _, member := range declaration.Members {
 			name := memberName(member)
-			if inherited, _ := a.lookupMember(declaration.Parent, name); name != "constructor" && inherited != nil {
+			if inherited, _ := a.lookupMember(s, declaration.Parent, name); name != "constructor" && inherited != nil {
 				a.problem("SEM_INHERITED_MEMBER", "member "+name+" redeclares an inherited name", member.SourceSpan())
 			}
 		}
@@ -298,7 +307,7 @@ func memberName(statement ast.Statement) string {
 }
 
 func (a *analyzer) class(s *scope, declaration ast.ClassDeclStmt) {
-	info := a.classes[declaration.Name]
+	info := a.classInfo(s, declaration.Name)
 	if info == nil || info.declaration.Span != declaration.Span {
 		return
 	}
@@ -525,6 +534,7 @@ func (a *analyzer) expression(s *scope, expression ast.Expression) model.Type {
 }
 
 func (a *analyzer) expressionExpected(s *scope, expression ast.Expression, expected *model.Type) model.Type {
+	a.typeScope = s
 	if expression == nil {
 		return errorType()
 	}
@@ -556,7 +566,7 @@ func (a *analyzer) expressionExpected(s *scope, expression ast.Expression, expec
 	case ast.ArrayExpr:
 		return a.collection(s, n, expected)
 	case ast.NewExpr:
-		info := a.classes[n.ClassName]
+		info := a.classInfo(s, n.ClassName)
 		if info == nil {
 			for _, argument := range n.Arguments {
 				a.expression(s, argument)
@@ -668,7 +678,7 @@ func (a *analyzer) member(s *scope, receiver ast.Expression, name string, span a
 		a.problem("SEM_MEMBER", "member access requires a class value", span)
 		return nil
 	}
-	member, _ := a.lookupMember(typeOf.Name, name)
+	member, _ := a.lookupMember(s, typeOf.Name, name)
 	if member == nil {
 		a.problem("SEM_MEMBER", "unknown member "+name+" on "+typeOf.Name, span)
 	}
@@ -693,11 +703,20 @@ func (a *analyzer) assignMember(s *scope, receiver ast.Expression, name string, 
 	return member.Type
 }
 
-func (a *analyzer) lookupMember(className, name string) (*model.Symbol, bool) {
+func (a *analyzer) classInfo(s *scope, name string) *classInfo {
+	for ; s != nil; s = s.outer {
+		if info := s.classes[name]; info != nil {
+			return info
+		}
+	}
+	return nil
+}
+
+func (a *analyzer) lookupMember(s *scope, className, name string) (*model.Symbol, bool) {
 	seen := map[string]bool{}
 	for className != "" && !seen[className] {
 		seen[className] = true
-		info := a.classes[className]
+		info := a.classInfo(s, className)
 		if info == nil {
 			break
 		}
@@ -708,7 +727,7 @@ func (a *analyzer) lookupMember(className, name string) (*model.Symbol, bool) {
 		if name == "constructor" {
 			break
 		}
-		className = info.declaration.Parent
+		className, s = info.declaration.Parent, info.owner
 	}
 	return nil, false
 }
@@ -973,7 +992,7 @@ func (a *analyzer) compatible(target, value model.Type) bool {
 			if name == target.Name {
 				return true
 			}
-			info := a.classes[name]
+			info := a.classInfo(a.typeScope, name)
 			if info == nil {
 				break
 			}

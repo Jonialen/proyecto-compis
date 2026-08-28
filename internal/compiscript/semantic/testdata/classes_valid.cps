@@ -9,3 +9,9 @@ let animal: Animal = new Dog(2);
 let puppy: Puppy = new Puppy();
 let inheritedName: string = puppy.name;
 let inheritedMethod: string = puppy.speak();
+function localFactory(): string {
+  class LocalChild : LocalBase {}
+  class LocalBase { let label: string; function read(): string { function nested(): string { return this.label; } return nested(); } }
+  let local: LocalBase = new LocalChild();
+  return local.label;
+}

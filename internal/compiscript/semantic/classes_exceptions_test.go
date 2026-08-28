@@ -2,6 +2,7 @@ package semantic_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"genanalex/internal/compiscript/model"
@@ -18,7 +19,7 @@ func TestClassesMembersInheritanceConstructorsAndThis(t *testing.T) {
 			classes = append(classes, current)
 		}
 	}
-	if len(classes) != 3 {
+	if len(classes) != 5 {
 		t.Fatalf("class scopes = %+v", classes)
 	}
 	got := []string{}
@@ -34,9 +35,10 @@ func TestClassesRejectInvalidHierarchyMembersAndConstruction(t *testing.T) {
 	_, diagnostics := analyzeFixture(t, "classes_invalid")
 	requireCounts(t, diagnostics, map[string]int{
 		"SEM_ARGUMENT": 1, "SEM_ARITY": 2, "SEM_DUPLICATE": 1,
+		"SEM_CONSTANT_ASSIGNMENT": 1, "SEM_TYPE": 1,
 		"SEM_INHERITED_MEMBER": 1, "SEM_INHERITANCE_CYCLE": 2,
-		"SEM_MEMBER": 1, "SEM_THIS": 2, "SEM_UNKNOWN_BASE": 1,
-		"SEM_UNKNOWN_CLASS": 1,
+		"SEM_MEMBER": 2, "SEM_THIS": 2, "SEM_UNKNOWN_BASE": 1,
+		"SEM_UNKNOWN_CLASS": 2,
 	})
 }
 
@@ -46,9 +48,10 @@ func TestCatchBindingScopeAndBothBlocks(t *testing.T) {
 		t.Fatalf("semantic diagnostics: %+v", diagnostics)
 	}
 	found := false
+	wantOffset := strings.Index(string(fixture(t, "catch_valid")), "problem")
 	for _, current := range scopes {
 		for _, symbol := range current.Symbols {
-			found = found || current.Kind == model.ScopeCatch && symbol.Name == "problem" && symbol.Kind == model.SymbolCatch && symbol.Type.Kind == model.TypeException
+			found = found || current.Kind == model.ScopeCatch && symbol.Name == "problem" && symbol.Kind == model.SymbolCatch && symbol.Type.Kind == model.TypeException && symbol.Span.Start.Offset == wantOffset && symbol.Span.End.Offset == wantOffset+len("problem")
 		}
 	}
 	if !found {
