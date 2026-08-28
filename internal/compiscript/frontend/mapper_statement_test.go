@@ -66,6 +66,15 @@ func TestMapStatementAlternatives(t *testing.T) {
 			t.Fatalf("cases = %#v", switchStmt.Cases)
 		}
 	})
+
+	t.Run("nested function parameters stay local", func(t *testing.T) {
+		program, diagnostics := Parse([]byte("function outer(value: integer) { function inner(other: string) {} }"))
+		outer := program.Statements[0].(ast.FunctionDeclStmt)
+		inner := outer.Body.Statements[0].(ast.FunctionDeclStmt)
+		if len(diagnostics) != 0 || len(outer.Parameters) != 1 || outer.Parameters[0].Name != "value" || len(inner.Parameters) != 1 || inner.Parameters[0].Name != "other" {
+			t.Fatalf("outer=%#v inner=%#v diagnostics=%#v", outer.Parameters, inner.Parameters, diagnostics)
+		}
+	})
 }
 
 func assertStatementContract(t *testing.T, source string, statement ast.Statement) {

@@ -44,7 +44,7 @@ func (m statementMapper) mapStatementTree(tree antlr.Tree) ast.Statement {
 		}
 		return ast.AssignStmt{Span: m.span(ctx), Target: expressions[0], Value: expressions[1]}
 	case *generated.FunctionDeclarationContext:
-		return ast.FunctionDeclStmt{Span: m.span(ctx), Name: m.identifiers(ctx)[0], Parameters: m.parameters(ctx), Result: m.directType(ctx), Body: m.firstBlock(ctx)}
+		return ast.FunctionDeclStmt{Span: m.span(ctx), Name: m.identifiers(ctx)[0], Parameters: m.parameters(ctx.Parameters()), Result: m.directType(ctx), Body: m.firstBlock(ctx)}
 	case *generated.ClassDeclarationContext:
 		ids := m.identifiers(ctx)
 		class := ast.ClassDeclStmt{Span: m.span(ctx), Name: ids[0]}
@@ -195,6 +195,9 @@ func (m statementMapper) identifiers(tree antlr.Tree) (identifiers []string) {
 }
 
 func (m statementMapper) parameters(tree antlr.Tree) (parameters ast.Parameters) {
+	if tree == nil {
+		return nil
+	}
 	for i := 0; i < tree.GetChildCount(); i++ {
 		if ctx, ok := tree.GetChild(i).(*generated.ParameterContext); ok {
 			parameter := ast.Parameter{Span: m.span(ctx), Name: m.identifiers(ctx)[0], Type: m.typeRef(ctx)}
