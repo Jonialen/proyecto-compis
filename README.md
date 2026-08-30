@@ -15,8 +15,35 @@ Toolkit en Go para construir y ejecutar analizadores léxicos con **YALex** y an
 | YAPar LR(0) / LR(1) | Existen como opciones comparables, pero **no** como backends ejecutables. |
 | Parser standalone | Disponible para el camino basado en tablas LR/SLR; no debe asumirse universal para todos los métodos. |
 | IDE/interfaz gráfica | Disponible como app web servida desde `cmd/ide`. |
+| Compiscript | ANTLR frontend, project AST, semantic analysis, JSON CLI report, and IDE integration are available. |
 
 La referencia técnica principal está en [`docs/documentacion_tecnica.md`](docs/documentacion_tecnica.md).
+
+## Compiscript quick start
+
+Compiscript follows a one-way pipeline: the ANTLR lexer/parser and generated Visitor in `internal/compiscript/frontend` build the project AST in `internal/compiscript/ast`; `internal/compiscript/semantic` then resolves scopes, names, and types. Consumers use the facade in `internal/compiscript` rather than depending on generated CST types.
+
+Analyze a checked-in example from the CLI. The command prints the AST view, diagnostics, and scopes as JSON:
+
+```bash
+go run ./cmd/compiscript testdata/compiscript/acceptance/operators_valid.cps
+```
+
+Run the IDE and open `http://localhost:8080`; the Compiscript UI calls `POST /api/compiscript/analyze`:
+
+```bash
+go run ./cmd/ide
+```
+
+Run the focused and complete verification suites:
+
+```bash
+go test ./internal/compiscript/... ./cmd/compiscript ./cmd/ide -count=1
+go test ./... -count=1
+go build ./...
+```
+
+See the [Entrega 1 acceptance runbook](docs/semestre2/entrega1/acceptance.md), the [Compiscript grammar](docs/semestre2/entrega1/Compiscript.g4), and the [contribution evidence](docs/semestre2/entrega1/evidence/contributions.md).
 
 ## Requisitos
 
@@ -188,3 +215,5 @@ Formato esperado:
 
 - [`docs/documentacion_tecnica.md`](docs/documentacion_tecnica.md): arquitectura, estado real y detalle técnico.
 - [`docs/parte2/`](docs/parte2/): planeación y backlogs históricos.
+- [`docs/semestre2/entrega1/acceptance.md`](docs/semestre2/entrega1/acceptance.md): current Compiscript acceptance and generator gates.
+- [`docs/semestre2/entrega1/evidence/contributions.md`](docs/semestre2/entrega1/evidence/contributions.md): contribution counts derived from Git history.
