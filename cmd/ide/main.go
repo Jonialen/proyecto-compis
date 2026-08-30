@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	compiscript "genanalex/internal/compiscript"
 	"genanalex/internal/lexbuild"
@@ -38,6 +40,8 @@ type compiscriptRequest struct {
 	Source *string `json:"source"`
 }
 
+const maxCompiscriptRequestBytes = 1 << 20
+
 func handleCompiscriptAnalyze(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method != http.MethodPost {
@@ -50,7 +54,24 @@ func handleCompiscriptAnalyze(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnsupportedMediaType, "content type must be application/json")
 		return
 	}
-	decoder := json.NewDecoder(r.Body)
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxCompiscriptRequestBytes+1))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if len(body) > maxCompiscriptRequestBytes {
+		writeErr(w, http.StatusRequestEntityTooLarge, "request body too large")
+		return
+	}
+	if !utf8.Valid(body) {
+		writeErr(w, http.StatusBadRequest, "source must be valid UTF-8")
+		return
+	}
+	if hasDuplicateSource(body) {
+		writeErr(w, http.StatusBadRequest, "duplicate source field")
+		return
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	var req compiscriptRequest
 	if err := decoder.Decode(&req); err != nil {
@@ -66,7 +87,33 @@ func handleCompiscriptAnalyze(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "source is required")
 		return
 	}
-	json.NewEncoder(w).Encode(compiscript.Analyze([]byte(*req.Source)))
+	if err := json.NewEncoder(w).Encode(compiscript.Analyze([]byte(*req.Source))); err != nil {
+		fmt.Fprintf(os.Stderr, "ide: write Compiscript response: %v\n", err)
+	}
+}
+
+func hasDuplicateSource(body []byte) bool {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return false
+	}
+	seen := false
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return false
+		}
+		if key == "source" && seen {
+			return true
+		}
+		seen = seen || key == "source"
+		var value json.RawMessage
+		if decoder.Decode(&value) != nil {
+			return false
+		}
+	}
+	return false
 }
 
 func cors(h http.HandlerFunc) http.HandlerFunc {

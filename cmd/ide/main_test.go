@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -39,7 +41,7 @@ func TestCompiscriptAnalyzeReturnsFacadeReport(t *testing.T) {
 				t.Fatal(err)
 			}
 			first := request(t, http.MethodPost, "/api/compiscript/analyze", "application/json", string(body))
-			second := request(t, http.MethodPost, "/api/compiscript/analyze", "application/json", string(body))
+			second := request(t, http.MethodPost, "/api/compiscript/analyze", "application/json; charset=utf-8", string(body))
 			if first.Code != http.StatusOK {
 				t.Fatalf("status = %d, body = %s", first.Code, first.Body.String())
 			}
@@ -70,8 +72,11 @@ func TestCompiscriptAnalyzeRejectsInvalidRequests(t *testing.T) {
 		{"missing source", "application/json", `{}`, "source is required", http.StatusBadRequest},
 		{"null source", "application/json", `{"source":null}`, "source is required", http.StatusBadRequest},
 		{"wrong source type", "application/json", `{"source":7}`, "invalid JSON", http.StatusBadRequest},
+		{"invalid UTF-8", "application/json", "{\"source\":\"" + string([]byte{0xff}) + "\"}", "source must be valid UTF-8", http.StatusBadRequest},
+		{"duplicate source", "application/json", `{"source":"first","source":"second"}`, "duplicate source field", http.StatusBadRequest},
 		{"unknown field", "application/json", `{"source":"","extra":true}`, "invalid JSON", http.StatusBadRequest},
 		{"trailing JSON", "application/json", `{"source":""}{}`, "invalid JSON", http.StatusBadRequest},
+		{"oversized body", "application/json", `{"source":"` + strings.Repeat("a", 1<<20) + `"}`, "request body too large", http.StatusRequestEntityTooLarge},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -121,6 +126,9 @@ func TestLegacyProcessRouteStillWorks(t *testing.T) {
 	if !got.Success || got.Methods["slr"] == nil {
 		t.Fatalf("legacy response = %#v", got)
 	}
+	if hash := fmt.Sprintf("%x", sha256.Sum256(rec.Body.Bytes())); hash != "e9539811ecefe6b5bfb70e3ba4782c0514a4d4f51dc48e349f7774c62a34c946" {
+		t.Fatalf("legacy response hash = %s", hash)
+	}
 }
 
 func TestCompiscriptBrowserContract(t *testing.T) {
@@ -138,10 +146,14 @@ func TestCompiscriptBrowserContract(t *testing.T) {
 		}
 	}
 	js := string(script)
-	for _, token := range []string{"/api/compiscript/analyze", "function renderCompiscript", "textContent", "parentId", "symbols"} {
+	for _, token := range []string{"/api/compiscript/analyze", "function renderCompiscript", "clearCompiscriptResults(err.message)", "textContent", "parentId", "symbols"} {
 		if !strings.Contains(js, token) {
 			t.Errorf("app.js lacks %q", token)
 		}
+	}
+	runStart, renderStart := strings.Index(js, "async function runCompiscript"), strings.Index(js, "function renderCompiscript")
+	if runStart < 0 || renderStart < 0 || !strings.Contains(js[runStart:renderStart], "clearCompiscriptResults(err.message)") {
+		t.Error("Compiscript request failure does not clear stale results")
 	}
 	start := strings.Index(js, "function renderCompiscript")
 	end := strings.Index(js[start:], "// ── UWU mode")

@@ -679,10 +679,18 @@ async function runCompiscript() {
     renderCompiscript(source, data);
     setStatus(data.diagnostics.length ? 'Analysis complete with diagnostics' : '✓ Analysis complete', data.diagnostics.length ? 'error' : 'ok');
   } catch (err) {
+    clearCompiscriptResults(err.message);
     setStatus('Error: ' + err.message, 'error');
   } finally {
     setLoading(false);
   }
+}
+
+function clearCompiscriptResults(message) {
+  ['source', 'ast', 'diagnostics', 'environments'].forEach(name => {
+    document.getElementById(`rp-${name}`).replaceChildren(element('div', `Analysis failed: ${message}`, 'grammar-error-box'));
+  });
+  switchResultsTab('source');
 }
 
 function element(tag, text, className) {
