@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"genanalex/internal/compiscript/ast"
+	"genanalex/internal/compiscript/frontend/generated"
+	"github.com/antlr4-go/antlr/v4"
 )
 
 func TestParseExposesLocatedProgramStatementsAndDiagnostics(t *testing.T) {
@@ -21,5 +23,26 @@ func TestParseExposesLocatedProgramStatementsAndDiagnostics(t *testing.T) {
 	}
 	if _, ok := program.Statements[0].(ast.VarDeclStmt); !ok {
 		t.Fatalf("statement = %T, want ast.VarDeclStmt", program.Statements[0])
+	}
+}
+
+func TestGeneratedVisitorDispatchBuildsProgram(t *testing.T) {
+	source := []byte("let answer: integer = 42; print(answer);")
+	parser := generated.NewCompiscriptParser(antlr.NewCommonTokenStream(
+		generated.NewCompiscriptLexer(antlr.NewInputStream(string(source))), antlr.TokenDefaultChannel,
+	))
+
+	got, ok := parser.Program().(antlr.ParseTree).Accept(newStatementMapper(source)).(ast.Program)
+	if !ok {
+		t.Fatal("generated visitor did not return an AST program")
+	}
+	if len(got.Statements) != 2 {
+		t.Fatalf("statements = %d, want 2", len(got.Statements))
+	}
+	if _, ok := got.Statements[0].(ast.VarDeclStmt); !ok {
+		t.Fatalf("first statement = %T, want ast.VarDeclStmt", got.Statements[0])
+	}
+	if _, ok := got.Statements[1].(ast.PrintStmt); !ok {
+		t.Fatalf("second statement = %T, want ast.PrintStmt", got.Statements[1])
 	}
 }

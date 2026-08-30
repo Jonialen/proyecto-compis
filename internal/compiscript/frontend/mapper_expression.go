@@ -9,104 +9,178 @@ import (
 )
 
 type expressionMapper struct {
-	index sourceIndex
+	*generated.BaseCompiscriptVisitor
+	index          sourceIndex
+	suffixReceiver ast.Expression
 }
 
-func newExpressionMapper(source []byte) expressionMapper {
-	return expressionMapper{index: newSourceIndex(source)}
+var _ generated.CompiscriptVisitor = (*expressionMapper)(nil)
+
+func newExpressionMapper(source []byte) *expressionMapper {
+	return &expressionMapper{
+		BaseCompiscriptVisitor: &generated.BaseCompiscriptVisitor{BaseParseTreeVisitor: &antlr.BaseParseTreeVisitor{}},
+		index:                  newSourceIndex(source),
+	}
 }
 
-func (m expressionMapper) mapExpression(ctx generated.IExpressionContext) ast.Expression {
-	return m.mapTree(ctx)
+func (m *expressionMapper) mapExpression(ctx generated.IExpressionContext) ast.Expression {
+	return m.expression(ctx)
 }
 
-func (m expressionMapper) mapType(ctx generated.ITypeContext) ast.TypeRef {
+func (m *expressionMapper) mapType(ctx generated.ITypeContext) ast.TypeRef {
+	if mapped, ok := ctx.(antlr.ParseTree).Accept(m).(ast.TypeRef); ok {
+		return mapped
+	}
+	return ast.TypeRef{Span: m.span(ctx)}
+}
+
+func (m *expressionMapper) expression(tree antlr.Tree) ast.Expression {
+	parseTree, ok := tree.(antlr.ParseTree)
+	if !ok {
+		return ast.BadExpr{Span: m.span(tree)}
+	}
+	mapped, ok := parseTree.Accept(m).(ast.Expression)
+	if !ok || mapped == nil {
+		return ast.BadExpr{Span: m.span(tree)}
+	}
+	return mapped
+}
+
+func (m *expressionMapper) VisitExpression(ctx *generated.ExpressionContext) interface{} {
+	return m.expression(ctx.GetChild(0))
+}
+
+func (m *expressionMapper) VisitAssignExpr(ctx *generated.AssignExprContext) interface{} {
+	target, value := m.expression(ctx.GetChild(0)), m.expression(ctx.GetChild(2))
+	if property, ok := target.(ast.PropertyAccessExpr); ok {
+		return ast.PropertyAssignExpr{Span: m.span(ctx), Receiver: property.Receiver, Name: property.Name, Value: value}
+	}
+	return ast.AssignExpr{Span: m.span(ctx), Target: target, Value: value}
+}
+
+func (m *expressionMapper) VisitPropertyAssignExpr(ctx *generated.PropertyAssignExprContext) interface{} {
+	return ast.PropertyAssignExpr{Span: m.span(ctx), Receiver: m.expression(ctx.GetChild(0)), Name: treeText(ctx.GetChild(2)), Value: m.expression(ctx.GetChild(4))}
+}
+
+func (m *expressionMapper) VisitExprNoAssign(ctx *generated.ExprNoAssignContext) interface{} {
+	return m.expression(ctx.GetChild(0))
+}
+
+func (m *expressionMapper) VisitTernaryExpr(ctx *generated.TernaryExprContext) interface{} {
+	if ctx.GetChildCount() == 1 {
+		return m.expression(ctx.GetChild(0))
+	}
+	return ast.TernaryExpr{Span: m.span(ctx), Condition: m.expression(ctx.GetChild(0)), Then: m.expression(ctx.GetChild(2)), Else: m.expression(ctx.GetChild(4))}
+}
+
+func (m *expressionMapper) VisitLogicalOrExpr(ctx *generated.LogicalOrExprContext) interface{} {
+	return m.foldBinary(ctx)
+}
+
+func (m *expressionMapper) VisitLogicalAndExpr(ctx *generated.LogicalAndExprContext) interface{} {
+	return m.foldBinary(ctx)
+}
+
+func (m *expressionMapper) VisitEqualityExpr(ctx *generated.EqualityExprContext) interface{} {
+	return m.foldBinary(ctx)
+}
+
+func (m *expressionMapper) VisitRelationalExpr(ctx *generated.RelationalExprContext) interface{} {
+	return m.foldBinary(ctx)
+}
+
+func (m *expressionMapper) VisitAdditiveExpr(ctx *generated.AdditiveExprContext) interface{} {
+	return m.foldBinary(ctx)
+}
+
+func (m *expressionMapper) VisitMultiplicativeExpr(ctx *generated.MultiplicativeExprContext) interface{} {
+	return m.foldBinary(ctx)
+}
+
+func (m *expressionMapper) VisitUnaryExpr(ctx *generated.UnaryExprContext) interface{} {
+	if ctx.GetChildCount() == 1 {
+		return m.expression(ctx.GetChild(0))
+	}
+	return ast.UnaryExpr{Span: m.span(ctx), Operator: treeText(ctx.GetChild(0)), Operand: m.expression(ctx.GetChild(1))}
+}
+
+func (m *expressionMapper) VisitPrimaryExpr(ctx *generated.PrimaryExprContext) interface{} {
+	if treeText(ctx.GetChild(0)) == "(" {
+		return ast.GroupExpr{Span: m.span(ctx), Expression: m.expression(ctx.GetChild(1))}
+	}
+	return m.expression(ctx.GetChild(0))
+}
+
+func (m *expressionMapper) VisitLiteralExpr(ctx *generated.LiteralExprContext) interface{} {
+	if array, ok := ctx.GetChild(0).(*generated.ArrayLiteralContext); ok {
+		return array.Accept(m)
+	}
+	return ast.LiteralExpr{Span: m.span(ctx), Lexeme: ctx.GetText()}
+}
+
+func (m *expressionMapper) VisitLeftHandSide(ctx *generated.LeftHandSideContext) interface{} {
+	expression := m.expression(ctx.GetChild(0))
+	for i := 1; i < ctx.GetChildCount(); i++ {
+		previous := m.suffixReceiver
+		m.suffixReceiver = expression
+		expression = m.expression(ctx.GetChild(i))
+		m.suffixReceiver = previous
+	}
+	return expression
+}
+
+func (m *expressionMapper) VisitIdentifierExpr(ctx *generated.IdentifierExprContext) interface{} {
+	return ast.IdentifierExpr{Span: m.span(ctx), Name: ctx.GetText()}
+}
+
+func (m *expressionMapper) VisitNewExpr(ctx *generated.NewExprContext) interface{} {
+	return ast.NewExpr{Span: m.span(ctx), ClassName: treeText(ctx.GetChild(1)), Arguments: m.arguments(ctx)}
+}
+
+func (m *expressionMapper) VisitThisExpr(ctx *generated.ThisExprContext) interface{} {
+	return ast.ThisExpr{Span: m.span(ctx)}
+}
+
+func (m *expressionMapper) VisitCallExpr(ctx *generated.CallExprContext) interface{} {
+	receiver := m.suffixReceiver
+	return ast.CallExpr{Span: m.suffixSpan(receiver, ctx), Callee: receiver, Arguments: m.arguments(ctx)}
+}
+
+func (m *expressionMapper) VisitIndexExpr(ctx *generated.IndexExprContext) interface{} {
+	receiver := m.suffixReceiver
+	return ast.IndexExpr{Span: m.suffixSpan(receiver, ctx), Collection: receiver, Index: m.expression(ctx.GetChild(1))}
+}
+
+func (m *expressionMapper) VisitPropertyAccessExpr(ctx *generated.PropertyAccessExprContext) interface{} {
+	receiver := m.suffixReceiver
+	return ast.PropertyAccessExpr{Span: m.suffixSpan(receiver, ctx), Receiver: receiver, Name: treeText(ctx.GetChild(1))}
+}
+
+func (m *expressionMapper) VisitArrayLiteral(ctx *generated.ArrayLiteralContext) interface{} {
+	return ast.ArrayExpr{Span: m.span(ctx), Elements: m.expressions(ctx)}
+}
+
+func (m *expressionMapper) VisitType(ctx *generated.TypeContext) interface{} {
 	text := ctx.GetText()
 	name := strings.TrimSuffix(text, strings.Repeat("[]", strings.Count(text, "[]")))
 	return ast.TypeRef{Span: m.span(ctx), Name: name, Dimensions: strings.Count(text, "[]")}
 }
 
-func (m expressionMapper) mapTree(tree antlr.Tree) ast.Expression {
-	switch ctx := tree.(type) {
-	case *generated.ExpressionContext, *generated.ExprNoAssignContext:
-		return m.mapTree(tree.GetChild(0))
-	case *generated.AssignExprContext:
-		target, value := m.mapTree(ctx.GetChild(0)), m.mapTree(ctx.GetChild(2))
-		if property, ok := target.(ast.PropertyAccessExpr); ok {
-			return ast.PropertyAssignExpr{Span: m.span(ctx), Receiver: property.Receiver, Name: property.Name, Value: value}
-		}
-		return ast.AssignExpr{Span: m.span(ctx), Target: target, Value: value}
-	case *generated.PropertyAssignExprContext:
-		return ast.PropertyAssignExpr{Span: m.span(ctx), Receiver: m.mapTree(ctx.GetChild(0)), Name: treeText(ctx.GetChild(2)), Value: m.mapTree(ctx.GetChild(4))}
-	case *generated.TernaryExprContext:
-		if ctx.GetChildCount() == 1 {
-			return m.mapTree(ctx.GetChild(0))
-		}
-		return ast.TernaryExpr{Span: m.span(ctx), Condition: m.mapTree(ctx.GetChild(0)), Then: m.mapTree(ctx.GetChild(2)), Else: m.mapTree(ctx.GetChild(4))}
-	case *generated.LogicalOrExprContext, *generated.LogicalAndExprContext, *generated.EqualityExprContext, *generated.RelationalExprContext, *generated.AdditiveExprContext, *generated.MultiplicativeExprContext:
-		return m.foldBinary(tree)
-	case *generated.UnaryExprContext:
-		if ctx.GetChildCount() == 1 {
-			return m.mapTree(ctx.GetChild(0))
-		}
-		return ast.UnaryExpr{Span: m.span(ctx), Operator: treeText(ctx.GetChild(0)), Operand: m.mapTree(ctx.GetChild(1))}
-	case *generated.PrimaryExprContext:
-		if treeText(ctx.GetChild(0)) == "(" {
-			return ast.GroupExpr{Span: m.span(ctx), Expression: m.mapTree(ctx.GetChild(1))}
-		}
-		return m.mapTree(ctx.GetChild(0))
-	case *generated.LiteralExprContext:
-		if _, ok := ctx.GetChild(0).(*generated.ArrayLiteralContext); ok {
-			return m.mapTree(ctx.GetChild(0))
-		}
-		return ast.LiteralExpr{Span: m.span(ctx), Lexeme: ctx.GetText()}
-	case *generated.LeftHandSideContext:
-		expression := m.mapTree(ctx.GetChild(0))
-		for i := 1; i < ctx.GetChildCount(); i++ {
-			expression = m.applySuffix(expression, ctx.GetChild(i))
-		}
-		return expression
-	case *generated.IdentifierExprContext:
-		return ast.IdentifierExpr{Span: m.span(ctx), Name: ctx.GetText()}
-	case *generated.NewExprContext:
-		return ast.NewExpr{Span: m.span(ctx), ClassName: treeText(ctx.GetChild(1)), Arguments: m.arguments(ctx)}
-	case *generated.ThisExprContext:
-		return ast.ThisExpr{Span: m.span(ctx)}
-	case *generated.ArrayLiteralContext:
-		return ast.ArrayExpr{Span: m.span(ctx), Elements: m.expressions(ctx)}
-	default:
-		return ast.BadExpr{Span: m.span(tree)}
-	}
-}
-
-func (m expressionMapper) foldBinary(tree antlr.Tree) ast.Expression {
-	expression := m.mapTree(tree.GetChild(0))
+func (m *expressionMapper) foldBinary(tree antlr.Tree) ast.Expression {
+	expression := m.expression(tree.GetChild(0))
 	for i := 1; i < tree.GetChildCount(); i += 2 {
-		expression = ast.BinaryExpr{Span: m.span(tree), Left: expression, Operator: treeText(tree.GetChild(i)), Right: m.mapTree(tree.GetChild(i + 1))}
+		expression = ast.BinaryExpr{Span: m.span(tree), Left: expression, Operator: treeText(tree.GetChild(i)), Right: m.expression(tree.GetChild(i + 1))}
 	}
 	return expression
 }
 
-func (m expressionMapper) applySuffix(receiver ast.Expression, tree antlr.Tree) ast.Expression {
-	switch ctx := tree.(type) {
-	case *generated.CallExprContext:
-		return ast.CallExpr{Span: m.suffixSpan(receiver, ctx), Callee: receiver, Arguments: m.arguments(ctx)}
-	case *generated.IndexExprContext:
-		return ast.IndexExpr{Span: m.suffixSpan(receiver, ctx), Collection: receiver, Index: m.mapTree(ctx.GetChild(1))}
-	case *generated.PropertyAccessExprContext:
-		return ast.PropertyAccessExpr{Span: m.suffixSpan(receiver, ctx), Receiver: receiver, Name: treeText(ctx.GetChild(1))}
-	default:
-		return ast.BadExpr{Span: m.span(tree)}
-	}
-}
-
-func (m expressionMapper) suffixSpan(receiver ast.Expression, suffix antlr.Tree) ast.Span {
+func (m *expressionMapper) suffixSpan(receiver ast.Expression, suffix antlr.Tree) ast.Span {
 	span := m.span(suffix)
 	span.Start = receiver.SourceSpan().Start
 	return span
 }
 
-func (m expressionMapper) arguments(tree antlr.Tree) ast.Expressions {
+func (m *expressionMapper) arguments(tree antlr.Tree) ast.Expressions {
 	for i := 0; i < tree.GetChildCount(); i++ {
 		if arguments, ok := tree.GetChild(i).(*generated.ArgumentsContext); ok {
 			return m.expressions(arguments)
@@ -115,8 +189,7 @@ func (m expressionMapper) arguments(tree antlr.Tree) ast.Expressions {
 	return nil
 }
 
-func (m expressionMapper) expressions(tree antlr.Tree) ast.Expressions {
-	var expressions ast.Expressions
+func (m *expressionMapper) expressions(tree antlr.Tree) (expressions ast.Expressions) {
 	for i := 0; i < tree.GetChildCount(); i++ {
 		if expression, ok := tree.GetChild(i).(generated.IExpressionContext); ok {
 			expressions = append(expressions, m.mapExpression(expression))
@@ -125,7 +198,7 @@ func (m expressionMapper) expressions(tree antlr.Tree) ast.Expressions {
 	return expressions
 }
 
-func (m expressionMapper) span(tree antlr.Tree) ast.Span {
+func (m *expressionMapper) span(tree antlr.Tree) ast.Span {
 	context, ok := tree.(antlr.ParserRuleContext)
 	if !ok || context.GetStart() == nil {
 		return ast.Span{}
