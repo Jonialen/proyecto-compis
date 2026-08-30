@@ -40,6 +40,18 @@ type compiscriptRequest struct {
 	Source *string `json:"source"`
 }
 
+func (r *compiscriptRequest) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(data, &fields) // The typed decode below returns any syntax error.
+	for key := range fields {
+		if key != "source" {
+			return fmt.Errorf("unknown field %q", key)
+		}
+	}
+	type request compiscriptRequest
+	return json.Unmarshal(data, (*request)(r))
+}
+
 const maxCompiscriptRequestBytes = 1 << 20
 
 func handleCompiscriptAnalyze(w http.ResponseWriter, r *http.Request) {

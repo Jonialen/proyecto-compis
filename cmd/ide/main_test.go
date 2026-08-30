@@ -41,7 +41,7 @@ func TestCompiscriptAnalyzeReturnsFacadeReport(t *testing.T) {
 				t.Fatal(err)
 			}
 			first := request(t, http.MethodPost, "/api/compiscript/analyze", "application/json", string(body))
-			second := request(t, http.MethodPost, "/api/compiscript/analyze", "application/json; charset=utf-8", string(body))
+			second := request(t, http.MethodPost, "/api/compiscript/analyze", "application/json; charset=utf-8", strings.Replace(string(body), `"source"`, `"sour\u0063e"`, 1))
 			if first.Code != http.StatusOK {
 				t.Fatalf("status = %d, body = %s", first.Code, first.Body.String())
 			}
@@ -74,6 +74,8 @@ func TestCompiscriptAnalyzeRejectsInvalidRequests(t *testing.T) {
 		{"wrong source type", "application/json", `{"source":7}`, "invalid JSON", http.StatusBadRequest},
 		{"invalid UTF-8", "application/json", "{\"source\":\"" + string([]byte{0xff}) + "\"}", "source must be valid UTF-8", http.StatusBadRequest},
 		{"duplicate source", "application/json", `{"source":"first","source":"second"}`, "duplicate source field", http.StatusBadRequest},
+		{"case-variant source", "application/json", `{"Source":"value"}`, "invalid JSON", http.StatusBadRequest},
+		{"mixed case-variant source", "application/json", `{"source":"first","Source":"second"}`, "invalid JSON", http.StatusBadRequest},
 		{"unknown field", "application/json", `{"source":"","extra":true}`, "invalid JSON", http.StatusBadRequest},
 		{"trailing JSON", "application/json", `{"source":""}{}`, "invalid JSON", http.StatusBadRequest},
 		{"oversized body", "application/json", `{"source":"` + strings.Repeat("a", 1<<20) + `"}`, "request body too large", http.StatusRequestEntityTooLarge},
