@@ -3,28 +3,70 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime"
 	"net/http"
 	"os"
 	"strings"
 
+	compiscript "genanalex/internal/compiscript"
 	"genanalex/internal/lexbuild"
 	"genanalex/internal/shared"
 	"genanalex/internal/yapar"
 )
 
 func main() {
+	addr := ":8080"
+	fmt.Printf("[*] Furlantran running at http://localhost%s\n", addr)
+	if err := http.ListenAndServe(addr, newMux()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func newMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.Handle("/", http.FileServer(http.Dir("web")))
 	mux.HandleFunc("/api/process", cors(handleProcess))
+	mux.HandleFunc("/api/compiscript/analyze", cors(handleCompiscriptAnalyze))
 	mux.HandleFunc("/api/health", cors(handleHealth))
+	return mux
+}
 
-	addr := ":8080"
-	fmt.Printf("[*] Furlantran running at http://localhost%s\n", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+type compiscriptRequest struct {
+	Source *string `json:"source"`
+}
+
+func handleCompiscriptAnalyze(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
 	}
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		writeErr(w, http.StatusUnsupportedMediaType, "content type must be application/json")
+		return
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	var req compiscriptRequest
+	if err := decoder.Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if req.Source == nil {
+		writeErr(w, http.StatusBadRequest, "source is required")
+		return
+	}
+	json.NewEncoder(w).Encode(compiscript.Analyze([]byte(*req.Source)))
 }
 
 func cors(h http.HandlerFunc) http.HandlerFunc {

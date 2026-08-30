@@ -47,6 +47,7 @@
         <button class="sb-btn" id="load-yal">📂 Load .yal</button>
         <button class="sb-btn" id="load-yalp">📂 Load .yalp</button>
         <button class="sb-btn" id="load-input">📂 Load Input</button>
+        <button class="sb-btn" id="load-cps">📂 Load .cps</button>
       </section>
 
       <section class="sb-section">
@@ -73,6 +74,9 @@
         <div class="file-status" id="file-status-input">
           <span class="fs-dot"></span> input — <em>none</em>
         </div>
+        <div class="file-status" id="file-status-cps">
+          <span class="fs-dot"></span> .cps — <em>none</em>
+        </div>
       </section>
     </aside>
 
@@ -82,11 +86,13 @@
         <button class="tab" data-editor="yal">.yal</button>
         <button class="tab active" data-editor="yalp">.yalp</button>
         <button class="tab" data-editor="input">Input</button>
+        <button class="tab" data-editor="cps">Compiscript</button>
       </div>
       <div id="editor-wrapper">
         <div class="editor-panel" id="ep-yal"></div>
         <div class="editor-panel active" id="ep-yalp"></div>
         <div class="editor-panel" id="ep-input"></div>
+        <div class="editor-panel" id="ep-cps"></div>
       </div>
     </div>
 
@@ -99,6 +105,10 @@
         <button class="tab" data-result="slr">SLR(1)</button>
         <button class="tab" data-result="lalr">LALR</button>
         <button class="tab" data-result="automaton">Automaton</button>
+        <button class="tab" data-result="source">Source</button>
+        <button class="tab" data-result="ast">AST</button>
+        <button class="tab" data-result="diagnostics">Diagnostics</button>
+        <button class="tab" data-result="environments">Environments</button>
       </div>
       <div id="results-content">
         <div class="result-panel active" id="rp-summary">
@@ -122,6 +132,10 @@
         <div class="result-panel" id="rp-automaton">
           <div class="empty-state"><div class="empty-icon">🔵</div>LR(0) automaton will appear here.</div>
         </div>
+        <div class="result-panel" id="rp-source"></div>
+        <div class="result-panel" id="rp-ast"></div>
+        <div class="result-panel" id="rp-diagnostics"></div>
+        <div class="result-panel" id="rp-environments"></div>
       </div>
     </div>
 
@@ -211,6 +225,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/viz.js/2.1.2/viz.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/viz.js/2.1.2/full.render.js"></script>
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

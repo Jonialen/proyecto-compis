@@ -4,8 +4,8 @@
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const state = {
-  editors: { yal: null, yalp: null, input: null },
-  fileNames: { yal: null, yalp: null, input: null },
+  editors: { yal: null, yalp: null, input: null, cps: null },
+  fileNames: { yal: null, yalp: null, input: null, cps: null },
   activeEditor: 'yalp',
   activeResult: 'summary',
   lastResponse: null,
@@ -52,6 +52,7 @@ function initEditors() {
   makeEditor('yal',   '/* Load or paste your .yal lexer specification here */');
   makeEditor('yalp',  '/* Load or paste your .yalp grammar specification here */\n');
   makeEditor('input', '/* Load or paste the input string(s) to parse here */');
+  makeEditor('cps',   '/* Load or paste Compiscript source here */');
 }
 
 async function initViz() {
@@ -127,6 +128,11 @@ function bindSidebar() {
     fileInput.accept = '.txt,.expr,text/plain';
     fileInput.click();
   });
+  document.getElementById('load-cps').addEventListener('click', () => {
+    pendingTarget = 'cps';
+    fileInput.accept = '.cps,.txt,text/plain';
+    fileInput.click();
+  });
 
   fileInput.addEventListener('change', () => {
     const file = fileInput.files[0];
@@ -151,7 +157,7 @@ function markFileLoaded(target, name) {
   if (!el) return;
   el.classList.add('loaded');
   const short = name.length > 22 ? name.slice(0, 20) + '…' : name;
-  el.innerHTML = `<span class="fs-dot"></span> .${target === 'input' ? 'txt' : target} — ${short}`;
+  el.innerHTML = `<span class="fs-dot"></span> .${target === 'input' ? 'txt' : target} — ${escHtml(short)}`;
 }
 
 function saveCurrentFile() {
@@ -172,14 +178,19 @@ function downloadText(text, filename) {
 
 // ── Run button ────────────────────────────────────────────────────────────────
 function bindRunButton() {
-  document.getElementById('btn-run').addEventListener('click', () => openPaymentModal());
+  document.getElementById('btn-run').addEventListener('click', triggerRun);
+}
+
+function triggerRun() {
+  if (state.activeEditor === 'cps') runCompiscript();
+  else openPaymentModal();
 }
 
 function shortcutRun() {
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
-      openPaymentModal();
+      triggerRun();
     }
   });
 }
@@ -650,6 +661,74 @@ async function renderAutomatonFromState() {
   } catch (err) {
     el.innerHTML = renderErrorBox('Automaton render error: ' + err.message);
   }
+}
+
+// ── Compiscript analysis ──────────────────────────────────────────────────────
+async function runCompiscript() {
+  if (state.loading) return;
+  const source = state.editors.cps.getValue();
+  setLoading(true);
+  setStatus('Analysing Compiscript…', 'loading');
+  try {
+    const res = await fetch('/api/compiscript/analyze', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    renderCompiscript(source, data);
+    setStatus(data.diagnostics.length ? 'Analysis complete with diagnostics' : '✓ Analysis complete', data.diagnostics.length ? 'error' : 'ok');
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'error');
+  } finally {
+    setLoading(false);
+  }
+}
+
+function element(tag, text, className) {
+  const el = document.createElement(tag);
+  if (text !== undefined) el.textContent = text;
+  if (className) el.className = className;
+  return el;
+}
+
+function renderCompiscript(source, report) {
+  const sourcePanel = document.getElementById('rp-source');
+  sourcePanel.replaceChildren(element('pre', source, 'source-view'));
+
+  const astPanel = document.getElementById('rp-ast');
+  const astNode = node => {
+    const branch = element('details', undefined, 'tree-node');
+    branch.open = node.kind === 'program';
+    branch.appendChild(element('summary', `${node.kind}: ${node.label}`));
+    (node.children || []).forEach(child => branch.appendChild(astNode(child)));
+    return branch;
+  };
+  astPanel.replaceChildren(astNode(report.ast));
+
+  const diagnosticsPanel = document.getElementById('rp-diagnostics');
+  const diagnostics = (report.diagnostics || []).map(diagnostic => {
+    const start = diagnostic.span?.start || {};
+    return element('div', `${diagnostic.phase} ${diagnostic.code} @ ${start.line}:${start.column} — ${diagnostic.message}`, 'diagnostic-item');
+  });
+  diagnosticsPanel.replaceChildren(...(diagnostics.length ? diagnostics : [element('div', 'No diagnostics.', 'empty-state')]));
+
+  const environmentPanel = document.getElementById('rp-environments');
+  const scopes = report.scopes || [];
+  const byID = new Map(scopes.map(scope => [scope.id, scope]));
+  const children = new Map(scopes.map(scope => [scope.id, []]));
+  scopes.forEach(scope => { if (children.has(scope.parentId)) children.get(scope.parentId).push(scope); });
+  const scopeNode = scope => {
+    const branch = element('details', undefined, 'environment');
+    branch.open = scope.kind === 'global';
+    branch.appendChild(element('summary', `${scope.kind} environment #${scope.id}`));
+    (scope.symbols || []).forEach(symbol => branch.appendChild(element('div', `${symbol.kind} ${symbol.name}: ${symbol.type.name || symbol.type.kind}`, 'symbol')));
+    children.get(scope.id).forEach(child => branch.appendChild(scopeNode(child)));
+    return branch;
+  };
+  const roots = scopes.filter(scope => !byID.has(scope.parentId)).map(scopeNode);
+  environmentPanel.replaceChildren(...(roots.length ? roots : [element('div', 'No environments.', 'empty-state')]));
+  switchResultsTab('source');
 }
 
 // ── UWU mode ──────────────────────────────────────────────────────────────────

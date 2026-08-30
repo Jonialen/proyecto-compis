@@ -416,6 +416,23 @@ body.uwu-mode .tab.active {
 .result-panel::-webkit-scrollbar { width: 5px; }
 .result-panel::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
 
+.source-view, .tree-node, .environment, .symbol, .diagnostic-item {
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.source-view { color: var(--text-primary); }
+.tree-node, .environment { margin: 6px 0 6px 14px; }
+.tree-node > summary, .environment > summary { color: var(--accent-2); cursor: pointer; }
+.symbol, .diagnostic-item {
+  margin: 6px 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+}
+.diagnostic-item { color: var(--warning); }
+
 /* ═══════════════════════════════════════════════════════════════
    EMPTY STATE
    ═══════════════════════════════════════════════════════════════ */
