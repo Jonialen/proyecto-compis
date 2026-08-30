@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export LC_ALL=C
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 grammar="$root/docs/semestre2/entrega1/Compiscript.g4"
@@ -32,6 +33,8 @@ done
 for path in "$grammar" "$jar" "$checksum"; do
 	[[ -f "$path" ]] || { printf 'missing required file: %s\n' "$path" >&2; exit 1; }
 done
+grammar_dir=$(cd "$(dirname "$grammar")" && pwd)
+grammar_name=$(basename "$grammar")
 command -v "$java_bin" >/dev/null || { printf 'Java executable not found: %s\n' "$java_bin" >&2; exit 1; }
 command -v "$gofmt_bin" >/dev/null || { printf 'gofmt executable not found: %s\n' "$gofmt_bin" >&2; exit 1; }
 
@@ -58,7 +61,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-"$java_bin" -jar "$jar" -Dlanguage=Go -package generated -visitor -no-listener -o "$stage" "$grammar"
+(cd "$grammar_dir" && "$java_bin" -jar "$jar" -Dlanguage=Go -package generated -visitor -no-listener -o "$stage" "$grammar_name")
 find "$stage" -type f -name '*.go' -exec "$gofmt_bin" -w {} +
 find "$stage" -type f -name '*.go' -print -quit | grep -q . || { printf 'ANTLR generated no Go files\n' >&2; exit 1; }
 

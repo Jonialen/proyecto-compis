@@ -1,9 +1,12 @@
 package frontend
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -63,6 +66,83 @@ func TestGenerationIsArgvSafeAndAtomic(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGeneratedArtifactsArePortableAndReproducible(t *testing.T) {
+	root := repositoryRoot(t)
+	temporary := t.TempDir()
+	workdirs := []string{filepath.Join(temporary, "first checkout path"), filepath.Join(temporary, "second checkout path")}
+	outputs := []string{filepath.Join(temporary, "first output"), filepath.Join(temporary, "second output")}
+	grammarSource, err := os.ReadFile(filepath.Join(root, "docs", "semestre2", "entrega1", "Compiscript.g4"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := range workdirs {
+		if err := os.MkdirAll(workdirs[i], 0o755); err != nil {
+			t.Fatal(err)
+		}
+		grammar := filepath.Join(workdirs[i], "Compiscript.g4")
+		if err := os.WriteFile(grammar, grammarSource, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		command := exec.Command(filepath.Join(root, "scripts", "generate-compiscript.sh"), "--grammar", grammar, "--output", outputs[i])
+		command.Dir = workdirs[i]
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("generate from %q: %v\n%s", workdirs[i], err, output)
+		}
+	}
+
+	first := generatedFiles(t, outputs[0])
+	second := generatedFiles(t, outputs[1])
+	if !reflect.DeepEqual(first, second) {
+		t.Fatal("generation from distinct working directories produced different bytes")
+	}
+	committed := generatedFiles(t, filepath.Join(root, "internal", "compiscript", "frontend", "generated"))
+	if !reflect.DeepEqual(first, committed) {
+		t.Fatal("committed generated artifacts differ from portable regeneration")
+	}
+
+	absoluteHeader := regexp.MustCompile(`(?m)Code generated from (?:/|[A-Za-z]:[\\/])`)
+	for set, files := range map[string]map[string][]byte{"committed": committed, "regenerated": first} {
+		for name, contents := range files {
+			for _, path := range append([]string{root}, workdirs...) {
+				if bytes.Contains(contents, []byte(path)) {
+					t.Errorf("%s %s contains checkout-specific path %q", set, name, path)
+				}
+			}
+			if absoluteHeader.Match(contents) {
+				t.Errorf("%s %s contains an absolute grammar path", set, name)
+			}
+		}
+	}
+}
+
+func generatedFiles(t *testing.T, root string) map[string][]byte {
+	t.Helper()
+	files := map[string][]byte{}
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		files[relative] = contents
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
 }
 
 func fakeJava(goSource string) string {

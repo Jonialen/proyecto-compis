@@ -1,4 +1,4 @@
-// Code generated from /home/jonialen/Documents/uvg/s8/compis/proyecto-compis/docs/semestre2/entrega1/Compiscript.g4 by ANTLR 4.13.2. DO NOT EDIT.
+// Code generated from Compiscript.g4 by ANTLR 4.13.2. DO NOT EDIT.
 
 package generated
 

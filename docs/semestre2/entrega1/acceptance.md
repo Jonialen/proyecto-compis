@@ -55,7 +55,7 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 ./scripts/generate-compiscript.sh --output "$tmp/generated"
 diff -qr internal/compiscript/frontend/generated "$tmp/generated"
 identity=$(cd "$tmp/generated" && for f in Compiscript.interp Compiscript.tokens CompiscriptLexer.interp CompiscriptLexer.tokens compiscript_base_visitor.go compiscript_lexer.go compiscript_parser.go compiscript_visitor.go; do sha256sum "$f"; done | sha256sum | cut -d' ' -f1)
-test "$identity" = 34acd09aeeaa9ae8edf51480bd1e5f3aa5f080ec81ac950daf6df81f01101010
+test "$identity" = 79d82b69a89a6ef6b5d21a1eaf9ec9b5699b9db3048c2deaa244bbdc344fe2bb
 ```
 
 The temporary index covers untracked files without mutating the real index. Its path allowlist plus the dependency guard excludes production packages, imports, dependencies, and extension mechanisms. Explicit generator ordering is locale-independent and never replaces committed output.
