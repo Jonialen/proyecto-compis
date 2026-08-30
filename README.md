@@ -17,7 +17,7 @@ Toolkit en Go para construir y ejecutar analizadores léxicos con **YALex** y an
 | IDE/interfaz gráfica | Disponible como app web servida desde `cmd/ide`. |
 | Compiscript | ANTLR frontend, project AST, semantic analysis, JSON CLI report, and IDE integration are available. |
 
-La referencia técnica principal está en [`docs/documentacion_tecnica.md`](docs/documentacion_tecnica.md).
+La referencia técnica principal está en [`docs/semestre1/documentacion_tecnica.md`](docs/semestre1/documentacion_tecnica.md).
 
 ## Compiscript quick start
 
@@ -43,7 +43,7 @@ go test ./... -count=1
 go build ./...
 ```
 
-See the [Entrega 1 acceptance runbook](docs/semestre2/entrega1/acceptance.md), the [Compiscript grammar](docs/semestre2/entrega1/Compiscript.g4), and the [contribution evidence](docs/semestre2/entrega1/evidence/contributions.md).
+See the [Entrega 1 compliance status](docs/semestre2/entrega1/compliance.md), [acceptance runbook](docs/semestre2/entrega1/acceptance.md), [Compiscript grammar](docs/semestre2/entrega1/Compiscript.g4), and [contribution evidence](docs/semestre2/entrega1/evidence/contributions.md).
 
 ## Requisitos
 
@@ -213,7 +213,8 @@ Formato esperado:
 
 ## Más documentación
 
-- [`docs/documentacion_tecnica.md`](docs/documentacion_tecnica.md): arquitectura, estado real y detalle técnico.
-- [`docs/parte2/`](docs/parte2/): planeación y backlogs históricos.
+- [`docs/semestre1/documentacion_tecnica.md`](docs/semestre1/documentacion_tecnica.md): arquitectura, estado real y detalle técnico.
+- [`docs/semestre1/parte2/`](docs/semestre1/parte2/): planeación y backlogs históricos.
+- [`docs/semestre2/entrega1/compliance.md`](docs/semestre2/entrega1/compliance.md): current Compiscript requirement status, source contradictions, and remaining work.
 - [`docs/semestre2/entrega1/acceptance.md`](docs/semestre2/entrega1/acceptance.md): current Compiscript acceptance and generator gates.
 - [`docs/semestre2/entrega1/evidence/contributions.md`](docs/semestre2/entrega1/evidence/contributions.md): contribution counts derived from Git history.

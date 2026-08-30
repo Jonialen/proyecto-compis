@@ -2,6 +2,8 @@
 
 Run from the repository root. The authoritative gate builds the current CLI and invokes the current IDE handler through `httptest`; it never depends on port `8080` or another process.
 
+For requirement status, source contradictions, and remaining work, see [current compliance](compliance.md).
+
 ## Quick path
 
 Prerequisites: the Go version in `go.mod`; Java only for generator identity; Node for browser syntax.

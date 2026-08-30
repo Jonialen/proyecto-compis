@@ -16,6 +16,10 @@ requires digits on both sides, preserves `42` and `floatValue`, and rejects `.5`
 
 The generator verifies ANTLR 4.13.2, stages argv-safe output, formats Go, and swaps
 only after success; focused tests cover spaced paths and every specified failure.
+Generation runs from the grammar directory with the grammar basename, so generated
+headers contain `Compiscript.g4` rather than an absolute checkout path. A focused
+test regenerates from two distinct temporary checkout paths and compares both outputs
+with the committed artifacts byte for byte.
 
 ## Recovery and Acceptance Evidence
 
@@ -23,10 +27,10 @@ only after success; focused tests cover spaced paths and every specified failure
 `BadStmt` while its valid declaration siblings remain mapped, and that a malformed
 print operand becomes `BadExpr` without replacing adjacent print statements. It also
 parses two representative official `Especificaciones.md` examples with no diagnostics
-or top-level bad statements. On 2026-08-26, two temporary generator runs each produced
-eight artifacts; `diff -qr` was silent and both temporary manifests plus the checked-in
-generated manifest hashed to `34acd09aeeaa9ae8edf51480bd1e5f3aa5f080ec81ac950daf6df81f01101010`.
-The canonical manifest fixes this exact ordered eight-artifact scope:
+or top-level bad statements. The canonical manifest fixes this exact ordered
+eight-artifact scope:
 `(cd "$tree" && for f in Compiscript.interp Compiscript.tokens CompiscriptLexer.interp CompiscriptLexer.tokens compiscript_base_visitor.go compiscript_lexer.go compiscript_parser.go compiscript_visitor.go; do sha256sum "$f"; done) | sha256sum | awk '{print $1}'`.
-Final evidence reconciliation reran that algorithm for both temporary outputs and the
-checked-in tree; each produced the recorded `34acd09aeeaa9ae8edf51480bd1e5f3aa5f080ec81ac950daf6df81f01101010` identity.
+After portable regeneration changed only checkout-specific generated headers, the
+current checked-in identity is
+`79d82b69a89a6ef6b5d21a1eaf9ec9b5699b9db3048c2deaa244bbdc344fe2bb`, matching
+the gate in `acceptance.md`.
