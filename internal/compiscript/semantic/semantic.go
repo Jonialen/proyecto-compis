@@ -165,8 +165,21 @@ func (a *analyzer) statement(s *scope, statement ast.Statement) {
 		a.block(loop, n.Body)
 		a.loopDepth--
 	case ast.ForeachStmt:
-		a.expression(s, n.Iterable)
-		a.block(s, n.Body)
+		iterable := a.expression(s, n.Iterable)
+		element := errorType()
+		if iterable.Kind == model.TypeList && iterable.Element != nil {
+			element = *iterable.Element
+		} else if iterable.Kind != model.TypeError {
+			a.problem("SEM_TYPE", "foreach iterable must be a list", n.Iterable.SourceSpan())
+		}
+		if n.Body == nil {
+			break
+		}
+		body := a.newScope(s, model.ScopeBlock, n.Body.Span)
+		a.declare(body, model.Symbol{Name: n.Name, Kind: model.SymbolVariable, Type: element, Mutable: true, Span: n.Span})
+		a.loopDepth++
+		a.statements(body, n.Body.Statements)
+		a.loopDepth--
 	case ast.TryCatchStmt:
 		a.block(s, n.Try)
 		if n.Catch != nil {

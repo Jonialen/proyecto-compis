@@ -83,3 +83,46 @@ func TestTypesOperatorsAssignmentsAndErrorSuppression(t *testing.T) {
 		})
 	}
 }
+
+func TestForeachBindingTypeScopeAndDiagnostics(t *testing.T) {
+	tests := []struct {
+		name, source, located string
+		want                  []string
+	}{
+		{"resolves typed item", `foreach (item in [1]) { let next: integer = item + 1; print(item); }`, "", nil},
+		{"does not leak", `foreach (item in [1]) { print(item); } print(item);`, "item", []string{"SEM_UNRESOLVED"}},
+		{"rejects incompatible item use", `foreach (item in [1]) { let text: string = item; }`, "let text: string = item;", []string{"SEM_TYPE"}},
+		{"allows nested shadowing", `foreach (item in [1]) { foreach (item in ["x"]) { let text: string = item + "!"; } let next: integer = item + 1; }`, "", nil},
+		{"rejects same body scope duplicate", `foreach (item in [1]) { let item: integer = 2; }`, "let item: integer = 2;", []string{"SEM_DUPLICATE"}},
+		{"rejects scalar iterable", `foreach (item in 42) { print(item); }`, "42", []string{"SEM_TYPE"}},
+		{"suppresses unresolved iterable cascades", `foreach (item in missing) { print(item); }`, "missing", []string{"SEM_UNRESOLVED"}},
+		{"preserves loop transfer and unreachable rules", `foreach (item in [1]) { continue; print(item); }`, "print(item);", []string{"SEM_UNREACHABLE"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			program, parseDiagnostics := frontend.Parse([]byte(tt.source))
+			if len(parseDiagnostics) != 0 {
+				t.Fatalf("parse diagnostics: %+v", parseDiagnostics)
+			}
+			scopes, diagnostics := semantic.Analyze(program)
+			if got := codes(diagnostics); !slices.Equal(got, tt.want) {
+				t.Fatalf("diagnostic codes = %v, want %v: %+v", got, tt.want, diagnostics)
+			}
+			if tt.located != "" {
+				span := diagnostics[0].Span
+				if got := tt.source[span.Start.Offset:span.End.Offset]; got != tt.located {
+					t.Fatalf("diagnostic source = %q, want %q; span=%+v", got, tt.located, span)
+				}
+			}
+			if tt.name == "rejects scalar iterable" && diagnostics[0].Message != "foreach iterable must be a list" {
+				t.Fatalf("diagnostic message = %q", diagnostics[0].Message)
+			}
+			if tt.name == "resolves typed item" {
+				item := scopes[1].Symbols[0]
+				if item.Name != "item" || item.Type.Kind != model.TypeInteger || !item.Mutable {
+					t.Fatalf("iteration symbol = %+v, want mutable integer item", item)
+				}
+			}
+		})
+	}
+}
