@@ -189,6 +189,9 @@ func (a *analyzer) statement(s *scope, statement ast.Statement) {
 		}
 	case ast.SwitchStmt:
 		value := a.expression(s, n.Value)
+		if value.Kind != model.TypeBoolean && value.Kind != model.TypeError {
+			a.problem("SEM_CONDITION", "switch condition must be boolean", n.Value.SourceSpan())
+		}
 		seen := map[string]bool{}
 		a.switchDepth++
 		for _, switchCase := range n.Cases {

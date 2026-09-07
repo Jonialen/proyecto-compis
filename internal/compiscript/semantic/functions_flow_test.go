@@ -79,7 +79,7 @@ func TestFlowValidConditionsLoopsSwitchAndTransfers(t *testing.T) {
 func TestFlowInvalidConditionsCasesTransfersAndUnreachable(t *testing.T) {
 	_, diagnostics := analyzeFixture(t, "flow_invalid")
 	requireCounts(t, diagnostics, map[string]int{
-		"SEM_CASE_TYPE": 1, "SEM_CONDITION": 4, "SEM_DUPLICATE_CASE": 4,
+		"SEM_CASE_TYPE": 1, "SEM_CONDITION": 8, "SEM_DUPLICATE_CASE": 4,
 		"SEM_TRANSFER": 4, "SEM_UNREACHABLE": 4,
 	})
 	wantOrder := slices.Clone(codes(diagnostics))

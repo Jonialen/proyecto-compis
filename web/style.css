@@ -611,7 +611,7 @@ body.uwu-mode .parse-table .th-section {
 /* ═══════════════════════════════════════════════════════════════
    AUTOMATON PANEL
    ═══════════════════════════════════════════════════════════════ */
-#rp-automaton {
+#rp-automaton.active {
   display: flex;
   flex-direction: column;
   align-items: center;

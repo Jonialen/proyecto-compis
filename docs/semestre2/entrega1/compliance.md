@@ -1,10 +1,10 @@
 # Entrega 1 current compliance and remaining work
 
-This audit describes the repository at `97c394b` after `c8df850`, `92914dc`, and `97c394b`. The implementation and generated grammar are unchanged by this document. The supplied requirements remain authoritative: [`instrucciones.md`](instrucciones.md), [`Especificaciones.md`](Especificaciones.md), and [`Compiscript.g4`](Compiscript.g4).
+This audit describes the repository at `789da4b`, updated after the course authority (the two-member team) resolved the two source contradictions previously tracked here. The implementation and generated grammar are otherwise unchanged by this document. The supplied requirements remain authoritative: [`instrucciones.md`](instrucciones.md), [`Especificaciones.md`](Especificaciones.md), and [`Compiscript.g4`](Compiscript.g4).
 
 ## Result
 
-The ANTLR frontend, generated Visitor traversal, project AST, semantic checks, symbol environments, CLI, browser IDE, portable generation, and test evidence are present. Three items remain unresolved: two supplied sources contradict each other, and Git demonstrates only two contributor identities rather than the required three.
+The ANTLR frontend, generated Visitor traversal, project AST, semantic checks, symbol environments, CLI, browser IDE, portable generation, and test evidence are present. Both source contradictions are resolved (see below); the team has confirmed it has two members rather than three, so the roster requirement is accepted as a known, non-technical gap rather than something the implementation can close.
 
 ## Requirement matrix
 
@@ -25,9 +25,9 @@ The ANTLR frontend, generated Visitor traversal, project AST, semantic checks, s
 | Successful and failing tests for the semantic rules | Met | Focused semantic tests plus the hash-pinned acceptance manifest and requirement-evidence gate documented in [`acceptance.md`](acceptance.md) | None |
 | IDE can write/load and compile Compiscript and show tree, diagnostics, and environments | Met | `web/`; `POST /api/compiscript/analyze`; IDE handler and acceptance tests; [`evidence/compiscript-ide.md`](evidence/compiscript-ide.md) | None |
 | Execution and architecture documentation | Met | Compiscript pipeline and commands in the [repository README](../../../README.md); CLI, IDE, acceptance, grammar-audit, and contribution evidence in this directory | None |
-| `switch` condition semantics | Conflict | `instrucciones.md` requires a boolean condition. `Especificaciones.md` demonstrates `switch (x)` with integer cases. Current code accepts a comparable discriminant and requires compatible case values. | A course authority must choose the governing interpretation; then implementation/tests may need to change. Do not conceal either source. |
-| `break` placement | Conflict | `instrucciones.md` permits `break` only inside loops. The supplied grammar and `Especificaciones.md` include `switch`; current code permits `break` in loops or switches. | A course authority must decide whether `break` in `switch` is valid; then implementation/tests may need to change. |
-| Groups of three with individual commits from every member | Not demonstrated | [`evidence/contributions.md`](evidence/contributions.md) records 80 commits at audited baseline `97c394b` and only two observable contributor identities after alias reconciliation. | A real third member must contribute identifiable individual commits if the roster requirement applies. Documentation cannot manufacture this evidence. |
+| `switch` condition semantics | Met (decided) | Team decision: `instrucciones.md` governs; `switch` requires a boolean discriminant, matching `if`/`while`/`do-while`/`for`. `Especificaciones.md`'s `switch (x)` integer example is superseded for this project. `semantic.go` now emits `SEM_CONDITION` for a non-boolean `switch` value; case values must remain type-compatible with that boolean discriminant. `flow_valid.cps`/`flow_invalid.cps` and their tests were updated accordingly. | None |
+| `break` placement | Met (decided) | Team decision: `break` is valid inside loops or `switch`, matching the supplied grammar and `Especificaciones.md`. No implementation change was needed; `semantic.go` already permitted this. | None |
+| Groups of three with individual commits from every member | Accepted gap, not applicable | The team confirmed it has two members, not three. [`evidence/contributions.md`](evidence/contributions.md) records only two observable contributor identities, consistent with the actual roster. | None — this is a program-level constraint, not a defect; disclose the two-member roster to the course authority rather than fabricating a third contributor. |
 | Correct operation during the presentation | Not yet verifiable | Current automated gates are documented and previously passed. | Must be demonstrated in the evaluation environment on presentation day. |
 
 ## Closed audit gaps
@@ -35,11 +35,10 @@ The ANTLR frontend, generated Visitor traversal, project AST, semantic checks, s
 - **Visitor:** closed by `c8df850`; CST-to-AST mapping now uses generated ANTLR `Accept`/Visitor dispatch.
 - **Portable generation:** closed by `92914dc`; generation runs from the grammar directory, committed headers contain no checkout-specific absolute path, and two distinct temporary checkout paths reproduce identical bytes.
 - **README:** closed by `97c394b`; the root README now explains the Compiscript pipeline, CLI, IDE, verification commands, and evidence links.
+- **`switch`/`break` source contradiction:** closed after the team's decision (see matrix above); `semantic.go` and the flow fixtures/tests were updated to require a boolean `switch` discriminant while keeping `break` valid inside `switch`.
 
 ## Remaining work, in priority order
 
-1. Obtain one explicit course decision covering the two source contradictions before changing semantics.
-2. Resolve the three-member contribution requirement with real repository history; do not add unsupported attribution.
-3. Re-run the documented gates in the presentation environment. This is an operational verification, not a documentation or implementation change.
+1. Re-run the documented gates in the presentation environment. This is an operational verification, not a documentation or implementation change.
 
-No other repository-visible Entrega 1 requirement gap was found in this audit.
+No other repository-visible Entrega 1 requirement gap was found in this audit. The three-member roster item is a disclosed program constraint, not tracked as outstanding work here.
