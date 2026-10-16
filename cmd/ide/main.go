@@ -170,11 +170,12 @@ type methodResult struct {
 }
 
 type processResponse struct {
-	Tokens        []tokenInfo              `json:"tokens"`
-	LexicalErrors []string                 `json:"lexical_errors"`
-	Methods       map[string]*methodResult `json:"methods"`
-	GrammarError  string                   `json:"grammar_error,omitempty"`
-	Success       bool                     `json:"success"`
+	Tokens           []tokenInfo              `json:"tokens"`
+	LexicalErrors    []string                 `json:"lexical_errors"`
+	Methods          map[string]*methodResult `json:"methods"`
+	GrammarError     string                   `json:"grammar_error,omitempty"`
+	GrammarErrorKind string                   `json:"grammar_error_kind,omitempty"`
+	Success          bool                     `json:"success"`
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -210,6 +211,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request) {
 	spec, err := yapar.ParseFile(yalpPath)
 	if err != nil {
 		resp.GrammarError = err.Error()
+		resp.GrammarErrorKind = "spec"
 		json.NewEncoder(w).Encode(resp)
 		return
 	}
@@ -217,6 +219,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request) {
 	grammar, err := yapar.BuildGrammar(spec)
 	if err != nil {
 		resp.GrammarError = err.Error()
+		resp.GrammarErrorKind = "grammar"
 		json.NewEncoder(w).Encode(resp)
 		return
 	}
@@ -228,9 +231,11 @@ func handleProcess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Tokenize input when both .yal and input are provided
+	// A lexer requests analysis, including empty input and streams of skipped tokens.
+	// Without a lexer, preserve the table-only workflow.
 	var tokens []shared.Token
-	if strings.TrimSpace(req.YalexContent) != "" && strings.TrimSpace(req.InputContent) != "" {
+	analyzeInput := strings.TrimSpace(req.YalexContent) != ""
+	if analyzeInput {
 		tokens, resp.LexicalErrors, err = tokenize(req.YalexContent, req.InputContent)
 		if err != nil {
 			resp.GrammarError = err.Error()
@@ -262,7 +267,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request) {
 			result.AutomatonDOT = dot
 		}
 
-		if len(tokens) > 0 {
+		if analyzeInput {
 			parser, buildErr := yapar.BuildParser(grammar, ff, method)
 			if buildErr != nil {
 				result.Error = buildErr.Error()

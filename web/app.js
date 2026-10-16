@@ -428,8 +428,10 @@ async function runAnalysis() {
     state.lastResponse = data;
     displayResults(data);
 
-    const hasAny = data.success;
-    setStatus(hasAny ? '✓ Analysis complete' : '⚠ Analysis completed with errors', hasAny ? 'ok' : 'error');
+    const hasErrors = !data.success || !!data.grammar_error ||
+      (data.lexical_errors || []).length > 0 ||
+      Object.values(data.methods || {}).some(result => result.error || result.accepted === false);
+    setStatus(hasErrors ? '⚠ Analysis completed with errors' : '✓ Analysis complete', hasErrors ? 'error' : 'ok');
   } catch (err) {
     setStatus('Error: ' + err.message, 'error');
     flashPanel('rp-summary', renderErrorBox(err.message));
@@ -460,7 +462,9 @@ function renderSummary(data) {
   let html = '';
 
   if (data.grammar_error) {
-    html += renderErrorBox('Grammar / Spec Error\n\n' + data.grammar_error);
+    const heading = data.grammar_error_kind === 'spec' ? 'Specification Error' :
+      data.grammar_error_kind === 'grammar' ? 'Grammar Error' : 'Grammar / Spec Error';
+    html += renderErrorBox(heading + '\n\n' + data.grammar_error);
   }
 
   if (data.lexical_errors && data.lexical_errors.length > 0) {

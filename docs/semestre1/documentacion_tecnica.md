@@ -429,6 +429,30 @@ NO hay que documentar esto como “standalone multi-método completo”, porque 
 - La **IDE/interfaz gráfica** ya existe como aplicación web local.
 - La experiencia visual depende de `cmd/ide` y de los assets estáticos en `web/`.
 
+### Contrato de ejecución de la IDE YAPar
+
+En `POST /api/process`, cargar `yalex_content` solicita tokenización y parsing,
+incluso cuando `input_content` está vacío o solo contiene lexemas omitidos por
+el lexer. Cada método que logra construirse devuelve `accepted: true` o `false`
+según su gramática; un error de construcción conserva `accepted: null` y `error`.
+Sin lexer, se conserva la construcción de tablas sin parsing (`accepted: null`).
+
+Los errores conservan `grammar_error` y agregan el campo opcional
+`grammar_error_kind`: `spec` para el formato `.yalp` y `grammar` para la
+validación del modelo. La interfaz distingue ambos y mantiene un encabezado
+genérico para respuestas anteriores sin categoría.
+
+`success` conserva su significado de procesamiento de la solicitud; no implica
+que todos los métodos acepten la entrada. El estado visual también comprueba
+errores léxicos, errores por método y resultados rechazados.
+
+Pruebas de API y comportamiento JavaScript (estas últimas requieren Node.js):
+
+```sh
+go test ./cmd/ide -run '^TestYAPar|TestLegacyProcessRouteStillWorks' -count=1
+node --test web/app.test.cjs
+```
+
 ## 12. Verificación estática usada para esta documentación
 
 Se verificó contra código fuente, no contra supuestos históricos.
