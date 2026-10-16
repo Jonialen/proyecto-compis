@@ -25,6 +25,28 @@ func (e *SpecError) Error() string {
 	return fmt.Sprintf("yapar spec: %s", e.Message)
 }
 
+// GrammarError identifies validation failures while building the formal grammar.
+// Its message and SpecError unwrap preserve the legacy diagnostic contract.
+// Callers that need the precise phase should check for GrammarError first.
+type GrammarError struct {
+	Message string
+}
+
+func (e *GrammarError) Error() string {
+	if e == nil {
+		return "<nil>"
+	}
+	return e.Unwrap().Error()
+}
+
+// Unwrap retains errors.As compatibility with existing SpecError consumers.
+func (e *GrammarError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return &SpecError{Message: e.Message}
+}
+
 // GrammarConflictError representa conflictos ACTION/GOTO detectados en la tabla.
 type GrammarConflictError struct {
 	State   int

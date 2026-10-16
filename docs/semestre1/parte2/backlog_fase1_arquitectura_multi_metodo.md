@@ -1,5 +1,28 @@
 # Backlog técnico detallado — Fase 1: arquitectura común multi-método
 
+## Estado de la base existente
+
+Los contratos multimétodo, los adaptadores SLR/LL1/LALR, el builder, las vistas
+de tablas, la visualización y la selección desde CLI ya están implementados.
+Los fragmentos de este documento son propuestas históricas, no interfaces que
+deban duplicarse ni motivos para deshabilitar métodos existentes.
+
+La tarea **1.2.2** incorpora `GrammarError` para identificar fallos al construir
+la gramática mediante `errors.As`, incluso si otro error los envuelve. Los
+errores de formato `.yalp` mantienen `SpecError`; los conflictos y errores de
+ejecución conservan sus tipos propios. Para compatibilidad, `GrammarError`
+mantiene los mensajes anteriores y permite también `errors.As` a `SpecError`.
+Quien necesite distinguir ambas fases debe comprobar primero `GrammarError`.
+
+Pruebas de esta separación:
+
+```sh
+go test ./internal/yapar -run '^(TestBuildGrammarValidationErrors|TestParseFormatErrorIsNotGrammarError|TestGrammarErrorFormatting)$' -count=1
+```
+
+Este estado no implica que se hayan verificado todos los criterios del backlog
+extendido ni los entregables académicos.
+
 Esta fase prepara el backend para soportar de forma limpia y comparable:
 
 - **LL(1)**

@@ -1,6 +1,8 @@
 package yapar
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -157,9 +159,25 @@ start : ε ;
 				t.Fatalf("Parse() error = %v", err)
 			}
 
-			_, err = BuildGrammar(spec)
+			g, err := BuildGrammar(spec)
 			if err == nil {
 				t.Fatal("BuildGrammar() error = nil, want error")
+			}
+			if g != nil {
+				t.Fatalf("BuildGrammar() = %#v, want no partial grammar", g)
+			}
+			wrapped := fmt.Errorf("build grammar: %w", err)
+			var grammarErr *GrammarError
+			if !errors.As(wrapped, &grammarErr) {
+				t.Fatalf("error type = %T, want *GrammarError through wrapping", err)
+			}
+			// Preserve the legacy classification for existing callers.
+			var specErr *SpecError
+			if !errors.As(wrapped, &specErr) {
+				t.Fatalf("error type = %T, want legacy *SpecError compatibility", err)
+			}
+			if got, want := err.Error(), "yapar spec: "+tt.wantMessage; got != want {
+				t.Fatalf("error = %q, want unchanged message %q", got, want)
 			}
 			if !strings.Contains(err.Error(), tt.wantMessage) {
 				t.Fatalf("error = %q, want message containing %q", err.Error(), tt.wantMessage)

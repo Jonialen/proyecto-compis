@@ -41,13 +41,13 @@ type Grammar struct {
 // BuildGrammar convierte una especificación cruda en una gramática consistente.
 func BuildGrammar(spec *YaparSpec) (*Grammar, error) {
 	if spec == nil {
-		return nil, &SpecError{Message: "nil spec"}
+		return nil, &GrammarError{Message: "nil spec"}
 	}
 	if len(spec.Productions) == 0 {
-		return nil, &SpecError{Message: "no productions declared"}
+		return nil, &GrammarError{Message: "no productions declared"}
 	}
 	if spec.StartSymbol == "" {
-		return nil, &SpecError{Message: "missing start symbol"}
+		return nil, &GrammarError{Message: "missing start symbol"}
 	}
 
 	nonTerminals, err := collectNonTerminals(spec)
@@ -55,7 +55,7 @@ func BuildGrammar(spec *YaparSpec) (*Grammar, error) {
 		return nil, err
 	}
 	if !nonTerminals[spec.StartSymbol] {
-		return nil, &SpecError{Message: fmt.Sprintf("start symbol %q does not have a production", spec.StartSymbol)}
+		return nil, &GrammarError{Message: fmt.Sprintf("start symbol %q does not have a production", spec.StartSymbol)}
 	}
 
 	terminals, err := collectTerminals(spec, nonTerminals)
@@ -86,10 +86,10 @@ func BuildGrammar(spec *YaparSpec) (*Grammar, error) {
 	nextID := 1
 	for _, raw := range spec.Productions {
 		if !g.NonTerminals[raw.Head] {
-			return nil, &SpecError{Message: fmt.Sprintf("production head %q is not a declared non-terminal", raw.Head)}
+			return nil, &GrammarError{Message: fmt.Sprintf("production head %q is not a declared non-terminal", raw.Head)}
 		}
 		if len(raw.Bodies) == 0 {
-			return nil, &SpecError{Message: fmt.Sprintf("production %q must declare at least one alternative", raw.Head)}
+			return nil, &GrammarError{Message: fmt.Sprintf("production %q must declare at least one alternative", raw.Head)}
 		}
 		for _, body := range raw.Bodies {
 			production := Production{ID: nextID, Head: raw.Head}
@@ -150,10 +150,10 @@ func collectNonTerminals(spec *YaparSpec) (map[string]bool, error) {
 	}
 	for _, production := range spec.Productions {
 		if production.Head == "" {
-			return nil, &SpecError{Message: "production head cannot be empty"}
+			return nil, &GrammarError{Message: "production head cannot be empty"}
 		}
 		if isReservedGrammarName(production.Head) {
-			return nil, &SpecError{Message: fmt.Sprintf("symbol %q is reserved by the grammar model", production.Head)}
+			return nil, &GrammarError{Message: fmt.Sprintf("symbol %q is reserved by the grammar model", production.Head)}
 		}
 		headSet[production.Head] = true
 	}
@@ -171,20 +171,20 @@ func augmentedName(start string, reserved map[string]bool) string {
 func resolveSymbol(name string, terminals, nonTerminals, ignoreSet map[string]bool) (bool, error) {
 	switch {
 	case name == "":
-		return false, &SpecError{Message: "empty symbol in production body"}
+		return false, &GrammarError{Message: "empty symbol in production body"}
 	case name == Epsilon:
-		return false, &SpecError{Message: "explicit epsilon symbol is not allowed; use an empty alternative instead"}
+		return false, &GrammarError{Message: "explicit epsilon symbol is not allowed; use an empty alternative instead"}
 	case name == EndMarker:
-		return false, &SpecError{Message: fmt.Sprintf("symbol %q is reserved for end of input", EndMarker)}
+		return false, &GrammarError{Message: fmt.Sprintf("symbol %q is reserved for end of input", EndMarker)}
 	case terminals[name]:
 		if ignoreSet[name] {
-			return false, &SpecError{Message: fmt.Sprintf("ignored token %q cannot appear in grammar productions", name)}
+			return false, &GrammarError{Message: fmt.Sprintf("ignored token %q cannot appear in grammar productions", name)}
 		}
 		return true, nil
 	case nonTerminals[name]:
 		return false, nil
 	default:
-		return false, &SpecError{Message: fmt.Sprintf("symbol %q is neither token nor production head", name)}
+		return false, &GrammarError{Message: fmt.Sprintf("symbol %q is neither token nor production head", name)}
 	}
 }
 
@@ -192,16 +192,16 @@ func collectTerminals(spec *YaparSpec, nonTerminals map[string]bool) (map[string
 	terminals := make(map[string]bool, len(spec.Tokens))
 	for _, tok := range spec.Tokens {
 		if tok == "" {
-			return nil, &SpecError{Message: "token name cannot be empty"}
+			return nil, &GrammarError{Message: "token name cannot be empty"}
 		}
 		if isReservedGrammarName(tok) {
-			return nil, &SpecError{Message: fmt.Sprintf("symbol %q is reserved by the grammar model", tok)}
+			return nil, &GrammarError{Message: fmt.Sprintf("symbol %q is reserved by the grammar model", tok)}
 		}
 		if nonTerminals[tok] {
-			return nil, &SpecError{Message: fmt.Sprintf("symbol %q cannot be both token and non-terminal", tok)}
+			return nil, &GrammarError{Message: fmt.Sprintf("symbol %q cannot be both token and non-terminal", tok)}
 		}
 		if terminals[tok] {
-			return nil, &SpecError{Message: fmt.Sprintf("token %q declared more than once", tok)}
+			return nil, &GrammarError{Message: fmt.Sprintf("token %q declared more than once", tok)}
 		}
 		terminals[tok] = true
 	}
@@ -212,7 +212,7 @@ func validateIgnoreTokens(spec *YaparSpec, terminals map[string]bool) (map[strin
 	ignoreSet := cloneBoolMap(spec.IgnoreTokens)
 	for tok := range ignoreSet {
 		if !terminals[tok] {
-			return nil, &SpecError{Message: fmt.Sprintf("ignored token %q must be declared with %%token", tok)}
+			return nil, &GrammarError{Message: fmt.Sprintf("ignored token %q must be declared with %%token", tok)}
 		}
 	}
 	return ignoreSet, nil
