@@ -66,7 +66,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
+	"strings"
 )
 
 type Token struct {
@@ -103,16 +105,14 @@ var predictiveTable = map[string]map[string]int{
 
 func main() {
 	tokensPath := flag.String("tokens", "", "path to a JSON file containing []Token")
+	lexerPath := flag.String("lexer", "", "path to a trusted standalone lexer executable (requires -src)")
+	sourcePath := flag.String("src", "", "source file to tokenize with -lexer")
 	flag.Parse()
-	if *tokensPath == "" {
+	if *tokensPath == "" && *lexerPath == "" && *sourcePath == "" {
 		fmt.Fprintln(os.Stderr, "Usage: generated_parser -tokens <tokens.json>")
 		os.Exit(1)
 	}
-	data, err := os.ReadFile(*tokensPath)
-	var tokens []Token
-	if err == nil {
-		err = json.Unmarshal(data, &tokens)
-	}
+	tokens, err := loadStandaloneInput(*tokensPath, *lexerPath, *sourcePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading tokens: %v\n", err)
 		os.Exit(1)
@@ -122,6 +122,18 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("[+] Input accepted by parser for %s\n", startSymbol)
+}
+
+func loadTokens(path string) ([]Token, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var tokens []Token
+	if err := json.Unmarshal(data, &tokens); err != nil {
+		return nil, err
+	}
+	return tokens, nil
 }
 
 func parseTokens(tokens []Token) error {
@@ -196,4 +208,4 @@ func syntaxError(token Token, endLine int, expected []string) error {
 	}
 	return fmt.Errorf("syntax error at line %d: got %q (%q), expected %v", line, token.Type, token.Lexeme, expected)
 }
-`
+` + standaloneInputTemplate

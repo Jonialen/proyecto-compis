@@ -266,6 +266,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 )
@@ -370,14 +371,16 @@ var gotoTable = map[int]map[string]int{
 
 func main() {
 	tokensPath := flag.String("tokens", "", "path to a JSON file containing []Token")
+	lexerPath := flag.String("lexer", "", "path to a trusted standalone lexer executable (requires -src)")
+	sourcePath := flag.String("src", "", "source file to tokenize with -lexer")
 	flag.Parse()
 
-	if *tokensPath == "" {
+	if *tokensPath == "" && *lexerPath == "" && *sourcePath == "" {
 		fmt.Fprintln(os.Stderr, "Usage: generated_parser -tokens <tokens.json>")
 		os.Exit(1)
 	}
 
-	tokens, err := loadTokens(*tokensPath)
+	tokens, err := loadStandaloneInput(*tokensPath, *lexerPath, *sourcePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading tokens: %v\n", err)
 		os.Exit(1)
@@ -548,4 +551,4 @@ func syntaxErrorLine(lookahead Token, original []Token) int {
 	}
 	return endOfInputLine(original)
 }
-`
+` + standaloneInputTemplate

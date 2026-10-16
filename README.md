@@ -213,6 +213,13 @@ Formato esperado:
 ]
 ```
 
+## Integración lexer-parser standalone
+
+Los parsers generados también pueden leer fuente mediante
+`-lexer <ejecutable> -src <archivo>`, sin preparar JSON manualmente. El lexer
+generado ofrece `-format json`; su salida de texto sigue siendo el valor
+predeterminado. Véase la [integración reproducible](docs/semestre1/parte2/guia_demos_yapar.md#integración-lexer-parser-standalone).
+
 ## Limitaciones conocidas
 
 - `lr0` y `lr1` aparecen en la comparación y en `-method`, pero hoy son placeholders no implementados.

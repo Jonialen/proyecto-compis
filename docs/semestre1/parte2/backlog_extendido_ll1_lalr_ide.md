@@ -33,6 +33,13 @@ incluir ese marcador reservado; cada runtime lo agrega internamente.
 `TestParsersRejectSuppliedEndMarker` y las pruebas de binarios generados
 verifican rechazo, ubicación y preservación de la entrada.
 
+La integración de lexer y parsers standalone ya permite fuente directa con
+`-lexer <ejecutable> -src <fuente>` en LL1, SLR y LALR. El lexer generado agrega
+un modo JSON opcional; los modos anteriores de texto y `-tokens` se mantienen.
+`TestStandaloneLexerParserBridge` verifica los binarios y sus fallos. La
+[guía](guia_demos_yapar.md#integración-lexer-parser-standalone) documenta el
+protocolo y la necesidad de usar un ejecutable explícito de confianza.
+
 Estos estados se limitan a las pruebas y escenarios indicados; no certifican
 todas las gramáticas ni eliminan las limitaciones de standalone y conflictos.
 
@@ -278,6 +285,6 @@ Proyecto listo para evaluación.
 
 Ejecutar la matriz de la [guía de demos](guia_demos_yapar.md) antes de cambiar
 algoritmos o la IDE. No reconstruir LL1, LALR ni los contratos comunes por
-aparecer en las listas históricas. La interoperabilidad automática lexer-parser, una política
+aparecer en las listas históricas. Un ejecutable combinado lexer-parser, una política
 general de precedencia y la verificación de entregables externos requieren
 trabajo separado; no forman parte de este cierre de demos.

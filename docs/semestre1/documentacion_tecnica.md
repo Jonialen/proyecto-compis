@@ -69,7 +69,7 @@ Hoy el estado real es este:
 - Soporte standalone garantizado para **todos** los métodos disponibles en la CLI.
 - Resolución general por precedencia/asociatividad para conflictos.
 - AST semántico o acciones semánticas embebidas en `.yalp`.
-- Interoperabilidad automática completa entre lexer standalone generado y parser standalone generado; el parser standalone consume tokens vía JSON.
+- Generación de un único ejecutable que embeba lexer y parser; la integración standalone actual usa dos binarios explícitos.
 
 ## 3. Mapa rápido del repositorio
 
@@ -440,7 +440,7 @@ NO hay que documentar esto como “standalone multi-método completo”, porque 
 - `lr0` y `lr1` siguen como **placeholders compare-only**.
 - No existe resolución general de conflictos por precedencia/asociatividad.
 - El standalone del parser no cubre uniformemente todos los métodos visibles en CLI.
-- El parser standalone requiere un adaptador externo si se quiere conectar con otro lexer por JSON.
+- La integración standalone usa `-lexer <ejecutable> -src <fuente>`; el ejecutable indicado debe implementar `-src` y `-format json`. No se genera un binario combinado.
 
 ### De producto
 

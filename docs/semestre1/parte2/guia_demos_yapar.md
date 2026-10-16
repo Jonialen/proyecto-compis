@@ -110,8 +110,9 @@ go build -o "$WORK/parser" "$WORK/parser.go"
 La entrada válida termina con código 0 e imprime `Input accepted`. La inválida
 termina con código 1 y escribe un error sintáctico de línea 1 en stderr. Ese
 rechazo es esperado. El binario es autónomo: no importa paquetes del proyecto
-ni lee la gramática o el lexer al ejecutarse. Sigue consumiendo tokens JSON;
-no se agrega un adaptador automático para la salida del lexer standalone.
+ni lee la gramática al ejecutarse. El modo `-tokens` sigue consumiendo JSON;
+para analizar fuente se puede usar la integración de dos ejecutables descrita
+más abajo.
 
 La prueba reproduce generación, compilación, aceptación y rechazo, comprueba
 que dos generaciones producen los mismos bytes y mantiene el rechazo de
@@ -152,6 +153,63 @@ de EOF, líneas sin ubicación y tokens sobrantes:
 
 ```sh
 go test ./internal/generator -run '^TestLL1StandaloneDiagnosticParity$' -count=1
+```
+
+## Integración lexer-parser standalone
+
+Los tres métodos permiten analizar archivos fuente sin preparar tokens a mano.
+Se generan y compilan dos programas independientes; el parser invoca el lexer
+indicado explícitamente y consume su salida JSON por memoria, sin crear un
+archivo intermedio.
+
+```sh
+D=testdata/yapar/demos
+WORK=$(mktemp -d)
+go run ./cmd/yalex -yal testdata/yapar/arithmetic.yal -out "$WORK/lexer.go"
+go run ./cmd/yapar -yalp "$D/nullable.yalp" -method ll1 -out "$WORK/parser.go"
+go build -o "$WORK/lexer" "$WORK/lexer.go"
+go build -o "$WORK/parser" "$WORK/parser.go"
+"$WORK/parser" -lexer "$WORK/lexer" -src "$D/valid.txt"
+"$WORK/parser" -lexer "$WORK/lexer" -src "$D/empty.txt"
+"$WORK/parser" -lexer "$WORK/lexer" -src "$D/invalid.txt"
+```
+
+Los dos primeros análisis terminan con código 0: `nullable.yalp` acepta `7`
+y vacío. El tercero termina con código 1 por el token `PLUS` inesperado.
+Repetir la generación con `-method slr` o `-method lalr` para los otros métodos.
+Con `required.yalp`, la misma entrada vacía se rechaza.
+
+### Modos y protocolo
+
+| Programa generado | Uso | Resultado |
+|---|---|---|
+| Lexer | `-src <fuente>` o `-src <fuente> -format text` | Salida legible anterior, sin cambios |
+| Lexer | `-src <fuente> -format json` | Array de tokens con `type`, `lexeme`, `line`; `[]` si no hay tokens |
+| Parser | `-tokens <archivo.json>` | Modo anterior, sin ejecución de otro programa |
+| Parser | `-lexer <ejecutable> -src <fuente>` | Tokenización y análisis de fuente |
+
+Los flags `-lexer` y `-src` deben aparecer juntos y no se pueden combinar con
+`-tokens`, incluso si uno de los valores explícitos está vacío. `-format`
+pertenece al **lexer generado**, no a la CLI generadora
+`cmd/yalex`. El parser solicita `-format json` automáticamente.
+
+Si falla la tokenización, el lexer JSON escribe diagnósticos en stderr, termina
+con código distinto de cero y no emite tokens parciales. El parser rechaza ese
+resultado sin anunciar aceptación. También rechaza un ejecutable inexistente,
+JSON inválido y tokens de tipo `$` suministrados por el lexer.
+
+Usar solo ejecutables de confianza: `-lexer` ejecuta ese programa localmente.
+No es una cadena de comandos ni se interpreta mediante una shell; las rutas
+con espacios se pasan como argumentos. No hay descubrimiento automático de
+ejecutables ni compilación en tiempo de análisis.
+
+Regenerar **ambos** programas para obtener los nuevos flags; los binarios
+anteriores conservan su comportamiento. La prueba de integración compila
+lexer y parsers y cubre los tres métodos, errores léxicos/sintácticos, vacío,
+rutas con espacios, modos incompatibles y fallos del protocolo:
+
+```sh
+go test ./cmd/yapar -run '^TestStandaloneLexerParserBridge$' -count=1
 ```
 
 ## Evidencia y límites
