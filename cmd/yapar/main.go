@@ -118,12 +118,19 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 
 	if cfg.outFile != "" {
-		if cfg.method == yapar.MethodLL1 {
-			return fmt.Errorf("standalone parser generation is not supported for method %s", cfg.method)
-		}
 		fmt.Fprintf(logOut, "[*] Generating standalone parser: %s\n", cfg.outFile)
-		if err := generator.GenerateParserSourceFromTableView(cfg.outFile, grammar, table); err != nil {
-			return fmt.Errorf("generate standalone parser: %w", err)
+		var generationErr error
+		if cfg.method == yapar.MethodLL1 {
+			predictive, err := yapar.BuildLL1Table(grammar, ff)
+			if err != nil {
+				return fmt.Errorf("build LL1 table for generation: %w", err)
+			}
+			generationErr = generator.GenerateLL1ParserSource(cfg.outFile, grammar, predictive)
+		} else {
+			generationErr = generator.GenerateParserSourceFromTableView(cfg.outFile, grammar, table)
+		}
+		if generationErr != nil {
+			return fmt.Errorf("generate standalone parser: %w", generationErr)
 		}
 		fmt.Fprintln(logOut, "[+] Standalone parser generated successfully.")
 	}
@@ -153,7 +160,7 @@ func parseFlags(args []string, stderr io.Writer) (*config, error) {
 	cfg := &config{}
 	fs.StringVar(&cfg.yalpFile, "yalp", "", "path to the .yalp parser specification file")
 	fs.StringVar(&cfg.yalFile, "yal", "", "path to the .yal lexer specification file")
-	fs.StringVar(&cfg.outFile, "out", "", "path to the output .go file for the generated parser (slr or lalr)")
+	fs.StringVar(&cfg.outFile, "out", "", "path to the output .go file for the generated parser (ll1, slr or lalr)")
 	fs.StringVar(&cfg.srcFile, "src", "", "path to the source file to tokenize and parse")
 	method := string(yapar.MethodSLR)
 	format := string(outputFormatNone)

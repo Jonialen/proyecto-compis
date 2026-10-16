@@ -25,7 +25,7 @@ Hoy el estado real es este:
 - **La visualización/exportación es común**: tabla en `text`, tabla en `json` y **DOT del autómata cuando aplica**.
 - **Existe una CLI comparativa** (`-compare`) para contrastar `ll1`, `lr0`, `slr`, `lr1`, `lalr`.
 - **`lr0` y `lr1` NO están implementados como parsers ejecutables**: son placeholders explícitos para comparación/reporting.
-- **El generador standalone del parser admite SLR y LALR mediante el mismo runtime LR**; LL1 no está soportado en este flujo.
+- **El generador standalone del parser admite LL1, SLR y LALR**: LL1 usa un runtime predictivo propio; SLR y LALR comparten el runtime LR.
 
 ## 2. Alcance actual
 
@@ -136,7 +136,8 @@ Piezas clave:
 | `TableView` | Vista común para inspección, exportación y generación |
 | `internal/yapar/visualizer.go` | Render común a texto/JSON/DOT |
 | `internal/yapar/comparison.go` | Reporte comparativo entre métodos |
-| `internal/generator/parser_gen.go` | Generador standalone a partir de `TableView` |
+| `internal/generator/parser_gen.go` | Generador standalone LR a partir de `TableView` |
+| `internal/generator/ll1_parser_gen.go` | Generador standalone predictivo a partir de `LL1Table` |
 
 ### 4.4 Por qué “table-centric” importa
 
@@ -409,14 +410,16 @@ Ejemplo:
 
 Aunque el generador recibe una `TableView`, la CLI actual NO ofrece soporte standalone completo para todos los métodos. En particular:
 
-- `ll1` con `-out` devuelve error explícito.
+- `ll1` con `-out` serializa una tabla `LL1Table` con un runtime de pila predictiva; conserva `IGNORE`, epsilon y diagnósticos con línea y tokens esperados.
 - `slr` y `lalr` con `-out` serializan sus tablas ACTION/GOTO mediante el mismo generador y runtime LR.
 - `lr0` y `lr1` siguen sin backend ejecutable; no se agrega soporte para ellos.
 
-`TestRunGeneratesStandaloneLRParsers` comprueba generación reproducible,
+`TestRunGeneratesStandaloneParsers` comprueba generación reproducible,
 compilación y aceptación/rechazo del binario generado. Incluye una gramática
-LALR que SLR no admite, una gramática nullable y una regresión de SLR. La
-[guía de demos](parte2/guia_demos_yapar.md#parser-standalone-lalr) contiene los
+LALR que SLR no admite, gramáticas nullable, LL1 con recursión derecha y tokens
+ignorados, y una regresión de SLR. LL1 rechaza recursión izquierda y conflictos
+antes de escribir el archivo de salida. La
+[guía de demos](parte2/guia_demos_yapar.md#parser-standalone-ll1) contiene los
 comandos y tokens JSON necesarios.
 
 NO hay que documentar esto como “standalone multi-método completo”, porque hoy sería falso.

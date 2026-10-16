@@ -21,8 +21,11 @@ presentación, por solicitud del usuario.
 Extensión posterior al cierre de demos: `-method lalr -out` ya permite generar
 un parser standalone usando el runtime LR existente. La
 [guía de demos](guia_demos_yapar.md#parser-standalone-lalr) y
-`TestRunGeneratesStandaloneLRParsers` comprueban compilación, entradas válidas,
-rechazo y epsilon. LL1 standalone sigue pendiente; no se amplía su alcance.
+`TestRunGeneratesStandaloneParsers` comprueban compilación, entradas válidas,
+rechazo y epsilon. LL1 también permite `-out` mediante una plantilla predictiva
+independiente, con pruebas de tokens ignorados, recursión derecha, JSON inválido
+y preservación de la generación LR anterior. Véase el
+[ejemplo LL1](guia_demos_yapar.md#parser-standalone-ll1).
 
 Estos estados se limitan a las pruebas y escenarios indicados; no certifican
 todas las gramáticas ni eliminan las limitaciones de standalone y conflictos.
@@ -269,6 +272,6 @@ Proyecto listo para evaluación.
 
 Ejecutar la matriz de la [guía de demos](guia_demos_yapar.md) antes de cambiar
 algoritmos o la IDE. No reconstruir LL1, LALR ni los contratos comunes por
-aparecer en las listas históricas. El standalone LL1, una política
+aparecer en las listas históricas. La interoperabilidad automática lexer-parser, una política
 general de precedencia y la verificación de entregables externos requieren
 trabajo separado; no forman parte de este cierre de demos.

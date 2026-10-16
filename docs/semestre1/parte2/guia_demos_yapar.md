@@ -114,11 +114,44 @@ ni lee la gramática o el lexer al ejecutarse. Sigue consumiendo tokens JSON;
 no se agrega un adaptador automático para la salida del lexer standalone.
 
 La prueba reproduce generación, compilación, aceptación y rechazo, comprueba
-que dos generaciones producen los mismos bytes y mantiene las restricciones
-de LL1 y `-compare`:
+que dos generaciones producen los mismos bytes y mantiene el rechazo de
+gramáticas LL1 recursivas por la izquierda y de `-compare` con `-out`:
 
 ```sh
-go test ./cmd/yapar -run '^(TestRunGeneratesStandaloneLRParsers|TestStandaloneRejectionsPreserveDestination|TestRunRejectsLL1StandaloneGeneration|TestRunCompareRejectsStandaloneGeneration)$' -count=1
+go test ./cmd/yapar -run '^(TestRunGeneratesStandaloneParsers|TestStandaloneRejectionsPreserveDestination|TestRunRejectsLeftRecursiveLL1StandaloneGeneration|TestRunCompareRejectsStandaloneGeneration)$' -count=1
+```
+
+## Parser standalone LL1
+
+LL1 genera un runtime predictivo separado. La gramática `predictive.yalp`
+reconoce un entero seguido de cero o más sumas; usa una producción vacía y
+recursión derecha. El JSON válido incluye un token `WS` para comprobar que
+el parser aplica `IGNORE WS`.
+
+```sh
+D=testdata/yapar/demos
+WORK=$(mktemp -d)
+go run ./cmd/yapar -yalp "$D/predictive.yalp" -method ll1 -out "$WORK/parser.go"
+go build -o "$WORK/parser" "$WORK/parser.go"
+"$WORK/parser" -tokens "$D/predictive_valid.tokens.json"
+"$WORK/parser" -tokens "$D/predictive_invalid.tokens.json"
+```
+
+La entrada válida termina con código 0. La inválida (`7 +`) termina con código
+1 y un diagnóstico que espera `INT` en la línea 1. Los tokens extra y el JSON
+malformado también se rechazan. Para aceptar una entrada completamente vacía,
+generar con `nullable.yalp` y usar `[]` como archivo de tokens JSON.
+
+La CLI reutiliza `BuildLL1Table` para construir la tabla que serializa; no
+convierte acciones LR en predicciones ni transforma automáticamente gramáticas
+incompatibles. Los binarios LR anteriores conservan su plantilla y formato.
+
+La regresión de equivalencia compara stdout, stderr y código de salida con el
+parser LL1 integrado para prefijos nullable, tokens ignorados y diagnósticos
+de EOF, líneas sin ubicación y tokens sobrantes:
+
+```sh
+go test ./internal/generator -run '^TestLL1StandaloneDiagnosticParity$' -count=1
 ```
 
 ## Evidencia y límites
@@ -132,7 +165,7 @@ go test ./cmd/yapar -run '^(TestRunGeneratesStandaloneLRParsers|TestStandaloneRe
 - No se certifican todas las gramáticas, tamaños de pantalla ni una entrega
   académica completa. No se creó ni revisó un video.
 - `lr0` y `lr1` siguen como placeholders ejecutables; la generación standalone
-  desde CLI admite SLR y LALR, pero todavía no LL1.
+  desde CLI admite los tres métodos implementados: LL1, SLR y LALR.
 
 La suite global de Compiscript requiere además el JAR de ANTLR documentado en
 su configuración. Las pruebas de estas demos YAPar no lo necesitan.

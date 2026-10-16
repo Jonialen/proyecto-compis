@@ -153,14 +153,13 @@ expr : ID PLUS ID ;
 	}
 }
 
-func TestRunRejectsLL1StandaloneGeneration(t *testing.T) {
+func TestRunRejectsLeftRecursiveLL1StandaloneGeneration(t *testing.T) {
 	dir := t.TempDir()
 	yalpPath := filepath.Join(dir, "parser.yalp")
 	outPath := filepath.Join(dir, "parser.go")
 	if err := os.WriteFile(yalpPath, []byte(`%token A B
 %%
-s : A opt ;
-opt : B | ;
+s : s A | B ;
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
@@ -169,13 +168,13 @@ opt : B | ;
 	var stderr bytes.Buffer
 	err := run([]string{"-yalp", yalpPath, "-method", "ll1", "-out", outPath}, &stdout, &stderr)
 	if err == nil {
-		t.Fatal("run() error = nil, want unsupported ll1 codegen error")
+		t.Fatal("run() error = nil, want left recursion error")
 	}
-	if !strings.Contains(err.Error(), "ll1") || !strings.Contains(err.Error(), "not supported") {
-		t.Fatalf("error = %q, want ll1 not supported error", err.Error())
+	if !strings.Contains(err.Error(), "ll1 left recursion") {
+		t.Fatalf("error = %q, want LL1 left recursion error", err.Error())
 	}
 	if _, err := os.Stat(outPath); !os.IsNotExist(err) {
-		t.Fatalf("unsupported LL1 generation created output or failed unexpectedly: %v", err)
+		t.Fatalf("rejected LL1 grammar created output or failed unexpectedly: %v", err)
 	}
 }
 

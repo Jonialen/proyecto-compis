@@ -58,7 +58,7 @@ func GenerateParserSource(outputPath string, g *yapar.Grammar, table *yapar.Pars
 	return GenerateParserSourceFromTableView(outputPath, g, parserTableViewAdapter{grammar: g, table: table})
 }
 
-// GenerateParserSourceFromTableView serializa la gramática y cualquier tabla compatible con TableView.
+// GenerateParserSourceFromTableView serializa la gramática y una tabla LR compatible con TableView.
 func GenerateParserSourceFromTableView(outputPath string, g *yapar.Grammar, table yapar.TableView) error {
 	if g == nil {
 		return fmt.Errorf("generating parser source: grammar is required")
@@ -85,6 +85,14 @@ func GenerateParserSourceFromTableView(outputPath string, g *yapar.Grammar, tabl
 }
 
 func buildParserTemplateDataFromTableView(g *yapar.Grammar, table yapar.TableView) parserTemplateData {
+	data := buildParserGrammarData(g)
+	data.ActionRows = buildActionRows(table)
+	data.GotoRows = buildGotoRows(table)
+	return data
+}
+
+// buildParserGrammarData keeps grammar serialization common to both runtimes.
+func buildParserGrammarData(g *yapar.Grammar) parserTemplateData {
 	data := parserTemplateData{
 		Start:     g.Start,
 		Augmented: g.Augmented,
@@ -101,8 +109,6 @@ func buildParserTemplateDataFromTableView(g *yapar.Grammar, table yapar.TableVie
 		data.Productions = append(data.Productions, entry)
 	}
 
-	data.ActionRows = buildActionRows(table)
-	data.GotoRows = buildGotoRows(table)
 	return data
 }
 

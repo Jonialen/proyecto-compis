@@ -1,0 +1,4 @@
+[
+  { "type": "INT", "lexeme": "7", "line": 1 },
+  { "type": "PLUS", "lexeme": "+", "line": 1 }
+]

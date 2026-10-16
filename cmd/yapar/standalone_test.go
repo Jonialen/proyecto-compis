@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestRunGeneratesStandaloneLRParsers(t *testing.T) {
+func TestRunGeneratesStandaloneParsers(t *testing.T) {
 	if testing.Short() {
 		t.Skip("standalone acceptance compiles and executes generated parsers")
 	}
@@ -24,6 +24,18 @@ func TestRunGeneratesStandaloneLRParsers(t *testing.T) {
 	for _, tt := range []struct {
 		name, method, grammar, valid, invalid string
 	}{
+		{
+			name: "LL1 required", method: "ll1", grammar: "required.yalp",
+			valid: `[{"type":"INT","lexeme":"7","line":1}]`, invalid: `[{"type":"PLUS","lexeme":"+","line":1}]`,
+		},
+		{
+			name: "LL1 nullable", method: "ll1", grammar: "nullable.yalp",
+			valid: `[]`, invalid: `[{"type":"PLUS","lexeme":"+","line":1}]`,
+		},
+		{
+			name: "LL1 predictive sequence and ignored tokens", method: "ll1", grammar: "predictive.yalp",
+			valid: readDemo("predictive_valid.tokens.json"), invalid: readDemo("predictive_invalid.tokens.json"),
+		},
 		{
 			name: "LALR assignment not SLR", method: "lalr", grammar: "assignment.yalp",
 			valid: readDemo("assignment_valid.tokens.json"), invalid: readDemo("assignment_invalid.tokens.json"),
@@ -66,13 +78,22 @@ func TestRunGeneratesStandaloneLRParsers(t *testing.T) {
 			if out, err := build.CombinedOutput(); err != nil {
 				t.Fatalf("compile standalone parser: %v\n%s", err, out)
 			}
-			for _, input := range []struct {
+			type tokenCase struct {
 				name, json string
 				code       int
-			}{
+				message    string
+			}
+			inputs := []tokenCase{
 				{name: "accepted", json: tt.valid},
-				{name: "rejected", json: tt.invalid, code: 1},
-			} {
+				{name: "rejected", json: tt.invalid, code: 1, message: "syntax error at line 1"},
+			}
+			if tt.method == "ll1" {
+				inputs = append(inputs,
+					tokenCase{name: "malformed JSON", json: "{", code: 1, message: "Error loading tokens:"},
+					tokenCase{name: "extra tokens", json: `[{"type":"INT","lexeme":"7","line":1},{"type":"INT","lexeme":"8","line":7}]`, code: 1, message: "syntax error at line 7"},
+				)
+			}
+			for _, input := range inputs {
 				t.Run(input.name, func(t *testing.T) {
 					tokens := writeTempFile(t, dir, input.name+".json", input.json)
 					cmd := exec.Command(binary, "-tokens", tokens)
@@ -94,7 +115,7 @@ func TestRunGeneratesStandaloneLRParsers(t *testing.T) {
 						if !strings.Contains(stdout.String(), "Input accepted") || stderr.Len() != 0 {
 							t.Fatalf("accepted stdout=%q stderr=%q", stdout.String(), stderr.String())
 						}
-					} else if stdout.Len() != 0 || !strings.Contains(stderr.String(), "syntax error at line 1") {
+					} else if stdout.Len() != 0 || !strings.Contains(stderr.String(), input.message) {
 						t.Fatalf("rejected stdout=%q stderr=%q", stdout.String(), stderr.String())
 					}
 				})
@@ -105,11 +126,11 @@ func TestRunGeneratesStandaloneLRParsers(t *testing.T) {
 
 func TestStandaloneRejectionsPreserveDestination(t *testing.T) {
 	for _, tt := range []struct {
-		name string
-		args []string
-		want string
+		name, grammar string
+		args          []string
+		want          string
 	}{
-		{name: "ll1", args: []string{"-method", "ll1"}, want: "standalone parser generation is not supported for method ll1"},
+		{name: "left recursive ll1", grammar: "indirect.yalp", args: []string{"-method", "ll1"}, want: `build parser backend: yapar ll1 left recursion at non-terminal "tail" in production 2`},
 		{name: "compare", args: []string{"-compare"}, want: "standalone parser generation is incompatible with -compare"},
 		{name: "lr0", args: []string{"-method", "lr0"}, want: `build parser backend: parser method "lr0" not implemented yet: valid options are ll1, lr0, slr, lr1, lalr`},
 		{name: "lr1", args: []string{"-method", "lr1"}, want: `build parser backend: parser method "lr1" not implemented yet: valid options are ll1, lr0, slr, lr1, lalr`},
@@ -117,7 +138,11 @@ func TestStandaloneRejectionsPreserveDestination(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			const sentinel = "existing destination\n"
 			dest := writeTempFile(t, t.TempDir(), "parser.go", sentinel)
-			args := append([]string{"-yalp", "../../testdata/yapar/demos/required.yalp", "-out", dest}, tt.args...)
+			grammar := tt.grammar
+			if grammar == "" {
+				grammar = "required.yalp"
+			}
+			args := append([]string{"-yalp", filepath.Join("../../testdata/yapar/demos", grammar), "-out", dest}, tt.args...)
 			var stdout, stderr bytes.Buffer
 			err := run(args, &stdout, &stderr)
 			if err == nil || err.Error() != tt.want {

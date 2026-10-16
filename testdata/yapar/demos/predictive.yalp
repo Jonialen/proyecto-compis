@@ -1,0 +1,5 @@
+%token INT PLUS WS
+IGNORE WS
+%%
+start : INT tail ;
+tail : PLUS INT tail | ;
