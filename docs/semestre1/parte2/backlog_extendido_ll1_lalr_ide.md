@@ -15,7 +15,21 @@ se ejecuta con:
 go test ./internal/yapar -run '^TestBuildParserLL1(RejectsLeftRecursiveCycles|AllowsRecursionAfterConsumedTerminal)$' -count=1
 ```
 
-Este avance no certifica todas las fases ni los entregables de presentación.
+La Fase 2 también cuenta con una regresión del conflicto FIRST/FOLLOW de
+`s : opt B ; opt : B | ;`, que debe rechazarse como `LL1ConflictError`.
+
+Para el criterio comparativo de la Fase 3, la gramática
+`s : L EQUAL R | R ; L : STAR R | ID ; R : L ;` produce conflicto
+shift/reduce con SLR, pero LALR acepta referencias y asignaciones válidas y
+rechaza entradas incompletas o asignaciones encadenadas:
+
+```sh
+go test ./internal/yapar -run '^(TestBuildParserLL1RejectsFirstFollowConflict|TestBuildParserLALRAcceptsGrammarThatSLRRejects)$' -count=1
+```
+
+Estas pruebas caracterizan comportamiento existente; no requieren cambiar la
+política actual de conflictos LALR. Este avance no certifica todas las fases
+ni los entregables de presentación.
 
 Este backlog extiende la planeación anterior para alinearla con el enunciado oficial de la Parte 2, que exige no solo SLR(1), sino también **LL(1)**, **LALR**, visualización de estructuras y una **interfaz gráfica tipo IDE**.
 

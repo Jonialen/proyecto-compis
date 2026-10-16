@@ -161,6 +161,22 @@ s : A | A B ;
 	}
 }
 
+func TestBuildParserLL1RejectsFirstFollowConflict(t *testing.T) {
+	g := mustBuildGrammar(t, "%token B\n%%\ns : opt B ; opt : B | ;")
+	ff, err := ComputeFirstFollow(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parser, err := BuildParser(g, ff, MethodLL1)
+	var conflict *LL1ConflictError
+	if parser != nil || !errors.As(err, &conflict) {
+		t.Fatalf("BuildParser() = (%v, %v), want nil parser and LL1ConflictError", parser, err)
+	}
+	if conflict.NonTerminal != "opt" || conflict.Terminal != "B" || conflict.ExistingProd != 2 || conflict.ConflictProd != 3 {
+		t.Fatalf("conflict = %#v, want opt/B conflict between productions 2 and 3", conflict)
+	}
+}
+
 func TestLL1ParserAcceptsAndRejectsInput(t *testing.T) {
 	g := mustBuildGrammar(t, `%token A B WS
 IGNORE WS

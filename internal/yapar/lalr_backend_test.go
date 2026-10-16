@@ -2,6 +2,7 @@ package yapar
 
 import (
 	"bytes"
+	"errors"
 	"log"
 	"reflect"
 	"strings"
@@ -83,6 +84,65 @@ y : B ;
 	}
 	if got := logs.String(); !strings.Contains(got, "reduce/reduce") || !strings.Contains(got, "production 1") {
 		t.Fatalf("warning log = %q, want reduce/reduce warning mentioning chosen production", got)
+	}
+}
+
+func TestBuildParserLALRAcceptsGrammarThatSLRRejects(t *testing.T) {
+	g := mustBuildGrammar(t, `%token STAR ID EQUAL
+%%
+s : L EQUAL R | R ;
+L : STAR R | ID ;
+R : L ;
+`)
+	ff, err := ComputeFirstFollow(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slr, err := BuildParser(g, ff, MethodSLR)
+	var conflict *GrammarConflictError
+	if slr != nil || !errors.As(err, &conflict) {
+		t.Fatalf("BuildParser(SLR) = (%v, %v), want nil parser and conflict", slr, err)
+	}
+	if conflict.Kind != "shift/reduce" || conflict.Symbol != "EQUAL" {
+		t.Fatalf("SLR conflict = %#v, want shift/reduce on EQUAL", conflict)
+	}
+	lalr, err := BuildParser(g, ff, MethodLALR)
+	if err != nil {
+		t.Fatalf("BuildParser(LALR) error = %v", err)
+	}
+	for _, tt := range []struct {
+		name     string
+		input    string
+		accepted bool
+	}{
+		{name: "reference", input: "ID", accepted: true},
+		{name: "assignment", input: "ID EQUAL ID", accepted: true},
+		{name: "dereferenced assignment", input: "STAR ID EQUAL STAR ID", accepted: true},
+		{name: "nested dereference", input: "STAR STAR ID", accepted: true},
+		{name: "empty"},
+		{name: "missing target", input: "EQUAL ID"},
+		{name: "missing value", input: "ID EQUAL"},
+		{name: "chained assignment", input: "ID EQUAL ID EQUAL ID"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var tokens []shared.Token
+			for _, kind := range strings.Fields(tt.input) {
+				tokens = append(tokens, shared.Token{Type: kind, Lexeme: kind, Line: 1})
+			}
+			result, err := lalr.Parse(tokens)
+			if result == nil || result.Accepted != tt.accepted {
+				t.Fatalf("Parse(%q) = (%#v, %v), want Accepted=%v", tt.input, result, err, tt.accepted)
+			}
+			if tt.accepted && err != nil {
+				t.Fatalf("Parse(valid) error = %v", err)
+			}
+			if !tt.accepted {
+				var syntaxErr *SyntaxError
+				if !errors.As(err, &syntaxErr) {
+					t.Fatalf("Parse(invalid) error = %v, want SyntaxError", err)
+				}
+			}
+		})
 	}
 }
 
