@@ -412,6 +412,11 @@ func loadTokens(path string) ([]Token, error) {
 }
 
 func parseTokens(tokens []Token) (*ParseResult, error) {
+	for _, token := range tokens {
+		if token.Type == endMarker {
+			return &ParseResult{Accepted: false}, fmt.Errorf("yapar: token type %q is reserved for end of input at line %d", endMarker, syntaxErrorLine(token, tokens))
+		}
+	}
 	filtered := filterIgnoredTokens(tokens)
 	stream := append([]Token{}, filtered...)
 	stream = append(stream, Token{Type: endMarker, Line: endOfInputLine(tokens)})

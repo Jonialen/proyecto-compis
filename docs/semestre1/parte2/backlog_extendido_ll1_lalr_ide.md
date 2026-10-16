@@ -27,6 +27,12 @@ independiente, con pruebas de tokens ignorados, recursión derecha, JSON inváli
 y preservación de la generación LR anterior. Véase el
 [ejemplo LL1](guia_demos_yapar.md#parser-standalone-ll1).
 
+El pendiente de aceptación anticipada mediante `$` externo se corrigió en los
+tres métodos, tanto integrados como standalone. Los flujos de tokens no deben
+incluir ese marcador reservado; cada runtime lo agrega internamente.
+`TestParsersRejectSuppliedEndMarker` y las pruebas de binarios generados
+verifican rechazo, ubicación y preservación de la entrada.
+
 Estos estados se limitan a las pruebas y escenarios indicados; no certifican
 todas las gramáticas ni eliminan las limitaciones de standalone y conflictos.
 

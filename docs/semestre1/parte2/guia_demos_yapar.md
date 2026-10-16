@@ -156,6 +156,10 @@ go test ./internal/generator -run '^TestLL1StandaloneDiagnosticParity$' -count=1
 
 ## Evidencia y límites
 
+- El fin de entrada `$` es interno. No agregar un token `{"type":"$"}` al
+  JSON: se rechaza aunque la gramática sea nullable o haya una entrada válida
+  antes del marcador. Esto también aplica al runtime integrado de los tres
+  métodos. Un token de otro tipo puede conservar `$` como lexema.
 - `cmd/yapar/demo_test.go` conserva la matriz CLI de estos archivos.
 - `cmd/ide/yapar_process_test.go` verifica el contrato HTTP, incluidos vacío y
   espacios omitidos; `web/app.test.cjs` verifica estados y encabezados de error.

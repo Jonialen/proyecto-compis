@@ -20,6 +20,9 @@ func ParseTokens(g *Grammar, table *ParsingTable, tokens []shared.Token) (*Parse
 	if table == nil {
 		return &ParseResult{Accepted: false}, fmt.Errorf("yapar: parsing table is required")
 	}
+	if err := rejectExternalEndMarker(tokens); err != nil {
+		return &ParseResult{Accepted: false}, err
+	}
 
 	filtered := FilterIgnoredTokens(tokens, g.IgnoreSet)
 	stream := append([]shared.Token{}, filtered...)
@@ -68,6 +71,16 @@ func ParseTokens(g *Grammar, table *ParsingTable, tokens []shared.Token) (*Parse
 		GotType:  EndMarker,
 		Expected: table.ExpectedTokens(stateStack[len(stateStack)-1]),
 	}
+}
+
+// rejectExternalEndMarker keeps EOF owned by the runtime, not its caller.
+func rejectExternalEndMarker(tokens []shared.Token) error {
+	for _, token := range tokens {
+		if token.Type == EndMarker {
+			return fmt.Errorf("yapar: token type %q is reserved for end of input at line %d", EndMarker, syntaxErrorLine(token, tokens))
+		}
+	}
+	return nil
 }
 
 // FilterIgnoredTokens elimina tokens marcados para omisión por la gramática.

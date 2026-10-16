@@ -155,6 +155,9 @@ func (p *ll1Parser) Parse(tokens []shared.Token) (*ParseResult, error) {
 	if p.table == nil {
 		return &ParseResult{Accepted: false}, fmt.Errorf("yapar: ll1 table is required")
 	}
+	if err := rejectExternalEndMarker(tokens); err != nil {
+		return &ParseResult{Accepted: false}, err
+	}
 
 	filtered := FilterIgnoredTokens(tokens, p.grammar.IgnoreSet)
 	stream := append([]shared.Token{}, filtered...)

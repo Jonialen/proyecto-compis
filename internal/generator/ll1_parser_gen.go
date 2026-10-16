@@ -126,10 +126,19 @@ func main() {
 
 func parseTokens(tokens []Token) error {
 	endLine := 1
-	stream := make([]Token, 0, len(tokens)+1)
 	for _, token := range tokens {
 		if token.Line > 0 {
 			endLine = token.Line
+		}
+	}
+	stream := make([]Token, 0, len(tokens)+1)
+	for _, token := range tokens {
+		if token.Type == "$" {
+			line := token.Line
+			if line <= 0 {
+				line = endLine
+			}
+			return fmt.Errorf("yapar: token type %q is reserved for end of input at line %d", "$", line)
 		}
 		if !ignoreSet[token.Type] {
 			stream = append(stream, token)

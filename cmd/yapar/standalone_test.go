@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"genanalex/internal/shared"
 )
 
 func TestRunGeneratesStandaloneParsers(t *testing.T) {
@@ -87,6 +90,27 @@ func TestRunGeneratesStandaloneParsers(t *testing.T) {
 				{name: "accepted", json: tt.valid},
 				{name: "rejected", json: tt.invalid, code: 1, message: "syntax error at line 1"},
 			}
+			var prefix []shared.Token
+			if err := json.Unmarshal([]byte(tt.valid), &prefix); err != nil {
+				t.Fatal(err)
+			}
+			injected, err := json.Marshal(append(prefix, shared.Token{Type: "$", Line: 3}, shared.Token{Type: "PLUS", Line: 7}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			inputs = append(inputs,
+				tokenCase{name: "premature supplied EOF", json: string(injected), code: 1, message: "reserved for end of input at line 3"},
+				tokenCase{name: "supplied EOF only", json: `[{"type":"$","line":3}]`, code: 1, message: "reserved for end of input at line 3"},
+				tokenCase{name: "supplied EOF line fallback", json: `[{"type":"$"},{"type":"INT","line":9}]`, code: 1, message: "reserved for end of input at line 9"},
+			)
+			if len(prefix) > 0 {
+				prefix[0].Lexeme = "$"
+				dollarLexeme, err := json.Marshal(prefix)
+				if err != nil {
+					t.Fatal(err)
+				}
+				inputs = append(inputs, tokenCase{name: "dollar lexeme is not EOF", json: string(dollarLexeme)})
+			}
 			if tt.method == "ll1" {
 				inputs = append(inputs,
 					tokenCase{name: "malformed JSON", json: "{", code: 1, message: "Error loading tokens:"},
@@ -110,6 +134,10 @@ func TestRunGeneratesStandaloneParsers(t *testing.T) {
 					}
 					if code != input.code {
 						t.Fatalf("exit=%d, want %d; stdout=%s stderr=%s", code, input.code, stdout.String(), stderr.String())
+					}
+					after, err := os.ReadFile(tokens)
+					if err != nil || string(after) != input.json {
+						t.Fatalf("standalone parser changed token file: %v", err)
 					}
 					if input.code == 0 {
 						if !strings.Contains(stdout.String(), "Input accepted") || stderr.Len() != 0 {

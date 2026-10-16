@@ -55,6 +55,8 @@ func TestLL1StandaloneDiagnosticParity(t *testing.T) {
 		{name: "unknown line fallback", tokens: []shared.Token{{Type: "UNKNOWN", Line: -1}, {Type: "WS", Line: 9}}},
 		{name: "missing terminal EOF", tokens: []shared.Token{{Type: "INT", Line: 2}, {Type: "PLUS", Line: 2}, {Type: "WS", Line: 9}}},
 		{name: "extra token", tokens: []shared.Token{{Type: "INT"}, {Type: "INT", Line: 7}}},
+		{name: "external EOF", tokens: []shared.Token{{Type: "INT"}, {Type: "$", Line: 3}, {Type: "PLUS", Line: 7}}},
+		{name: "external EOF line fallback", tokens: []shared.Token{{Type: "$"}, {Type: "INT", Line: 9}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			result, parseErr := oracle.Parse(tt.tokens)

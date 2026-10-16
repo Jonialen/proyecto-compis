@@ -196,6 +196,11 @@ incluyen generación, compilación y ejecución con tokens JSON válidos e invá
 
 El parser generado con `-out` consume tokens en JSON:
 
+El token de tipo `$` está reservado para el fin de entrada y lo agrega el
+runtime. No debe incluirse en el JSON: los parsers integrados y standalone lo
+rechazan con un diagnóstico de ubicación. Un lexema cuyo texto sea `$` no es
+el marcador si su tipo de token es otro.
+
 ```bash
 go run parser_gen.go -tokens tokens.json
 ```

@@ -406,6 +406,15 @@ Ejemplo:
 ]
 ```
 
+### Fin de entrada reservado
+
+LL1, SLR y LALR agregan `$` internamente, tanto en el runtime integrado como
+en el standalone. Todo token de entrada cuyo `Type` sea `$` se rechaza antes
+del análisis; no puede usarse para aceptar un prefijo y omitir tokens restantes.
+El diagnóstico conserva la línea del token, o la misma ubicación de respaldo
+usada por los errores sintácticos si esa línea falta. El lexema `$` por sí solo
+no se rechaza: la reserva aplica al tipo de token.
+
 ### Límite importante
 
 Aunque el generador recibe una `TableView`, la CLI actual NO ofrece soporte standalone completo para todos los métodos. En particular:
