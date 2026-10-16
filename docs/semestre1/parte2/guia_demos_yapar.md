@@ -89,6 +89,38 @@ Para el ejemplo de asignaciones, seleccionar solo SLR y LALR. SLR debe
 mostrar su conflicto; LALR debe aceptar la entrada válida. Si se omite el
 lexer, **Table Ready** solo acredita construcción, no análisis de entrada.
 
+## Parser standalone LALR
+
+La generación LALR utiliza la misma plantilla LR que SLR, pero serializa la
+tabla LALR. Los archivos `assignment_valid.tokens.json` e
+`assignment_invalid.tokens.json` representan las dos entradas de asignación
+de esta guía; no es necesario preparar tokens a mano para repetir el ejemplo.
+
+Desde la raíz, crear la salida en un directorio temporal:
+
+```sh
+D=testdata/yapar/demos
+WORK=$(mktemp -d)
+go run ./cmd/yapar -yalp "$D/assignment.yalp" -method lalr -out "$WORK/parser.go"
+go build -o "$WORK/parser" "$WORK/parser.go"
+"$WORK/parser" -tokens "$D/assignment_valid.tokens.json"
+"$WORK/parser" -tokens "$D/assignment_invalid.tokens.json"
+```
+
+La entrada válida termina con código 0 e imprime `Input accepted`. La inválida
+termina con código 1 y escribe un error sintáctico de línea 1 en stderr. Ese
+rechazo es esperado. El binario es autónomo: no importa paquetes del proyecto
+ni lee la gramática o el lexer al ejecutarse. Sigue consumiendo tokens JSON;
+no se agrega un adaptador automático para la salida del lexer standalone.
+
+La prueba reproduce generación, compilación, aceptación y rechazo, comprueba
+que dos generaciones producen los mismos bytes y mantiene las restricciones
+de LL1 y `-compare`:
+
+```sh
+go test ./cmd/yapar -run '^(TestRunGeneratesStandaloneLRParsers|TestStandaloneRejectionsPreserveDestination|TestRunRejectsLL1StandaloneGeneration|TestRunCompareRejectsStandaloneGeneration)$' -count=1
+```
+
 ## Evidencia y límites
 
 - `cmd/yapar/demo_test.go` conserva la matriz CLI de estos archivos.
@@ -100,7 +132,7 @@ lexer, **Table Ready** solo acredita construcción, no análisis de entrada.
 - No se certifican todas las gramáticas, tamaños de pantalla ni una entrega
   académica completa. No se creó ni revisó un video.
 - `lr0` y `lr1` siguen como placeholders ejecutables; la generación standalone
-  desde CLI no admite LL1 ni LALR. Estos ejemplos no amplían ese alcance.
+  desde CLI admite SLR y LALR, pero todavía no LL1.
 
 La suite global de Compiscript requiere además el JAR de ANTLR documentado en
 su configuración. Las pruebas de estas demos YAPar no lo necesitan.

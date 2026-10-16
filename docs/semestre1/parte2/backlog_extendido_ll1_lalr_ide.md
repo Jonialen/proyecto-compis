@@ -18,6 +18,12 @@ presentación, por solicitud del usuario.
 | 7. IDE | Flujos de demo comprobados en Chrome real | Carga, edición, descarga, errores, vacío y ejecuciones consecutivas sobre `d0cff74` |
 | 8. Cierre reproducible | Demos, guía y README preparados; video no verificado | [Guía](guia_demos_yapar.md); guion excluido del alcance |
 
+Extensión posterior al cierre de demos: `-method lalr -out` ya permite generar
+un parser standalone usando el runtime LR existente. La
+[guía de demos](guia_demos_yapar.md#parser-standalone-lalr) y
+`TestRunGeneratesStandaloneLRParsers` comprueban compilación, entradas válidas,
+rechazo y epsilon. LL1 standalone sigue pendiente; no se amplía su alcance.
+
 Estos estados se limitan a las pruebas y escenarios indicados; no certifican
 todas las gramáticas ni eliminan las limitaciones de standalone y conflictos.
 
@@ -263,6 +269,6 @@ Proyecto listo para evaluación.
 
 Ejecutar la matriz de la [guía de demos](guia_demos_yapar.md) antes de cambiar
 algoritmos o la IDE. No reconstruir LL1, LALR ni los contratos comunes por
-aparecer en las listas históricas. Las extensiones de standalone, una política
+aparecer en las listas históricas. El standalone LL1, una política
 general de precedencia y la verificación de entregables externos requieren
 trabajo separado; no forman parte de este cierre de demos.

@@ -186,9 +186,13 @@ go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -yal testdata/yapar/arit
 | `-table` | Atajo para tabla en texto. | Equivale a salida `text`. |
 | `-yal` | Lexer `.yal`. | Debe usarse junto con `-src`. |
 | `-src` | Archivo fuente a tokenizar y parsear. | Debe usarse junto con `-yal`. |
-| `-out` | Genera parser standalone. | No usar con `-compare`; `ll1` y `lalr` no soportan este flujo. |
+| `-out` | Genera parser standalone SLR o LALR. | No usar con `-compare`; `ll1` todavía no soporta este flujo. |
 
 ## Parser standalone
+
+La CLI permite generar parsers **SLR y LALR** reutilizando el mismo runtime LR.
+Para LALR, los [ejemplos reproducibles](docs/semestre1/parte2/guia_demos_yapar.md#parser-standalone-lalr)
+incluyen la generación, compilación y ejecución con tokens JSON válidos e inválidos.
 
 El parser generado con `-out` consume tokens en JSON:
 

@@ -1,0 +1,4 @@
+[
+  { "type": "ID", "lexeme": "x", "line": 1 },
+  { "type": "EQUAL", "lexeme": "=", "line": 1 }
+]

@@ -174,27 +174,8 @@ opt : B | ;
 	if !strings.Contains(err.Error(), "ll1") || !strings.Contains(err.Error(), "not supported") {
 		t.Fatalf("error = %q, want ll1 not supported error", err.Error())
 	}
-}
-
-func TestRunRejectsLALRStandaloneGeneration(t *testing.T) {
-	dir := t.TempDir()
-	yalpPath := filepath.Join(dir, "parser.yalp")
-	outPath := filepath.Join(dir, "parser.go")
-	if err := os.WriteFile(yalpPath, []byte(`%token ID PLUS
-%%
-expr : ID PLUS ID ;
-`), 0o644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	err := run([]string{"-yalp", yalpPath, "-method", "lalr", "-out", outPath}, &stdout, &stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want unsupported lalr codegen error")
-	}
-	if !strings.Contains(err.Error(), "lalr") || !strings.Contains(err.Error(), "not supported") {
-		t.Fatalf("error = %q, want lalr not supported error", err.Error())
+	if _, err := os.Stat(outPath); !os.IsNotExist(err) {
+		t.Fatalf("unsupported LL1 generation created output or failed unexpectedly: %v", err)
 	}
 }
 

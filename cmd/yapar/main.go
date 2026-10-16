@@ -118,7 +118,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 
 	if cfg.outFile != "" {
-		if cfg.method == yapar.MethodLL1 || cfg.method == yapar.MethodLALR {
+		if cfg.method == yapar.MethodLL1 {
 			return fmt.Errorf("standalone parser generation is not supported for method %s", cfg.method)
 		}
 		fmt.Fprintf(logOut, "[*] Generating standalone parser: %s\n", cfg.outFile)
@@ -153,7 +153,7 @@ func parseFlags(args []string, stderr io.Writer) (*config, error) {
 	cfg := &config{}
 	fs.StringVar(&cfg.yalpFile, "yalp", "", "path to the .yalp parser specification file")
 	fs.StringVar(&cfg.yalFile, "yal", "", "path to the .yal lexer specification file")
-	fs.StringVar(&cfg.outFile, "out", "", "path to the output .go file for the generated parser")
+	fs.StringVar(&cfg.outFile, "out", "", "path to the output .go file for the generated parser (slr or lalr)")
 	fs.StringVar(&cfg.srcFile, "src", "", "path to the source file to tokenize and parse")
 	method := string(yapar.MethodSLR)
 	format := string(outputFormatNone)
