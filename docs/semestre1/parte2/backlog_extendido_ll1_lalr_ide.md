@@ -1,5 +1,22 @@
 # Backlog extendido — Parte 2 real
 
+## Avance contrastado con la implementación
+
+Las listas originales de brechas son históricas: LL(1), LALR, comparación,
+visualización e IDE ya tienen implementaciones. No deben reconstruirse por
+aparecer en la sección «Falta»; se deben contrastar sus criterios con pruebas.
+
+En la Fase 2, la política de recursión izquierda es **rechazar con error claro**,
+sin transformación automática. El detector cubre recursión directa, indirecta y
+prefijos nullable; conserva la recursión derecha válida. La regresión pública
+se ejecuta con:
+
+```sh
+go test ./internal/yapar -run '^TestBuildParserLL1(RejectsLeftRecursiveCycles|AllowsRecursionAfterConsumedTerminal)$' -count=1
+```
+
+Este avance no certifica todas las fases ni los entregables de presentación.
+
 Este backlog extiende la planeación anterior para alinearla con el enunciado oficial de la Parte 2, que exige no solo SLR(1), sino también **LL(1)**, **LALR**, visualización de estructuras y una **interfaz gráfica tipo IDE**.
 
 ---

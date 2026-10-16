@@ -109,7 +109,8 @@ func (e *LL1ConflictError) Error() string {
 	)
 }
 
-// LeftRecursionError representa recursión izquierda directa incompatible con LL(1).
+// LeftRecursionError identifies a production participating in left recursion
+// incompatible with LL(1), including indirect cycles and nullable prefixes.
 type LeftRecursionError struct {
 	NonTerminal  string
 	ProductionID int

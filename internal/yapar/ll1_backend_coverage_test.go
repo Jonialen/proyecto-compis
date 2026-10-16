@@ -76,7 +76,7 @@ s : A ;
 }
 
 func TestCheckLeftRecursionAllowsNilAndEmptyBodies(t *testing.T) {
-	if err := checkLeftRecursion(nil); err != nil {
+	if err := checkLeftRecursion(nil, nil); err != nil {
 		t.Fatalf("checkLeftRecursion(nil) error = %v", err)
 	}
 
@@ -84,7 +84,7 @@ func TestCheckLeftRecursionAllowsNilAndEmptyBodies(t *testing.T) {
 		NonTerminals: map[string]bool{"s": true},
 		Productions:  []Production{{ID: 1, Head: "s"}},
 	}
-	if err := checkLeftRecursion(g); err != nil {
+	if err := checkLeftRecursion(g, nil); err != nil {
 		t.Fatalf("checkLeftRecursion(empty body) error = %v", err)
 	}
 }

@@ -22,7 +22,7 @@ func BuildLL1Table(g *Grammar, ff *FirstFollow) (*LL1Table, error) {
 	if ff == nil {
 		return nil, fmt.Errorf("yapar: first/follow data is required to build LL1 table")
 	}
-	if err := checkLeftRecursion(g); err != nil {
+	if err := checkLeftRecursion(g, ff.Nullable); err != nil {
 		return nil, err
 	}
 
@@ -75,10 +75,11 @@ func (t *LL1Table) set(nonTerminal, terminal string, productionID int) error {
 	return nil
 }
 
-func checkLeftRecursion(g *Grammar) error {
+func checkLeftRecursion(g *Grammar, nullable map[string]bool) error {
 	if g == nil {
 		return nil
 	}
+	// Keep the existing immediate-recursion diagnostic and its production order.
 	for _, production := range g.Productions {
 		if len(production.Body) == 0 {
 			continue
@@ -86,6 +87,49 @@ func checkLeftRecursion(g *Grammar) error {
 		first := production.Body[0]
 		if !first.Terminal && first.Name == production.Head {
 			return &LeftRecursionError{NonTerminal: production.Head, ProductionID: production.ID}
+		}
+	}
+
+	// A body can expose every non-terminal before its first non-nullable symbol.
+	// A cycle in these left-corner edges means expansion can recur without input.
+	type leftCorner struct {
+		symbol       string
+		productionID int
+	}
+	edges := make(map[string][]leftCorner)
+	for _, production := range g.Productions {
+		for _, symbol := range production.Body {
+			if symbol.Terminal {
+				break
+			}
+			edges[production.Head] = append(edges[production.Head], leftCorner{symbol.Name, production.ID})
+			if !nullable[symbol.Name] {
+				break
+			}
+		}
+	}
+	active, done := make(map[string]bool), make(map[string]bool)
+	var visit func(string) error
+	visit = func(head string) error {
+		active[head] = true
+		for _, edge := range edges[head] {
+			if active[edge.symbol] {
+				return &LeftRecursionError{NonTerminal: head, ProductionID: edge.productionID}
+			}
+			if !done[edge.symbol] {
+				if err := visit(edge.symbol); err != nil {
+					return err
+				}
+			}
+		}
+		active[head], done[head] = false, true
+		return nil
+	}
+	for _, head := range sortedGrammarNonTerminals(g) {
+		if !done[head] {
+			if err := visit(head); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

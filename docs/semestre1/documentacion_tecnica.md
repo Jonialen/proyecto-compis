@@ -226,10 +226,16 @@ type YaparSpec struct {
 `internal/yapar/ll1_backend.go`:
 
 - construye tabla LL(1) con `BuildLL1Table`,
-- detecta recursión izquierda inmediata,
+- rechaza recursión izquierda directa, indirecta y oculta por prefijos nullable,
 - detecta conflictos LL(1),
 - ejecuta parsing predictivo con stack,
 - adapta la tabla a `TableView` para exportación común.
+
+La política es rechazar, no transformar automáticamente la gramática. El
+detector reutiliza `Nullable` para recorrer dependencias de esquina izquierda
+y reporta `LeftRecursionError` con una producción que participa en el ciclo.
+La recursión posterior a un terminal consumido sigue siendo válida; los
+prefijos comunes que generan conflictos se reportan con `LL1ConflictError`.
 
 ### 6.5 Backend SLR(1)
 

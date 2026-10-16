@@ -78,6 +78,65 @@ expr : expr A | B ;
 	}
 }
 
+func TestBuildParserLL1RejectsLeftRecursiveCycles(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		rules string
+	}{
+		{name: "indirect", rules: "s : a ; a : s ;"},
+		{name: "nullable prefix", rules: "s : opt s | B ; opt : ;"},
+		{name: "multiple nullable prefixes", rules: "s : opt empty a | B ; opt : ; empty : ; a : s ;"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := mustBuildGrammar(t, "%token B\n%%\n"+tt.rules)
+			ff, err := ComputeFirstFollow(g)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parser, err := BuildParser(g, ff, MethodLL1)
+			var recursion *LeftRecursionError
+			if parser != nil || !errors.As(err, &recursion) {
+				t.Fatalf("BuildParser() = (%v, %v), want nil parser and LeftRecursionError", parser, err)
+			}
+			if recursion.ProductionID <= 0 || recursion.ProductionID >= len(g.Productions) {
+				t.Fatalf("invalid recursive production: %#v", recursion)
+			}
+			if head := g.Productions[recursion.ProductionID].Head; head != recursion.NonTerminal {
+				t.Fatalf("error head = %q, production head = %q", recursion.NonTerminal, head)
+			}
+		})
+	}
+}
+
+func TestBuildParserLL1AllowsRecursionAfterConsumedTerminal(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		rules string
+	}{
+		{name: "right recursion", rules: "s : B s | ;"},
+		{name: "nullable prefix before terminal", rules: "s : opt B s | ; opt : ;"},
+		{name: "non nullable prefix", rules: "s : prefix s | ; prefix : B ;"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			g := mustBuildGrammar(t, "%token B\n%%\n"+tt.rules)
+			ff, err := ComputeFirstFollow(g)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parser, err := BuildParser(g, ff, MethodLL1)
+			if err != nil {
+				t.Fatalf("BuildParser() error = %v", err)
+			}
+			for _, tokens := range [][]shared.Token{nil, {{Type: "B", Line: 1}, {Type: "B", Line: 1}}} {
+				result, err := parser.Parse(tokens)
+				if err != nil || result == nil || !result.Accepted {
+					t.Fatalf("Parse(%v) = (%v, %v), want accepted", tokens, result, err)
+				}
+			}
+		})
+	}
+}
+
 func TestBuildLL1TableRejectsPredictPredictConflict(t *testing.T) {
 	g := mustBuildGrammar(t, `%token A B
 %%
