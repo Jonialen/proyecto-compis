@@ -1,0 +1,5 @@
+%token STAR ID EQUAL
+%%
+s : L EQUAL R | R ;
+L : STAR R | ID ;
+R : L ;

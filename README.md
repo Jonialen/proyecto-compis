@@ -213,6 +213,7 @@ Formato esperado:
 
 ## Más documentación
 
+- [`docs/semestre1/parte2/guia_demos_yapar.md`](docs/semestre1/parte2/guia_demos_yapar.md): casos YAPar reproducibles, comandos y resultados esperados en CLI e IDE.
 - [`docs/semestre1/documentacion_tecnica.md`](docs/semestre1/documentacion_tecnica.md): arquitectura, estado real y detalle técnico.
 - [`docs/semestre1/parte2/`](docs/semestre1/parte2/): planeación y backlogs históricos.
 - [`docs/semestre2/entrega1/compliance.md`](docs/semestre2/entrega1/compliance.md): current Compiscript requirement status, source contradictions, and remaining work.

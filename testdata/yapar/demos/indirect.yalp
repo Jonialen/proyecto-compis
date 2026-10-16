@@ -1,0 +1,4 @@
+%token INT
+%%
+start : tail ;
+tail : start ;

@@ -2,6 +2,25 @@
 
 ## Avance contrastado con la implementación
 
+La [guía de demos](guia_demos_yapar.md) contiene los archivos y comandos
+reproducibles. La matriz `TestDemoCLI` ejecuta 16 escenarios sobre el binario
+real y comprueba códigos de salida y mensajes. No se incluye guion de
+presentación, por solicitud del usuario.
+
+| Fase | Estado observado | Evidencia principal |
+|---|---|---|
+| 1. Arquitectura común | Implementada; clasificación de errores reforzada | `method.go`, `errors.go`, pruebas de gramática y contratos en `internal/yapar/` |
+| 2. LL1 | Implementada; rechazo de recursión y conflictos probado | `ll1_backend_test.go`, casos `required`, `nullable` e `indirect` |
+| 3. LALR | Implementada; diferencia frente a SLR probada | `lalr_backend_test.go`, demo `assignment` |
+| 4. Comparación | Implementada; resultados y conflictos disponibles | `comparison_test.go`, CLI e IDE |
+| 5. Visualización | Tablas y SVG LR(0) comprobados en flujos de demo | `visualizer_test.go`, validación Chrome sobre `d0cff74` |
+| 6. CLI | Métodos y casos de demo ejecutados | `cmd/yapar/demo_test.go` y pruebas existentes de CLI |
+| 7. IDE | Flujos de demo comprobados en Chrome real | Carga, edición, descarga, errores, vacío y ejecuciones consecutivas sobre `d0cff74` |
+| 8. Cierre reproducible | Demos, guía y README preparados; video no verificado | [Guía](guia_demos_yapar.md); guion excluido del alcance |
+
+Estos estados se limitan a las pruebas y escenarios indicados; no certifican
+todas las gramáticas ni eliminan las limitaciones de standalone y conflictos.
+
 Las listas originales de brechas son históricas: LL(1), LALR, comparación,
 visualización e IDE ya tienen implementaciones. No deben reconstruirse por
 aparecer en la sección «Falta»; se deben contrastar sus criterios con pruebas.
@@ -35,7 +54,7 @@ Este backlog extiende la planeación anterior para alinearla con el enunciado of
 
 ---
 
-## Resumen de brecha
+## Resumen original de brecha (histórico)
 
 ### Ya implementado
 
@@ -50,7 +69,7 @@ Este backlog extiende la planeación anterior para alinearla con el enunciado of
 - CLI `cmd/yalex` y `cmd/yapar`
 - Generador standalone del parser
 
-### Falta para cumplir el enunciado oficial
+### Brecha registrada al crear este backlog (ya implementada)
 
 - **LL(1)**
 - **LALR(1)**
@@ -208,17 +227,17 @@ IDE funcional para demo y evaluación.
 Preparar la presentación y validación final.
 
 ### Tareas
-1. Casos de demo válidos e inválidos.
-2. Guion técnico de presentación.
-3. Revisión de README y documentación.
-4. Revisión de video/demo.
+1. Casos de demo válidos e inválidos: disponibles en `testdata/yapar/demos/`, con pruebas CLI.
+2. Guion técnico de presentación: excluido por solicitud del usuario; no se genera.
+3. Revisión de README y documentación: guía reproducible enlazada desde el README.
+4. Revisión de video/demo: flujos de IDE validados; video no creado ni verificado.
 
 ### Entregable
 Proyecto listo para evaluación.
 
 ---
 
-## Prioridad recomendada
+## Orden original de implementación
 
 1. Fase 1 — arquitectura común
 2. Fase 2 — LL(1)
@@ -242,9 +261,8 @@ Proyecto listo para evaluación.
 
 ## Recomendación inmediata
 
-El siguiente paso correcto es comenzar por:
-
-- **Fase 1 — arquitectura común**
-- **Fase 2 — LL(1)**
-
-Esto ordena el backend comparativo antes de meterse a LALR o a la interfaz.
+Ejecutar la matriz de la [guía de demos](guia_demos_yapar.md) antes de cambiar
+algoritmos o la IDE. No reconstruir LL1, LALR ni los contratos comunes por
+aparecer en las listas históricas. Las extensiones de standalone, una política
+general de precedencia y la verificación de entregables externos requieren
+trabajo separado; no forman parte de este cierre de demos.

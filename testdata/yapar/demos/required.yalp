@@ -1,0 +1,3 @@
+%token INT
+%%
+start : INT ;
