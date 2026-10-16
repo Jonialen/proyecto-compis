@@ -6,7 +6,7 @@ class Animal {
 class Dog : Animal { let age: integer; function constructor(age: integer) { this.age = age; } }
 class Puppy : Dog {}
 let animal: Animal = new Dog(2);
-let puppy: Puppy = new Puppy();
+let puppy: Puppy = new Puppy(1);
 let inheritedName: string = puppy.name;
 let inheritedMethod: string = puppy.speak();
 function localFactory(): string {

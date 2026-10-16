@@ -61,3 +61,24 @@ func TestCatchBindingScopeAndBothBlocks(t *testing.T) {
 	_, diagnostics = analyzeFixture(t, "catch_invalid")
 	requireCounts(t, diagnostics, map[string]int{"SEM_UNRESOLVED": 3})
 }
+
+func TestInheritedMethodsAreOverridableAndConstructorsAreInherited(t *testing.T) {
+	_, diagnostics := analyzeFixture(t, "inheritance_valid")
+	if len(diagnostics) != 0 {
+		t.Fatalf("semantic diagnostics: %+v", diagnostics)
+	}
+}
+
+func TestInheritedMemberRedeclarationRejectsIncompatibleOverrides(t *testing.T) {
+	_, diagnostics := analyzeFixture(t, "inheritance_invalid")
+	requireCounts(t, diagnostics, map[string]int{
+		"SEM_OVERRIDE": 2, "SEM_INHERITED_MEMBER": 2, "SEM_ARITY": 1,
+	})
+}
+
+func TestInheritanceAnimalExampleAcceptsOverridesAndInheritedConstructor(t *testing.T) {
+	_, diagnostics := analyzeFixture(t, "inheritance_animal_example_valid")
+	if len(diagnostics) != 0 {
+		t.Fatalf("semantic diagnostics: %+v", diagnostics)
+	}
+}

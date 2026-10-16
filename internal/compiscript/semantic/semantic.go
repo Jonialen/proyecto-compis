@@ -303,9 +303,23 @@ func (a *analyzer) registerClasses(s *scope, statements ast.Statements) {
 		}
 		for _, member := range declaration.Members {
 			name := memberName(member)
-			if inherited, _ := a.lookupMember(s, declaration.Parent, name); name != "constructor" && inherited != nil {
-				a.problem("SEM_INHERITED_MEMBER", "member "+name+" redeclares an inherited name", member.SourceSpan())
+			if name == "constructor" {
+				continue
 			}
+			inherited, _ := a.lookupMember(s, declaration.Parent, name)
+			if inherited == nil {
+				continue
+			}
+			// Redeclarar un metodo heredado es sobrescritura valida mientras la firma coincida;
+			// cualquier otra redeclaracion sigue siendo un conflicto con el miembro heredado.
+			override, isFunction := member.(ast.FunctionDeclStmt)
+			if isFunction && inherited.Kind == model.SymbolMethod {
+				if !sameSignature(inherited.Type, functionType(override)) {
+					a.problem("SEM_OVERRIDE", "member "+name+" overrides an inherited method with an incompatible signature", member.SourceSpan())
+				}
+				continue
+			}
+			a.problem("SEM_INHERITED_MEMBER", "member "+name+" redeclares an inherited name", member.SourceSpan())
 		}
 	}
 }
@@ -590,9 +604,11 @@ func (a *analyzer) expressionExpected(s *scope, expression ast.Expression, expec
 			a.problem("SEM_UNKNOWN_CLASS", "unknown class "+n.ClassName, n.Span)
 			return errorType()
 		}
-		constructor, hasConstructor := info.members["constructor"]
+		// El constructor se resuelve por la cadena de herencia: una clase sin constructor propio
+		// usa el del ancestro mas cercano que lo declare.
+		constructor, _ := a.lookupMember(s, n.ClassName, "constructor")
 		parameters := model.Types{}
-		if hasConstructor && constructor.Kind == model.SymbolMethod {
+		if constructor != nil && constructor.Kind == model.SymbolMethod {
 			parameters = constructor.Type.Params
 		}
 		a.arguments(s, n.Arguments, parameters, n.Span)
@@ -739,9 +755,6 @@ func (a *analyzer) lookupMember(s *scope, className, name string) (*model.Symbol
 		if member, ok := info.members[name]; ok {
 			copy := member
 			return &copy, className == info.declaration.Name
-		}
-		if name == "constructor" {
-			break
 		}
 		className, s = info.declaration.Parent, info.owner
 	}
@@ -992,6 +1005,39 @@ func functionType(function ast.FunctionDeclStmt) model.Type {
 	}
 	result := declaredType(function.Result, primitive(model.TypeNull))
 	return model.Type{Kind: model.TypeFunction, Name: function.Name, Params: params, Result: &result}
+}
+
+// sameSignature compara dos tipos de funcion por aridad, tipos de parametro y tipo de retorno.
+// El nombre del miembro se ignora a proposito: la sobrescritura reusa el nombre heredado.
+func sameSignature(inherited, override model.Type) bool {
+	if len(inherited.Params) != len(override.Params) {
+		return false
+	}
+	for i := range inherited.Params {
+		if !sameType(inherited.Params[i], override.Params[i]) {
+			return false
+		}
+	}
+	if inherited.Result == nil || override.Result == nil {
+		return inherited.Result == override.Result
+	}
+	return sameType(*inherited.Result, *override.Result)
+}
+
+func sameType(left, right model.Type) bool {
+	if left.Kind != right.Kind || left.Kind == model.TypeClass && left.Name != right.Name {
+		return false
+	}
+	if left.Kind == model.TypeList {
+		if left.Element == nil || right.Element == nil {
+			return left.Element == right.Element
+		}
+		return sameType(*left.Element, *right.Element)
+	}
+	if left.Kind == model.TypeFunction {
+		return sameSignature(left, right)
+	}
+	return true
 }
 
 func (a *analyzer) compatible(target, value model.Type) bool {
