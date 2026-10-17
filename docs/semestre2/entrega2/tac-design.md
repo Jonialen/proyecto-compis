@@ -1,8 +1,9 @@
 # Compiscript three-address code
 
 This is the numeric foundation of Entrega 2, not the complete assignment.
-The existing analysis command and IDE report remain unchanged. A separate
-source compiler and CLI will consume this representation in subsequent units.
+The separate `compiscript.Compile(source []byte)` library API generates typed,
+source-located TAC for numeric programs. The existing analysis command and IDE
+report remain unchanged. A separate CLI is deferred to T3 and is not available yet.
 
 ## Representation
 
@@ -32,7 +33,7 @@ not permission to omit instructions. There is no TAC executor in this unit.
 
 ## Binding and lifetimes
 
-The source compiler will assign symbol names `s<scope-id>.<source-name>` from
+The source compiler assigns symbol names `s<scope-id>.<source-name>` from
 the semantic scope inventory. These are logical identities, not byte offsets,
 and are deterministic for the same source, not stable across source edits.
 Declarations become visible only after their initializer is lowered. This
@@ -48,13 +49,50 @@ not physical register usage, stack size, or a claim of global optimality.
 
 ## Source-compiler boundary
 
-The planned initial source slice supports initialized integer/float variables
+The implemented source slice supports initialized integer/float variables
 and constants, identifier assignment, lexical blocks, grouping, unary minus,
 and `+`, `-`, `*`, `/`. Unsupported statements, operators, expressions, types,
 and missing initializers must be reported explicitly with source locations.
 No partial TAC may escape after lexical, syntax, semantic, or lowering errors.
-Original source bytes and the existing `Analyze` report must remain unchanged.
-The source compiler and command are not available until their work units land.
+Original source bytes and the existing `Analyze` report remain unchanged.
+Numeric expression statements are supported; their final temporary is released
+without a store. Assignment expressions (including property assignments),
+ternaries, strings, booleans, lists, print, functions, and control flow are not
+lowered. Unsupported input is not silently skipped.
+
+### Library quick path
+
+Inside this Go module, call `compiscript.Compile(source)` from
+`genanalex/internal/compiscript`. The result is a `CompilationReport` with JSON
+fields `tac`, `diagnostics`, and `scopes`. Parse and semantic analysis each run
+once. Any frontend or semantic error preserves the same ordered diagnostics and
+scope snapshots as `Analyze`, sets `tac` to `null`, and skips lowering entirely.
+Lowering reports the first unsupported construct with code `TAC_UNSUPPORTED`,
+phase `codegen`, a descriptive message, and its source span; `tac` is also `null`,
+even when earlier statements were supported. An empty source succeeds with
+`instructions: []`, `peakTemporaries: 0`, and `diagnostics: []`.
+
+For example, `let x=1/2; x=x+3;` produces exactly:
+
+```text
+t0:float = i2f 1:integer
+t1:float = i2f 2:integer
+t0:float = t0:float / t1:float
+s1.x:float = t0:float
+t0:float = i2f 3:integer
+t0:float = s1.x:float + t0:float
+s1.x:float = t0:float
+```
+
+The peak is two temporaries: division consumes `t0` and `t1` before reusing
+`t0` as its destination. Each JSON instruction also retains its source span and
+operand kinds. No arithmetic is evaluated by the compiler.
+
+For `let x=1; print(x);`, the result contains no TAC and reports
+`unsupported statement in numeric TAC` at `print(x);`. For
+`let x:integer;`, it reports `numeric declarations require an initializer`.
+For `let x=missing;`, the existing semantic diagnostic is returned instead of
+attempting code generation. These are library examples, not new CLI invocations.
 
 ## Remaining Entrega 2 work
 
@@ -74,10 +112,14 @@ closure environments must be designed and tested before emitting their metadata.
 ## Verification
 
 ```sh
-go test ./internal/compiscript/tac -count=1
+GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test ./internal/compiscript ./internal/compiscript/tac -count=1
+GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go vet ./internal/compiscript ./internal/compiscript/tac
 ```
 
 Current tests pin instruction formatting, deterministic program output, live
 temporary uniqueness, release protection, type-changing reuse, and bounded
-allocation across repeated expressions. Source-level and CLI tests will be
-added with those behaviors, not inferred from these representation tests.
+allocation across repeated expressions. Source-level tests pin precedence,
+associativity, widening, division, lexical binding, exact typed/source-located
+instructions, rejection without partial output, deterministic JSON, input
+preservation, and compatibility with analysis diagnostics. CLI tests arrive
+with T3; complete Entrega 2 coverage is not claimed by this numeric foundation.

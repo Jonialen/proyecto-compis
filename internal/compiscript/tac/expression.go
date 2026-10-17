@@ -1,0 +1,104 @@
+package tac
+
+import (
+	"strings"
+
+	"genanalex/internal/compiscript/ast"
+	"genanalex/internal/compiscript/model"
+)
+
+func (l *lowerer) expression(env *environment, expression ast.Expression) (Operand, bool) {
+	switch n := expression.(type) {
+	case ast.LiteralExpr:
+		if numericLexeme(n.Lexeme) {
+			kind := model.TypeInteger
+			if strings.Contains(n.Lexeme, ".") {
+				kind = model.TypeFloat
+			}
+			return Operand{Kind: Literal, Value: n.Lexeme, Type: kind}, true
+		}
+	case ast.IdentifierExpr:
+		if value, ok := env.lookup(n.Name); ok {
+			return value.operand, true
+		}
+	case ast.GroupExpr:
+		return l.expression(env, n.Expression)
+	case ast.UnaryExpr:
+		if n.Operator == "-" {
+			value, ok := l.expression(env, n.Operand)
+			if !ok {
+				return Operand{}, false
+			}
+			return l.operation(Negate, value, nil, value.Type, n.Span), true
+		}
+	case ast.BinaryExpr:
+		switch n.Operator {
+		case "+", "-", "*", "/":
+			left, ok := l.expression(env, n.Left)
+			if !ok {
+				return Operand{}, false
+			}
+			// Keep the left value live through the complete recursive RHS.
+			right, ok := l.expression(env, n.Right)
+			if !ok {
+				return Operand{}, false
+			}
+			kind := model.TypeInteger
+			if left.Type == model.TypeFloat || right.Type == model.TypeFloat || n.Operator == "/" {
+				kind = model.TypeFloat
+				left = l.widen(left, n.Left.SourceSpan())
+				right = l.widen(right, n.Right.SourceSpan())
+			}
+			return l.operation(Opcode(n.Operator), left, &right, kind, n.Span), true
+		}
+	}
+	return Operand{}, l.unsupported(expression.SourceSpan(), "unsupported expression in numeric TAC")
+}
+
+// Validate the grammar's numeric spelling without imposing a machine integer width.
+func numericLexeme(value string) bool {
+	parts := strings.Split(value, ".")
+	if len(parts) > 2 {
+		return false
+	}
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+		for _, digit := range part {
+			if digit < '0' || digit > '9' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (l *lowerer) widen(value Operand, span ast.Span) Operand {
+	if value.Type == model.TypeInteger {
+		return l.operation(IntegerToFloat, value, nil, model.TypeFloat, span)
+	}
+	return value
+}
+
+// Every instruction reads operands before writing. Reuse a consumed operand's
+// slot without releasing it; only other consumed temporary slots become free.
+func (l *lowerer) operation(op Opcode, left Operand, right *Operand, kind model.TypeKind, span ast.Span) Operand {
+	var target Operand
+	if left.Kind == Temporary {
+		target = left
+	} else if right != nil && right.Kind == Temporary {
+		target = *right
+	} else {
+		target = l.pool.acquire(kind)
+	}
+	target.Type = kind
+	l.program.Instructions = append(l.program.Instructions, Instruction{Op: op, Target: target, Left: left, Right: right, Span: span})
+	if left.Kind == Temporary && left.Value != target.Value {
+		l.pool.release(left)
+	}
+	if right != nil && right.Kind == Temporary && right.Value != target.Value {
+		l.pool.release(*right)
+	}
+	return target
+}
