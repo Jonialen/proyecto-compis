@@ -142,7 +142,17 @@ func (m *statementMapper) VisitDefaultCase(ctx *generated.DefaultCaseContext) in
 }
 
 func (m *statementMapper) VisitFunctionDeclaration(ctx *generated.FunctionDeclarationContext) interface{} {
-	return ast.FunctionDeclStmt{Span: m.span(ctx), Name: m.identifiers(ctx)[0], Parameters: m.parameters(ctx.Parameters()), Result: m.directType(ctx), Body: m.firstBlock(ctx)}
+	blocks := m.blocks(ctx)
+	statement := ast.FunctionDeclStmt{Span: m.span(ctx)}
+	if len(blocks) == 0 {
+		// Parser recovery can stop before entering the required function block.
+		return recoverStatement(statement, statement.Span)
+	}
+	statement.Name = m.identifiers(ctx)[0]
+	statement.Parameters = m.parameters(ctx.Parameters())
+	statement.Result = m.directType(ctx)
+	statement.Body = blocks[0]
+	return statement
 }
 
 func (m *statementMapper) VisitClassDeclaration(ctx *generated.ClassDeclarationContext) interface{} {

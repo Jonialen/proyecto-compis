@@ -83,6 +83,33 @@ func TestCLIReportMatchesFacade(t *testing.T) {
 	}
 }
 
+func TestCLIFunctionWithoutBodyReturnsDiagnostics(t *testing.T) {
+	const source = "function f()"
+	path := filepath.Join(t.TempDir(), "missing-body.cps")
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report := compiscript.Analyze([]byte(source))
+	if len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "syntax" {
+		t.Fatalf("diagnostics = %#v, want one syntax diagnostic", report.Diagnostics)
+	}
+	want, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = append(want, '\n')
+	for i := 0; i < 2; i++ {
+		result := executeCLI(t, path)
+		if result.exitCode != 0 || result.stderr != "" || !bytes.Equal(result.stdout, want) {
+			t.Fatalf("exit = %d, stderr = %q, stdout = %s; want facade report with exit 0", result.exitCode, result.stderr, result.stdout)
+		}
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != source {
+		t.Fatalf("source after analysis = %q, error = %v", after, err)
+	}
+}
+
 func TestCLIRejectsInvalidInputs(t *testing.T) {
 	temp := t.TempDir()
 	sourceDirectory := filepath.Join(temp, "directory.cps")

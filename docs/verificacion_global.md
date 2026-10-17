@@ -131,3 +131,45 @@ incluidos los diagnósticos, sin propagar el pánico.
 La gramática, los ocho artefactos generados, las dependencias y los scripts de
 generación permanecen sin cambios. Esta corrección se limita al fallo
 reproducido; no certifica la recuperación de cualquier otra entrada malformada.
+
+## Robustez: funciones sin cuerpo
+
+La entrada `function f()` también provocaba un pánico en `firstBlock` sobre
+la base `ed842b5`. La regresión `TestFunctionWithoutBodyRecovery` reprodujo
+el fallo antes de modificar el mapper (RED). Ahora `VisitFunctionDeclaration`
+detecta la ausencia de bloques y utiliza `recoverStatement` (GREEN), sin
+modificar el helper compartido ni las demás sentencias.
+
+El resultado contiene un `BadStmt` con span `[0,12)` y un diagnóstico
+`syntax`: `mismatched input '<EOF>' expecting {'{', ':'}`, en EOF, offset 12,
+línea 1, columna 13. La CLI mantiene salida 0 y stderr vacío; las pruebas de
+CLI y HTTP verifican el informe de la fachada, con respuesta HTTP 200.
+
+La exploración inicial ejecutó 24 casos en la CLI: llaves y paréntesis
+faltantes, expresiones incompletas, asignaciones y cuerpos de ciclos y
+funciones. Solo `function f()` provocó un pánico en ese corpus. Los otros
+23 casos conservaron stdout, stderr y salida byte por byte frente a la base.
+La matriz `TestRecoveryInputMatrix` agrega ocho controles de funciones
+tipadas, anidadas, métodos y componentes opcionales de `for`: 32 casos en
+total, con diagnóstico sintáctico para las entradas malformadas, sin él para
+los controles válidos, y preservación de los bytes de entrada.
+
+Una verificación independiente ejecutó 27 casos de CLI: 20 conservaron su
+salida exacta y siete que antes provocaban pánico devolvieron diagnósticos.
+También confirmó la regresión mínima, los contratos de CLI/HTTP y la
+inmutabilidad de la fuente. La omisión de condición en un `for` con expresión
+posterior conserva un diagnóstico semántico preexistente; no se cambió esa
+política ni se confundió con un fallo de recuperación sintáctica.
+
+En una copia aislada, sin red, la suite completa pasó en 16 paquetes, con
+cuatro paquetes sin tests, y `go vet -a ./...` terminó sin diagnósticos.
+Las fuentes archivadas no cambiaron tras las pruebas de generación. Los ocho
+controles adicionales se ejecutan con la regresión enfocada:
+
+```sh
+go test ./internal/compiscript/frontend ./cmd/compiscript ./cmd/ide -run 'TestFunctionWithoutBodyRecovery|TestRecoveryInputMatrix|TestMapStatementAlternatives|TestCLIFunctionWithoutBodyReturnsDiagnostics|TestCompiscriptAnalyzeReturnsFacadeReport' -count=1
+```
+
+La gramática, los artefactos generados, las dependencias y los scripts no se
+modificaron. Esta evidencia cubre los casos indicados, no cualquier programa
+malformado posible.
