@@ -3,7 +3,28 @@
 This is the numeric foundation of Entrega 2, not the complete assignment.
 The separate `compiscript.Compile(source []byte)` library API generates typed,
 source-located TAC for numeric programs. The existing analysis command and IDE
-report remain unchanged. A separate CLI is deferred to T3 and is not available yet.
+report remain unchanged. The separate `compiscript-tac` command compiles this
+subset without changing the existing analysis command's interface or exit policy.
+
+## Command quick path
+
+Given an existing UTF-8 `.cps` source file:
+
+```sh
+go run ./cmd/compiscript-tac program.cps
+go run ./cmd/compiscript-tac -format json program.cps
+go run ./cmd/compiscript-tac -h
+```
+
+The default format writes only TAC text to stdout. Rejected compilation writes
+located diagnostics to stderr, no TAC to stdout, and exits 1. JSON format writes
+the complete `CompilationReport` to stdout, including `tac: null` on rejection;
+its exit code is still 1 when diagnostics exist. Success exits 0, including an
+empty source. Invalid arguments or format exit 2; file/UTF-8/write failures
+exit 1; help exits 0 and prints usage to stderr. Flags precede the source path.
+`go run` can wrap a program's nonzero exit; build the binary when an automation
+needs the command's exact status. Scope snapshots are semantic metadata, not
+the extended address/activation-record layout still required by Entrega 2.
 
 ## Representation
 
@@ -92,7 +113,8 @@ For `let x=1; print(x);`, the result contains no TAC and reports
 `unsupported statement in numeric TAC` at `print(x);`. For
 `let x:integer;`, it reports `numeric declarations require an initializer`.
 For `let x=missing;`, the existing semantic diagnostic is returned instead of
-attempting code generation. These are library examples, not new CLI invocations.
+attempting code generation. The default command renders the same TAC; JSON
+exposes the complete report.
 
 ## Remaining Entrega 2 work
 
@@ -114,6 +136,7 @@ closure environments must be designed and tested before emitting their metadata.
 ```sh
 GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test ./internal/compiscript ./internal/compiscript/tac -count=1
 GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go vet ./internal/compiscript ./internal/compiscript/tac
+GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test ./cmd/compiscript-tac -count=1
 ```
 
 Current tests pin instruction formatting, deterministic program output, live
@@ -121,5 +144,7 @@ temporary uniqueness, release protection, type-changing reuse, and bounded
 allocation across repeated expressions. Source-level tests pin precedence,
 associativity, widening, division, lexical binding, exact typed/source-located
 instructions, rejection without partial output, deterministic JSON, input
-preservation, and compatibility with analysis diagnostics. CLI tests arrive
-with T3; complete Entrega 2 coverage is not claimed by this numeric foundation.
+preservation, and compatibility with analysis diagnostics. CLI tests execute
+the built binary for exact TAC/report output, repeated runs, located rejection,
+exit codes, argument/input errors, and unchanged files. Complete Entrega 2
+coverage is not claimed by this numeric foundation.
