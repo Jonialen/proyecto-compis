@@ -65,7 +65,13 @@ func (m *statementMapper) VisitPrintStatement(ctx *generated.PrintStatementConte
 
 func (m *statementMapper) VisitIfStatement(ctx *generated.IfStatementContext) interface{} {
 	bodies := m.bodies(ctx)
-	statement := ast.IfStmt{Span: m.span(ctx), Condition: m.firstExpression(ctx), Then: bodies[0]}
+	statement := ast.IfStmt{Span: m.span(ctx)}
+	if len(bodies) == 0 {
+		// Parser recovery can leave an if context without either body alternative.
+		return recoverStatement(statement, statement.Span)
+	}
+	statement.Condition = m.firstExpression(ctx)
+	statement.Then = bodies[0]
 	if len(bodies) > 1 {
 		statement.Else = bodies[1]
 	}

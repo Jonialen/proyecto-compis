@@ -32,6 +32,7 @@ func TestCompiscriptAnalyzeReturnsFacadeReport(t *testing.T) {
 		"let x: integer = 1;",
 		"let mensaje: string = \"¡Hola, 世界!\";",
 		"let x: integer = ; print(x);",
+		"if (true) { print(1);",
 		"",
 	}
 	for _, source := range sources {

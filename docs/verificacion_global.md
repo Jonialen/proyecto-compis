@@ -102,11 +102,32 @@ ejecuta `go vet -a` sobre el paquete generado, sin depender de un resultado
 previo de caché ni desactivar el analizador. La regresión fue observada en RED
 y luego en GREEN tras regenerar mediante el script.
 
-## Pendiente separado: entrada malformada
+## Corrección separada: entrada malformada
 
-La entrada `if (true) { print(1);` provoca un pánico por índice fuera de rango
-en `internal/compiscript/frontend/mapper_statement.go:68`, tanto en la base
-como en el candidato. Es un defecto preexistente del mapeo de entradas con
-errores, no una regresión de esta normalización; no se corrigió en esta unidad.
-Ese octavo caso no forma parte de las siete comparaciones de salida exacta:
-las trazas contienen rutas y direcciones de ejecución distintas.
+La entrada exacta `if (true) { print(1);` ya no provoca un pánico. La prueba
+pública `TestMissingClosingBrace` reprodujo primero el índice fuera de rango
+en `mapper_statement.go:68` sobre la base `a51076d`. La recuperación del parser
+puede producir un contexto `if` sin cuerpo; el mapper accedía a `bodies[0]`
+antes de que `recoverProgram` pudiera procesar los diagnósticos.
+
+El mapper ahora detecta ese contexto incompleto y reutiliza `recoverStatement`
+con el span calculado por el builder. No inserta una llave ni modifica la
+gramática. La prueba verifica exactamente los dos nodos `BadStmt` recuperados
+y los dos diagnósticos sintácticos, incluidos mensajes, orden y spans vacíos
+en EOF: offset 21, línea 1, columna 22.
+
+La regresión pasó de RED (pánico) a GREEN. Cuatro controles válidos cubren el
+caso cerrado, `else` con bloques, anidamiento y cuerpos sin llaves. En una copia
+aislada, sin red y con Go 1.27.1, `go test ./... -count=1` terminó con 16 paquetes
+OK y 4 sin tests; `go vet -a ./...` terminó sin diagnósticos. La CLI conservó
+stdout, stderr y código de salida byte por byte frente a `a51076d` en esos
+cuatro controles y un bloque independiente. Para la entrada malformada devuelve
+el informe con ambos diagnósticos y stderr vacío; mantiene el código de salida
+0 que la CLI ya utiliza para informes con errores del lenguaje.
+La regresión HTTP incluye la misma entrada: conserva la respuesta 200 de la
+API de análisis y verifica que el informe coincida con la fachada pública,
+incluidos los diagnósticos, sin propagar el pánico.
+
+La gramática, los ocho artefactos generados, las dependencias y los scripts de
+generación permanecen sin cambios. Esta corrección se limita al fallo
+reproducido; no certifica la recuperación de cualquier otra entrada malformada.
