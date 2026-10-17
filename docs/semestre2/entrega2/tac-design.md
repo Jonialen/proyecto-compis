@@ -8,11 +8,12 @@ subset without changing the existing analysis command's interface or exit policy
 
 ## Command quick path
 
-Given an existing UTF-8 `.cps` source file:
+Run the included numeric example (it computes the TAC for `x = 3.5`, without
+executing the source program):
 
 ```sh
-go run ./cmd/compiscript-tac program.cps
-go run ./cmd/compiscript-tac -format json program.cps
+go run ./cmd/compiscript-tac testdata/compiscript/tac/numeric.cps
+go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/numeric.cps
 go run ./cmd/compiscript-tac -h
 ```
 
