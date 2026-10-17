@@ -37,6 +37,7 @@ func TestGenerationIsArgvSafeAndAtomic(t *testing.T) {
 		{"missing java", filepath.Join(space, "missing-java"), "gofmt", nil, false},
 		{"checksum mismatch", fakeTool(t, space, "java-unused", fakeJava("package generated\n")), "gofmt", func() { _ = os.WriteFile(checksum, []byte(strings.Repeat("0", 64)+"  antlr.jar\n"), 0o644) }, false},
 		{"generation failure", fakeTool(t, space, "java-fails", "exit 7\n"), "gofmt", nil, false},
+		{"normalization failure", fakeTool(t, space, "java-invalid-generated", fakeJava("// Code generated from Compiscript.g4 by ANTLR 4.13.2. DO NOT EDIT.\npackage generated\nfunc broken(\n")), "gofmt", nil, false},
 		{"formatting failure", fakeTool(t, space, "java-invalid", fakeJava("package generated\nfunc broken(\n")), fakeTool(t, space, "gofmt-fails", "exit 9\n"), nil, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {

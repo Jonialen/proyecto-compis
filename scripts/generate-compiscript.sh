@@ -37,6 +37,7 @@ grammar_dir=$(cd "$(dirname "$grammar")" && pwd)
 grammar_name=$(basename "$grammar")
 command -v "$java_bin" >/dev/null || { printf 'Java executable not found: %s\n' "$java_bin" >&2; exit 1; }
 command -v "$gofmt_bin" >/dev/null || { printf 'gofmt executable not found: %s\n' "$gofmt_bin" >&2; exit 1; }
+command -v go >/dev/null || { printf 'Go executable not found: go\n' >&2; exit 1; }
 
 expected=$(awk 'NF { print $1; exit }' "$checksum")
 actual=$(sha256sum "$jar" | awk '{ print $1 }')
@@ -62,6 +63,7 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 (cd "$grammar_dir" && "$java_bin" -jar "$jar" -Dlanguage=Go -package generated -visitor -no-listener -o "$stage" "$grammar_name")
+go run "$root/scripts/normalize-antlr-go.go" "$stage"
 find "$stage" -type f -name '*.go' -exec "$gofmt_bin" -w {} +
 find "$stage" -type f -name '*.go' -print -quit | grep -q . || { printf 'ANTLR generated no Go files\n' >&2; exit 1; }
 

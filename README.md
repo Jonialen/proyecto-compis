@@ -229,7 +229,7 @@ predeterminado. Véase la [integración reproducible](docs/semestre1/parte2/guia
 
 ## Más documentación
 
-- [`docs/verificacion_global.md`](docs/verificacion_global.md): resultado global observado, entorno ANTLR y bloqueo pendiente de `go vet`.
+- [`docs/verificacion_global.md`](docs/verificacion_global.md): verificación global, entorno ANTLR y corrección reproducible de los avisos de `go vet`.
 - [`docs/semestre1/parte2/guia_demos_yapar.md`](docs/semestre1/parte2/guia_demos_yapar.md): casos YAPar reproducibles, comandos y resultados esperados en CLI e IDE.
 - [`docs/semestre1/documentacion_tecnica.md`](docs/semestre1/documentacion_tecnica.md): arquitectura, estado real y detalle técnico.
 - [`docs/semestre1/parte2/`](docs/semestre1/parte2/): planeación y backlogs históricos.
