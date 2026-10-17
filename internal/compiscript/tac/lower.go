@@ -32,6 +32,7 @@ type lowerer struct {
 	program     Program
 	pool        temporaryPool
 	diagnostics model.Diagnostics
+	nextLabel   int
 }
 
 // Generate lowers a semantically validated AST using its matching scope inventory.
@@ -93,6 +94,8 @@ func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 	case ast.BlockStmt:
 		child := l.environment(env, model.ScopeBlock, n.Span)
 		return child != nil && l.statements(child, n.Statements)
+	case ast.IfStmt:
+		return l.ifStatement(env, n)
 	case ast.ExprStmt:
 		value, ok := l.expression(env, n.Expression)
 		if ok {
@@ -116,8 +119,8 @@ func (l *lowerer) declaration(env *environment, name string, initializer ast.Exp
 			if symbol.Name != name || symbol.Span != span {
 				continue
 			}
-			if !numeric(symbol.Type.Kind) {
-				return l.unsupported(span, "only integer and float declarations are supported")
+			if !scalar(symbol.Type.Kind) {
+				return l.unsupported(span, "only integer, float and boolean declarations are supported")
 			}
 			target := Operand{Kind: Symbol, Value: fmt.Sprintf("s%d.%s", env.id, name), Type: symbol.Type.Kind}
 			// Do not activate the new name until its initializer has read outer bindings.
@@ -148,3 +151,5 @@ func (l *lowerer) store(env *environment, target Operand, expression ast.Express
 }
 
 func numeric(kind model.TypeKind) bool { return kind == model.TypeInteger || kind == model.TypeFloat }
+
+func scalar(kind model.TypeKind) bool { return numeric(kind) || kind == model.TypeBoolean }

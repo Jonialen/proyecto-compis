@@ -36,6 +36,16 @@ const (
 	Divide         Opcode = "/"
 	Negate         Opcode = "neg"
 	IntegerToFloat Opcode = "i2f"
+	Equal          Opcode = "=="
+	NotEqual       Opcode = "!="
+	Less           Opcode = "<"
+	LessEqual      Opcode = "<="
+	Greater        Opcode = ">"
+	GreaterEqual   Opcode = ">="
+	LogicalNot     Opcode = "!"
+	Label          Opcode = "label"
+	Jump           Opcode = "jump"
+	BranchTrue     Opcode = "branchTrue"
 )
 
 type Instruction struct {
@@ -44,14 +54,21 @@ type Instruction struct {
 	Left   Operand  `json:"left"`
 	Right  *Operand `json:"right,omitempty"`
 	Span   ast.Span `json:"span"`
+	Label  string   `json:"label,omitempty"`
 }
 
 func (i Instruction) String() string {
 	switch i.Op {
 	case Copy:
 		return fmt.Sprintf("%s = %s", i.Target, i.Left)
-	case Negate, IntegerToFloat:
+	case Negate, IntegerToFloat, LogicalNot:
 		return fmt.Sprintf("%s = %s %s", i.Target, i.Op, i.Left)
+	case Label:
+		return i.Label + ":"
+	case Jump:
+		return "goto " + i.Label
+	case BranchTrue:
+		return fmt.Sprintf("if %s goto %s", i.Left, i.Label)
 	default:
 		return fmt.Sprintf("%s = %s %s %s", i.Target, i.Left, i.Op, i.Right)
 	}

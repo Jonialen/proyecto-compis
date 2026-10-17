@@ -68,8 +68,30 @@ func TestGenerateRejectsInferredErrorAndEffectfulExpressions(t *testing.T) {
 	program := ast.Program{Span: span, Statements: ast.Statements{ast.VarDeclStmt{Span: span, Name: "x", Initializer: ast.LiteralExpr{Span: span, Lexeme: "1"}}}}
 	scopes := model.ScopeSnapshots{{ID: 1, Kind: model.ScopeGlobal, Span: span, Symbols: model.Symbols{{Name: "x", Span: span, Type: model.Type{Kind: model.TypeError}}}}}
 	result, diagnostics := tac.Generate(program, scopes)
-	want := model.Diagnostics{{Code: "TAC_UNSUPPORTED", Phase: model.Phase("codegen"), Message: "only integer and float declarations are supported", Span: span}}
+	want := model.Diagnostics{{Code: "TAC_UNSUPPORTED", Phase: model.Phase("codegen"), Message: "only integer, float and boolean declarations are supported", Span: span}}
 	if result != nil || !reflect.DeepEqual(diagnostics, want) {
 		t.Fatalf("error type accepted: %+v %+v", result, diagnostics)
+	}
+}
+
+func TestGenerateConditionsPreservesASTAndScopes(t *testing.T) {
+	source := []byte("let x=true; if(x&&!false){let x=!x;}else if(!x)x=true;")
+	program, parseDiagnostics := frontend.Parse(source)
+	scopes, diagnostics := semantic.Analyze(program)
+	if len(parseDiagnostics)+len(diagnostics) != 0 {
+		t.Fatalf("invalid fixture: %+v %+v", parseDiagnostics, diagnostics)
+	}
+	before, err := json.Marshal([]any{program, scopes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, firstDiagnostics := tac.Generate(program, scopes)
+	second, secondDiagnostics := tac.Generate(program, scopes)
+	if first == nil || len(firstDiagnostics) != 0 || !reflect.DeepEqual(first, second) || !reflect.DeepEqual(firstDiagnostics, secondDiagnostics) {
+		t.Fatalf("nondeterministic or rejected generation: %+v %+v", firstDiagnostics, secondDiagnostics)
+	}
+	after, err := json.Marshal([]any{program, scopes})
+	if err != nil || string(before) != string(after) {
+		t.Fatalf("AST or snapshots mutated: %s != %s (%v)", before, after, err)
 	}
 }

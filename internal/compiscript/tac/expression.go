@@ -10,6 +10,9 @@ import (
 func (l *lowerer) expression(env *environment, expression ast.Expression) (Operand, bool) {
 	switch n := expression.(type) {
 	case ast.LiteralExpr:
+		if n.Lexeme == "true" || n.Lexeme == "false" {
+			return Operand{Kind: Literal, Value: n.Lexeme, Type: model.TypeBoolean}, true
+		}
 		if numericLexeme(n.Lexeme) {
 			kind := model.TypeInteger
 			if strings.Contains(n.Lexeme, ".") {
@@ -24,16 +27,23 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 	case ast.GroupExpr:
 		return l.expression(env, n.Expression)
 	case ast.UnaryExpr:
-		if n.Operator == "-" {
+		if n.Operator == "-" || n.Operator == "!" {
 			value, ok := l.expression(env, n.Operand)
 			if !ok {
 				return Operand{}, false
 			}
-			return l.operation(Negate, value, nil, value.Type, n.Span), true
+			if n.Operator == "-" && numeric(value.Type) {
+				return l.operation(Negate, value, nil, value.Type, n.Span), true
+			}
+			if n.Operator == "!" && value.Type == model.TypeBoolean {
+				return l.operation(LogicalNot, value, nil, model.TypeBoolean, n.Span), true
+			}
 		}
 	case ast.BinaryExpr:
 		switch n.Operator {
-		case "+", "-", "*", "/":
+		case "&&", "||":
+			return l.logicalValue(env, n)
+		case "+", "-", "*", "/", "==", "!=", "<", "<=", ">", ">=":
 			left, ok := l.expression(env, n.Left)
 			if !ok {
 				return Operand{}, false
@@ -43,11 +53,21 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 			if !ok {
 				return Operand{}, false
 			}
+			comparison := n.Operator == "==" || n.Operator == "!=" || n.Operator == "<" || n.Operator == "<=" || n.Operator == ">" || n.Operator == ">="
+			if !numeric(left.Type) || !numeric(right.Type) {
+				if (n.Operator == "==" || n.Operator == "!=") && left.Type == model.TypeBoolean && right.Type == model.TypeBoolean {
+					return l.operation(Opcode(n.Operator), left, &right, model.TypeBoolean, n.Span), true
+				}
+				return Operand{}, l.unsupported(n.Span, "unsupported operand types in TAC")
+			}
 			kind := model.TypeInteger
 			if left.Type == model.TypeFloat || right.Type == model.TypeFloat || n.Operator == "/" {
 				kind = model.TypeFloat
 				left = l.widen(left, n.Left.SourceSpan())
 				right = l.widen(right, n.Right.SourceSpan())
+			}
+			if comparison {
+				kind = model.TypeBoolean
 			}
 			return l.operation(Opcode(n.Operator), left, &right, kind, n.Span), true
 		}

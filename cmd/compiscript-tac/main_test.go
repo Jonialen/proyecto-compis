@@ -108,6 +108,53 @@ func TestCLICompilationErrorsHaveNoPartialTAC(t *testing.T) {
 	}
 }
 
+func TestCLIConditionalSources(t *testing.T) {
+	source := "let x=false; if(true) x=!x; else x=false;"
+	path := fixture(t, source)
+	report := compiscript.Compile([]byte(source))
+	if report.TAC == nil || len(report.Diagnostics) != 0 {
+		t.Fatalf("conditional compilation failed: %+v", report.Diagnostics)
+	}
+	code, out, errOut := execute(t, path)
+	wantText := "s1.x:boolean = false:boolean\nif true:boolean goto L0\ngoto L1\nL0:\nt0:boolean = ! s1.x:boolean\ns1.x:boolean = t0:boolean\ngoto L2\nL1:\ns1.x:boolean = false:boolean\nL2:\n"
+	if code != 0 || out != wantText || errOut != "" {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, out, errOut)
+	}
+	code, out, errOut = execute(t, "-format=json", path)
+	want, err := json.MarshalIndent(report, "", "  ")
+	if err != nil || code != 0 || out != string(want)+"\n" || errOut != "" {
+		t.Fatalf("JSON exit=%d stdout=%q stderr=%q encode=%v", code, out, errOut, err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != source {
+		t.Fatalf("source changed: %q %v", after, err)
+	}
+}
+
+func TestCLIRejectsSkippedUnsupportedCode(t *testing.T) {
+	for _, tt := range []struct{ source, wantError string }{
+		{"if(false){print(1);}", "codegen TAC_UNSUPPORTED at 1:11: unsupported statement in numeric TAC\n"},
+		{"let x=true||((5%2)>0);", "codegen TAC_UNSUPPORTED at 1:15: unsupported expression in numeric TAC\n"},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			path := fixture(t, tt.source)
+			code, out, errOut := execute(t, path)
+			if code != 1 || out != "" || errOut != tt.wantError {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, out, errOut)
+			}
+			code, out, errOut = execute(t, "-format=json", path)
+			want, err := json.MarshalIndent(compiscript.Compile([]byte(tt.source)), "", "  ")
+			if err != nil || code != 1 || out != string(want)+"\n" || errOut != "" {
+				t.Fatalf("exit=%d stdout=%q stderr=%q encode=%v", code, out, errOut, err)
+			}
+			after, err := os.ReadFile(path)
+			if err != nil || string(after) != tt.source {
+				t.Fatalf("source changed: %q %v", after, err)
+			}
+		})
+	}
+}
+
 func TestCLIUsageAndInputErrors(t *testing.T) {
 	valid := fixture(t, "let x=1;")
 	invalidUTF8 := fixture(t, string([]byte{0xff}))

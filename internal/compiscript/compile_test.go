@@ -84,14 +84,11 @@ func TestCompileRepeatedExpressions(t *testing.T) {
 func TestCompileRejectsUnsupportedWithoutPartialTAC(t *testing.T) {
 	for _, tt := range []struct{ source, rejected, message string }{
 		{`print(1);`, `print(1);`, "unsupported statement in numeric TAC"},
-		{`if (true) {let y=2;}`, `if (true) {let y=2;}`, "unsupported statement in numeric TAC"},
 		{`function f() {return;}`, `function f() {return;}`, "unsupported statement in numeric TAC"},
-		{`let y=[1,2];`, `let y=[1,2];`, "only integer and float declarations are supported"},
-		{`let y="text";`, `let y="text";`, "only integer and float declarations are supported"},
-		{`let y=true;`, `let y=true;`, "only integer and float declarations are supported"},
+		{`let y=[1,2];`, `let y=[1,2];`, "only integer, float and boolean declarations are supported"},
+		{`let y="text";`, `let y="text";`, "only integer, float and boolean declarations are supported"},
 		{`let y:integer;`, `let y:integer;`, "numeric declarations require an initializer"},
 		{`let y=5%2;`, `5%2`, "unsupported expression in numeric TAC"},
-		{`let y=true&&false;`, `let y=true&&false;`, "only integer and float declarations are supported"},
 		{`let y=true?1:2;`, `true?1:2`, "unsupported expression in numeric TAC"},
 		{`let y=0; let z=(y=2);`, `y=2`, "unsupported expression in numeric TAC"},
 	} {

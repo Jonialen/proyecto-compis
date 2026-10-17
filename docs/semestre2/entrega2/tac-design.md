@@ -1,8 +1,8 @@
 # Compiscript three-address code
 
-This is the numeric foundation of Entrega 2, not the complete assignment.
+This is the numeric and conditional subset of Entrega 2, not the complete assignment.
 The separate `compiscript.Compile(source []byte)` library API generates typed,
-source-located TAC for numeric programs. The existing analysis command and IDE
+source-located TAC for numeric and boolean programs with `if/else`. The existing analysis command and IDE
 report remain unchanged. The separate `compiscript-tac` command compiles this
 subset without changing the existing analysis command's interface or exit policy.
 
@@ -14,6 +14,8 @@ executing the source program):
 ```sh
 go run ./cmd/compiscript-tac testdata/compiscript/tac/numeric.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/numeric.cps
+go run ./cmd/compiscript-tac testdata/compiscript/tac/conditions.cps
+go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/conditions.cps
 go run ./cmd/compiscript-tac -h
 ```
 
@@ -30,8 +32,10 @@ the extended address/activation-record layout still required by Entrega 2.
 ## Representation
 
 An instruction has an opcode, destination, left operand, optional right operand,
-and the originating AST source span. Operands distinguish literals, symbols,
-and virtual temporaries and retain the semantic `integer` or `float` type.
+and the originating AST source span. The optional `label` field names a control-flow
+destination; it is omitted from numeric JSON, preserving existing field order and
+output. Operands distinguish literals, symbols, and virtual temporaries and retain
+the semantic `integer`, `float` or `boolean` type.
 Text renders an operand as `value:type`; structured JSON retains its kind.
 This representation is not SSA: an assignment can update a symbol or reuse a
 temporary. Spans locate source operations, not unique expression identities.
@@ -43,6 +47,17 @@ temporary. Spans locate source operations, not unique expression identities.
 | Divide | `t0:float = 6.0:float / 2.0:float` | Floating-point division |
 | Negate | `t0:integer = neg s1.x:integer` | Numeric unary minus |
 | Integer to float | `t0:float = i2f s1.x:integer` | Explicit numeric widening |
+| Comparison | `t0:boolean = 1:integer < 2:integer` | `==`, `!=`, `<`, `<=`, `>`, `>=`; boolean equality/inequality also supported |
+| Logical not | `t0:boolean = ! s1.ready:boolean` | Boolean negation |
+| Label | `L0:` | Control-flow destination |
+| Jump | `goto L0` | Unconditional edge |
+| Branch true | `if t0:boolean goto L0` | Jump when the boolean left operand is true; otherwise fall through |
+
+Label/jump instructions use `label`; branch-true also uses `left`. Their unused
+legacy `target` operand is zero-valued; label/jump `left` is also zero-valued,
+and `right` is omitted. These fields are not value reads or writes. Labels start
+at `L0` and are allocated deterministically per compilation. Existing numeric
+instruction text and JSON remain unchanged.
 
 Each instruction reads all source operands before writing its destination.
 Consequently, a destination may reuse the last-consumed operand's temporary.
@@ -69,18 +84,49 @@ different type. Live operands cannot overlap; repeated statements do not
 reserve fresh slots indefinitely. `peakTemporaries` records peak live demand,
 not physical register usage, stack size, or a claim of global optimality.
 
+## Conditions and control flow
+
+Comparisons evaluate left to right and produce booleans; mixed numeric operands
+receive explicit integer-to-float conversions. Arithmetic still requires numeric
+operands, not booleans. Boolean literals, initialized declarations/constants,
+identifier assignments, expression statements and unary `!` are supported.
+
+`a && b` branches to `b` only when `a` is true; `a || b` branches to `b` only
+when `a` is false. Grouping and nested negation retain these semantics. A logical
+expression used as a value reserves a live result temporary before lowering its
+operands, then writes true or false on the corresponding incoming edge before
+joining. Recursive RHS operations cannot recycle that reserved result. A condition
+can instead branch directly without materializing a logical value.
+
+`if/else` lowers both bodies but executes only the selected body. Nested `if`,
+`else if`, no-else, empty and unbraced bodies use the frontend's existing block
+wrappers and matching semantic child scopes. Each declaration initializer reads
+outer bindings before activating its own name; branch-local names do not escape.
+Both sides of a logical expression and both branches are always statically
+validated, even after a literal condition. Unsupported syntax or semantic errors
+in unreachable source still reject the entire compilation.
+
+The conditional example guards division by zero and selects `quotient = -1`.
+The CLI emits TAC only; execution assertions use a bounded test-only interpreter,
+not a product runtime or optimizer.
+
 ## Source-compiler boundary
 
-The implemented source slice supports initialized integer/float variables
+The implemented source slice supports initialized integer/float/boolean variables
 and constants, identifier assignment, lexical blocks, grouping, unary minus,
-and `+`, `-`, `*`, `/`. Unsupported statements, operators, expressions, types,
+and `+`, `-`, `*`, `/`, comparisons, boolean logic, and `if/else` as described above.
+Unsupported statements, operators, expressions, types,
 and missing initializers must be reported explicitly with source locations.
 No partial TAC may escape after lexical, syntax, semantic, or lowering errors.
 Original source bytes and the existing `Analyze` report remain unchanged.
 Numeric expression statements are supported; their final temporary is released
 without a store. Assignment expressions (including property assignments),
-ternaries, strings, booleans, lists, print, functions, and control flow are not
-lowered. Unsupported input is not silently skipped.
+ternaries, strings, null, lists, objects/classes, print, functions, calls, loops,
+switch and transfers are not lowered. Unsupported input is not silently skipped.
+Unsupported declarations report `only integer, float and boolean declarations are supported`.
+Legacy unsupported-expression/statement and missing-initializer diagnostics retain
+their numeric wording for compatibility; all supported scalar declarations require
+an initializer.
 
 ### Library quick path
 
@@ -119,8 +165,7 @@ exposes the complete report.
 
 ## Remaining Entrega 2 work
 
-- Logical/comparison instructions, short circuit, labels, branches, loops,
-  switch, and correct break/continue targets.
+- Loops, switch, and correct break/continue targets.
 - Calls, parameters, returns, recursion, nested functions and closures. Capture
   analysis must retain binding edges; a `Captured` flag alone is insufficient.
 - Object allocation, constructors, fields, methods, `this`, lists and indexing.
@@ -148,4 +193,7 @@ instructions, rejection without partial output, deterministic JSON, input
 preservation, and compatibility with analysis diagnostics. CLI tests execute
 the built binary for exact TAC/report output, repeated runs, located rejection,
 exit codes, argument/input errors, and unchanged files. Complete Entrega 2
-coverage is not claimed by this numeric foundation.
+coverage is not claimed by this subset. Conditional tests execute generated
+instructions with a finite step budget, validate labels/targets and defined
+temporaries, and check skipped/demanded division traps, truth tables, nested joins,
+branch scopes, source preservation and deterministic bounded temporary allocation.

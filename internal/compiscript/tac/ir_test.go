@@ -1,6 +1,7 @@
 package tac
 
 import (
+	"encoding/json"
 	"testing"
 
 	"genanalex/internal/compiscript/model"
@@ -37,6 +38,42 @@ func TestInstructionText(t *testing.T) {
 				t.Fatalf("instruction = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestConditionalInstructionText(t *testing.T) {
+	condition := Operand{Kind: Temporary, Value: "t0", Type: model.TypeBoolean}
+	left := Operand{Kind: Literal, Value: "1", Type: model.TypeInteger}
+	right := Operand{Kind: Literal, Value: "2", Type: model.TypeInteger}
+	for _, op := range []Opcode{Equal, NotEqual, Less, LessEqual, Greater, GreaterEqual} {
+		instruction := Instruction{Op: op, Target: condition, Left: left, Right: &right}
+		want := "t0:boolean = 1:integer " + string(op) + " 2:integer"
+		if instruction.String() != want {
+			t.Fatalf("%s: %q", op, instruction.String())
+		}
+	}
+	for _, tt := range []struct {
+		instruction Instruction
+		want        string
+	}{
+		{Instruction{Op: Label, Label: "L0"}, "L0:"},
+		{Instruction{Op: Jump, Label: "L0"}, "goto L0"},
+		{Instruction{Op: BranchTrue, Label: "L0", Left: condition}, "if t0:boolean goto L0"},
+		{Instruction{Op: LogicalNot, Target: condition, Left: condition}, "t0:boolean = ! t0:boolean"},
+	} {
+		if tt.instruction.String() != tt.want {
+			t.Fatalf("got %q want %q", tt.instruction.String(), tt.want)
+		}
+	}
+}
+
+func TestNumericInstructionJSONCompatibility(t *testing.T) {
+	// Pin field order and omission independently of the current report encoder.
+	one := Operand{Kind: Literal, Value: "1", Type: model.TypeInteger}
+	data, err := json.Marshal(Instruction{Op: Copy, Target: one, Left: one})
+	want := `{"op":"copy","target":{"kind":"literal","value":"1","type":"integer"},"left":{"kind":"literal","value":"1","type":"integer"},"span":{"start":{"offset":0,"line":0,"column":0},"end":{"offset":0,"line":0,"column":0}}}`
+	if err != nil || string(data) != want {
+		t.Fatalf("JSON=%s err=%v", data, err)
 	}
 }
 
