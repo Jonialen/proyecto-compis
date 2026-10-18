@@ -131,10 +131,45 @@ func TestCLIConditionalSources(t *testing.T) {
 	}
 }
 
+func TestCLILoopSources(t *testing.T) {
+	for _, source := range []string{
+		"let x=0; while(x<3){x=x+1; if(x==2)continue;}",
+		"let x=0; do{x=x+1; continue;}while(x<3);",
+		"let x=0; for(;;x=x+1){if(x>=3)break;}",
+	} {
+		t.Run(source, func(t *testing.T) {
+			path := fixture(t, source)
+			report := compiscript.Compile([]byte(source))
+			if report.TAC == nil || len(report.Diagnostics) != 0 {
+				t.Fatalf("compile: %+v", report.Diagnostics)
+			}
+			for repeat := 0; repeat < 2; repeat++ {
+				code, out, errOut := execute(t, path)
+				if code != 0 || out != report.TAC.String() || errOut != "" {
+					t.Fatalf("exit=%d stdout=%q stderr=%q", code, out, errOut)
+				}
+				code, out, errOut = execute(t, "-format=json", path)
+				want, err := json.MarshalIndent(report, "", "  ")
+				if err != nil || code != 0 || out != string(want)+"\n" || errOut != "" {
+					t.Fatalf("exit=%d stdout=%q stderr=%q encode=%v", code, out, errOut, err)
+				}
+			}
+			after, err := os.ReadFile(path)
+			if err != nil || string(after) != source {
+				t.Fatalf("source changed: %q %v", after, err)
+			}
+		})
+	}
+}
+
 func TestCLIRejectsSkippedUnsupportedCode(t *testing.T) {
 	for _, tt := range []struct{ source, wantError string }{
 		{"if(false){print(1);}", "codegen TAC_UNSUPPORTED at 1:11: unsupported statement in numeric TAC\n"},
 		{"let x=true||((5%2)>0);", "codegen TAC_UNSUPPORTED at 1:15: unsupported expression in numeric TAC\n"},
+		{"while(false){print(1);}", "codegen TAC_UNSUPPORTED at 1:14: unsupported statement in numeric TAC\n"},
+		{"for(;false;5%2){}", "codegen TAC_UNSUPPORTED at 1:12: unsupported expression in numeric TAC\n"},
+		{"break;", "semantic SEM_TRANSFER at 1:1: break outside loop or switch\n"},
+		{"continue;", "semantic SEM_TRANSFER at 1:1: continue outside loop\n"},
 	} {
 		t.Run(tt.source, func(t *testing.T) {
 			path := fixture(t, tt.source)

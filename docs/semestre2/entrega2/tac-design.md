@@ -1,9 +1,10 @@
 # Compiscript three-address code
 
-This is the numeric and conditional subset of Entrega 2, not the complete assignment.
+This is the numeric, conditional and loop subset of Entrega 2, not the complete assignment.
 The separate `compiscript.Compile(source []byte)` library API generates typed,
-source-located TAC for numeric and boolean programs with `if/else`. The existing analysis command and IDE
-report remain unchanged. The separate `compiscript-tac` command compiles this
+source-located TAC for numeric and boolean programs with `if/else`, `while`,
+`do-while` and `for`. Existing analysis reports remain unchanged except for the
+corrected optional-for-header mapping described below. The separate `compiscript-tac` command compiles this
 subset without changing the existing analysis command's interface or exit policy.
 
 ## Command quick path
@@ -16,6 +17,8 @@ go run ./cmd/compiscript-tac testdata/compiscript/tac/numeric.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/numeric.cps
 go run ./cmd/compiscript-tac testdata/compiscript/tac/conditions.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/conditions.cps
+go run ./cmd/compiscript-tac testdata/compiscript/tac/loops.cps
+go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/loops.cps
 go run ./cmd/compiscript-tac -h
 ```
 
@@ -112,17 +115,57 @@ not a product runtime or optimizer.
 
 ## Source-compiler boundary
 
+### Loops and transfers
+
+| Construct | Execution order | Nearest-loop `continue` destination |
+| --- | --- | --- |
+| `while` | Condition, body, repeat | Condition |
+| `do-while` | Body, condition, repeat if true | Condition |
+| `for` | Initializer once, condition, body, post, repeat | Post, then condition |
+
+`break` exits the nearest loop, skipping a for post. An omitted for condition is
+true; initializer and post are optional independently. Nested and consecutive
+loops retain separate transfer targets. All bodies and posts are statically
+validated even when a literal condition prevents execution; rejection emits no TAC.
+
+A for initializer uses the existing semantic loop scope, with a child scope for
+the body. While/do bodies use their block scopes; a do condition cannot see body
+locals. Shadowing initializers read outer bindings before activating their names.
+Header/body/post temporaries are consumed before backedges; runtime iterations
+reuse emitted temporary identities without increasing static allocation demand.
+
+Only a whole for post may be a simple identifier assignment expression, optionally
+grouped: `for (;; (i=i+1)) { if(i>=3) break; }`. It uses the existing assignment
+validation, widening and store path. Numeric/boolean post expressions may instead
+be evaluated and discarded. Nested assignments, property/index assignments and
+assignment expressions elsewhere remain unsupported.
+
+The frontend now identifies condition/post by their actual header delimiters,
+not expression count. Declaration/assignment initializers consume their own first
+semicolon. The intentional compatibility exception is omitted-condition,
+present-post headers, for every initializer variant: `for (;; i=i+1) { ... }`
+now has no condition and an assignment post, rather than an assignment condition
+that spuriously reports `SEM_CONDITION` / `condition must be boolean`. This also
+corrects public AST/analysis reports for that family. Grammar, AST schema and
+semantic policies are unchanged; other existing analysis reports are preserved.
+
+The terminating loop example computes `total = 13` without print or a product
+runtime. It exercises while-continue, do-while and for break/continue.
+
+### Supported source
+
 The implemented source slice supports initialized integer/float/boolean variables
 and constants, identifier assignment, lexical blocks, grouping, unary minus,
-and `+`, `-`, `*`, `/`, comparisons, boolean logic, and `if/else` as described above.
+and `+`, `-`, `*`, `/`, comparisons, boolean logic, `if/else`, and the loops/transfers above.
 Unsupported statements, operators, expressions, types,
 and missing initializers must be reported explicitly with source locations.
 No partial TAC may escape after lexical, syntax, semantic, or lowering errors.
-Original source bytes and the existing `Analyze` report remain unchanged.
+Original source bytes are preserved; Compile retains the matching Analyze diagnostics/scopes.
 Numeric expression statements are supported; their final temporary is released
-without a store. Assignment expressions (including property assignments),
-ternaries, strings, null, lists, objects/classes, print, functions, calls, loops,
-switch and transfers are not lowered. Unsupported input is not silently skipped.
+without a store. Except for the for-post case above, assignment expressions
+(including property assignments), ternaries, strings, null, lists, objects/classes,
+print, functions, calls, foreach and switch are not lowered. Out-of-loop transfers
+are rejected. Unsupported input is not silently skipped.
 Unsupported declarations report `only integer, float and boolean declarations are supported`.
 Legacy unsupported-expression/statement and missing-initializer diagnostics retain
 their numeric wording for compatibility; all supported scalar declarations require
@@ -165,7 +208,7 @@ exposes the complete report.
 
 ## Remaining Entrega 2 work
 
-- Loops, switch, and correct break/continue targets.
+- Foreach and switch, including switch-specific break targets.
 - Calls, parameters, returns, recursion, nested functions and closures. Capture
   analysis must retain binding edges; a `Captured` flag alone is insufficient.
 - Object allocation, constructors, fields, methods, `this`, lists and indexing.
@@ -197,3 +240,5 @@ coverage is not claimed by this subset. Conditional tests execute generated
 instructions with a finite step budget, validate labels/targets and defined
 temporaries, and check skipped/demanded division traps, truth tables, nested joins,
 branch scopes, source preservation and deterministic bounded temporary allocation.
+Loop tests use the same bounded interpreter for optional clauses, backedges,
+nearest transfers, scope shadowing, numeric promotion and short-circuit traps.

@@ -33,6 +33,7 @@ type lowerer struct {
 	pool        temporaryPool
 	diagnostics model.Diagnostics
 	nextLabel   int
+	loops       []loopTargets
 }
 
 // Generate lowers a semantically validated AST using its matching scope inventory.
@@ -96,6 +97,16 @@ func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 		return child != nil && l.statements(child, n.Statements)
 	case ast.IfStmt:
 		return l.ifStatement(env, n)
+	case ast.WhileStmt:
+		return l.whileStatement(env, n)
+	case ast.DoWhileStmt:
+		return l.doWhileStatement(env, n)
+	case ast.ForStmt:
+		return l.forStatement(env, n)
+	case ast.BreakStmt:
+		return l.loopTransfer(n.Span, false)
+	case ast.ContinueStmt:
+		return l.loopTransfer(n.Span, true)
 	case ast.ExprStmt:
 		value, ok := l.expression(env, n.Expression)
 		if ok {

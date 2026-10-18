@@ -88,21 +88,24 @@ func (m *statementMapper) VisitDoWhileStatement(ctx *generated.DoWhileStatementC
 
 func (m *statementMapper) VisitForStatement(ctx *generated.ForStatementContext) interface{} {
 	statement := ast.ForStmt{Span: m.span(ctx), Body: m.firstBlock(ctx)}
+	clause := 0
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		child := ctx.GetChild(i)
-		if _, variable := child.(*generated.VariableDeclarationContext); variable && statement.Init == nil {
+		switch child := ctx.GetChild(i).(type) {
+		case *generated.VariableDeclarationContext, *generated.AssignmentContext:
 			statement.Init = m.visitStatementTree(child)
+			// These contexts include the initializer's semicolon.
+			clause = 1
+		case antlr.TerminalNode:
+			if child.GetText() == ";" {
+				clause++
+			}
+		case generated.IExpressionContext:
+			if clause == 1 {
+				statement.Condition = m.mapExpression(child)
+			} else if clause == 2 {
+				statement.Post = m.mapExpression(child)
+			}
 		}
-		if _, assignment := child.(*generated.AssignmentContext); assignment && statement.Init == nil {
-			statement.Init = m.visitStatementTree(child)
-		}
-	}
-	expressions := m.directExpressions(ctx)
-	if len(expressions) > 0 {
-		statement.Condition = expressions[0]
-	}
-	if len(expressions) > 1 {
-		statement.Post = expressions[1]
 	}
 	return statement
 }

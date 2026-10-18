@@ -51,7 +51,7 @@ func TestIndependentUnchosenSourceValidation(t *testing.T) {
 		"let result=true || ((\"a\"==\"b\"));",
 		"let result=false && ((true ? 1 : 2)>0);",
 		"if (true) {} else {print(1);}",
-		"if (false) {while (false) {}}",
+		"if (false) {foreach(x in [1,2]) {}}",
 		"if (false) {let x=missing;}",
 	} {
 		t.Run(source, func(t *testing.T) {

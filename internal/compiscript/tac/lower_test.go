@@ -75,23 +75,44 @@ func TestGenerateRejectsInferredErrorAndEffectfulExpressions(t *testing.T) {
 }
 
 func TestGenerateConditionsPreservesASTAndScopes(t *testing.T) {
-	source := []byte("let x=true; if(x&&!false){let x=!x;}else if(!x)x=true;")
-	program, parseDiagnostics := frontend.Parse(source)
-	scopes, diagnostics := semantic.Analyze(program)
-	if len(parseDiagnostics)+len(diagnostics) != 0 {
-		t.Fatalf("invalid fixture: %+v %+v", parseDiagnostics, diagnostics)
+	for _, text := range []string{
+		"let x=true; if(x&&!false){let x=!x;}else if(!x)x=true;",
+		"let x=0; while(x<2){x=x+1;} do{let x=x+1;}while(false); for(let i=x;i<4;(i=i+1)){if(i==3)continue;}",
+	} {
+		source := []byte(text)
+		program, parseDiagnostics := frontend.Parse(source)
+		scopes, diagnostics := semantic.Analyze(program)
+		if len(parseDiagnostics)+len(diagnostics) != 0 {
+			t.Fatalf("invalid fixture: %+v %+v", parseDiagnostics, diagnostics)
+		}
+		before, err := json.Marshal([]any{program, scopes})
+		if err != nil {
+			t.Fatal(err)
+		}
+		first, firstDiagnostics := tac.Generate(program, scopes)
+		second, secondDiagnostics := tac.Generate(program, scopes)
+		if first == nil || len(firstDiagnostics) != 0 || !reflect.DeepEqual(first, second) || !reflect.DeepEqual(firstDiagnostics, secondDiagnostics) {
+			t.Fatalf("nondeterministic or rejected generation: %+v %+v", firstDiagnostics, secondDiagnostics)
+		}
+		after, err := json.Marshal([]any{program, scopes})
+		if err != nil || string(before) != string(after) {
+			t.Fatalf("AST or snapshots mutated: %s != %s (%v)", before, after, err)
+		}
 	}
-	before, err := json.Marshal([]any{program, scopes})
-	if err != nil {
-		t.Fatal(err)
-	}
-	first, firstDiagnostics := tac.Generate(program, scopes)
-	second, secondDiagnostics := tac.Generate(program, scopes)
-	if first == nil || len(firstDiagnostics) != 0 || !reflect.DeepEqual(first, second) || !reflect.DeepEqual(firstDiagnostics, secondDiagnostics) {
-		t.Fatalf("nondeterministic or rejected generation: %+v %+v", firstDiagnostics, secondDiagnostics)
-	}
-	after, err := json.Marshal([]any{program, scopes})
-	if err != nil || string(before) != string(after) {
-		t.Fatalf("AST or snapshots mutated: %s != %s (%v)", before, after, err)
+}
+
+func TestGenerateRejectsOutOfLoopTransfers(t *testing.T) {
+	for _, source := range []string{"break;", "continue;", "while(false){} break;", "for(;;){break;} continue;"} {
+		t.Run(source, func(t *testing.T) {
+			program, diagnostics := frontend.Parse([]byte(source))
+			if len(diagnostics) != 0 {
+				t.Fatal(diagnostics)
+			}
+			scopes, _ := semantic.Analyze(program)
+			result, diagnostics := tac.Generate(program, scopes)
+			if result != nil || len(diagnostics) != 1 || diagnostics[0].Code != "TAC_UNSUPPORTED" {
+				t.Fatalf("result=%+v diagnostics=%+v", result, diagnostics)
+			}
+		})
 	}
 }
