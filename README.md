@@ -1,244 +1,83 @@
-# genAnaLex + YAPar
+# Compiscript: compilador e IDE
 
-Toolkit en Go para construir y ejecutar analizadores léxicos con **YALex** y analizadores sintácticos con **YAPar**. El proyecto permite compilar especificaciones `.yal`, tokenizar entradas, construir tablas sintácticas y comparar distintos métodos de parsing.
+Proyecto académico de Construcción de Compiladores. Compiscript transforma archivos `.cps` mediante un frontend ANTLR y análisis semántico en código intermedio de tres direcciones (TAC), con diagnósticos ubicados y símbolos extendidos. La CLI y el IDE web Furlantran comparten el mismo núcleo. **Compilar genera código; no ejecuta el programa fuente ni el TAC.**
 
-**Repositorio:** [https://github.com/Jonialen/proyecto-compis](https://github.com/Jonialen/proyecto-compis)
+[Repositorio en GitHub](https://github.com/Jonialen/proyecto-compis) · [Guía de Entrega 2](docs/semestre2/entrega2/README.md) · [Entregables PDF](deliverables/README.md)
 
-## Estado actual
+## Empezar desde la raíz
 
-| Componente | Estado |
-|---|---|
-| YALex | Funcional: compila `.yal`, tokeniza archivos y genera lexer standalone. |
-| YAPar LL(1) | Backend ejecutable disponible. |
-| YAPar SLR(1) | Backend ejecutable disponible. |
-| YAPar LALR | Backend ejecutable disponible. |
-| YAPar LR(0) / LR(1) | Existen como opciones comparables, pero **no** como backends ejecutables. |
-| Parser standalone | Disponible para el camino basado en tablas LR/SLR; no debe asumirse universal para todos los métodos. |
-| IDE/interfaz gráfica | Disponible como app web servida desde `cmd/ide`. |
-| Compiscript | Frontend ANTLR, análisis semántico, generación TAC para los tipos de construcción válidos del AST, símbolos extendidos e IDE con un núcleo compartido. Contratos y evidencia en el informe de Entrega 2. |
+Se necesita **Go 1.26.1 o posterior**, según [go.mod](go.mod), y acceso a las dependencias del módulo (o una caché existente). El módulo conserva el nombre `genanalex`. No se necesita Java para estos comandos si se usan los archivos ANTLR ya generados.
 
-La referencia técnica principal está en [`docs/semestre1/documentacion_tecnica.md`](docs/semestre1/documentacion_tecnica.md).
-
-## Compiscript: Entrega 2
-
-La [guía de ejecución e índice](docs/semestre2/entrega2/README.md) reúne el [informe y matriz del PDF](docs/semestre2/entrega2/report.md), la [arquitectura](docs/semestre2/entrega2/architecture.md), la [referencia TAC](docs/semestre2/entrega2/tac-design.md), la [batería de aceptación](docs/semestre2/entrega2/acceptance.md) y el [manual del IDE](docs/semestre2/entrega2/ide.md). T9/T10 resolvieron las brechas iniciales de print, resto, ternarias, asignaciones con valor, almacenamiento indefinido/null, valores sin anotación y try/catch. Se documentan las guardas estáticas y los fallos dinámicos; no se promete corrección exhaustiva, una calificación ni certificación visual del navegador.
-
-Desde la raíz del repositorio, generar TAC de un ejemplo y consultar el reporte JSON con símbolos y entornos:
-
-```bash
+```sh
+go run ./cmd/compiscript-tac -h
 go run ./cmd/compiscript-tac testdata/compiscript/tac/numeric.cps
 go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/acceptance.cps
-go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/values-effects.cps
-go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/dynamic-exceptions.cps
-go run ./cmd/compiscript testdata/compiscript/tac/acceptance.cps
 ```
 
-El último comando conserva el análisis sin generación. La CLI **genera código, no lo ejecuta**: print y try/catch se traducen a IR, no se ejecutan en la interfaz. Para el IDE, iniciar el servidor y abrir `http://localhost:8080`; Compiscript permite cargar o escribir `.cps`, compilar y consultar TAC, errores ubicados y símbolos extendidos. Analyze y YAPar siguen disponibles:
+El primer ejemplo genera TAC de una expresión numérica; el segundo devuelve el reporte JSON con `tac`, `diagnostics`, `scopes` y, cuando corresponde, `codegen` en unidades `abstract-cell`. Las opciones preceden al archivo. Los valores de ejecución descritos en los informes pertenecen al oráculo acotado de pruebas, no a la salida de la CLI.
 
-```bash
-go run ./cmd/ide
-```
+| Interfaz | Comando desde la raíz | Resultado |
+|---|---|---|
+| Compilación | `go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/acceptance.cps` | TAC, diagnósticos y símbolos/entornos de generación |
+| Análisis anterior | `go run ./cmd/compiscript testdata/compiscript/tac/acceptance.cps` | AST, diagnósticos y ámbitos; sin TAC ni `codegen` |
+| IDE local | `go run ./cmd/ide` | Interfaz web en `http://localhost:8080` |
 
-Prueba focalizada de aceptación y pruebas de conexiones de la interfaz:
+Para el IDE, ejecutar el servidor desde la raíz porque sirve la carpeta relativa `web`. Seleccionar Compiscript, cargar o editar un `.cps` y elegir **Compile .cps**; **Analyze .cps (AST)** conserva el análisis anterior. El servidor escucha en `:8080`, no exclusivamente en loopback: usarlo en un entorno local confiable y detenerlo con Ctrl+C. Los detalles de paneles y errores están en el [manual del IDE](docs/semestre2/entrega2/ide.md).
 
-```bash
-go test ./internal/compiscript/frontend ./internal/compiscript ./cmd/ide -run 'Test(MalformedForMissingBody|MissingLoopBodies|AcceptanceAtomicRecovery|AcceptanceMixedExecution|AcceptanceRecoveryCLI|AcceptanceValidLoops|MixedAcceptanceAPI)$' -count=1
+## Informes, instrucciones y entregables
+
+Los Markdown son las fuentes editables. Los cuatro PDF versionados están separados en `deliverables/entrega2/`; conservarlos juntos para los enlaces internos del paquete.
+
+| Documento | Leer o editar | PDF para entregar |
+|---|---|---|
+| Informe técnico y matriz de requisitos/evidencia | [Informe](docs/semestre2/entrega2/report.md) | [report.pdf](deliverables/entrega2/report.pdf) |
+| Arquitectura y decisiones | [Arquitectura](docs/semestre2/entrega2/architecture.md) | [architecture.pdf](deliverables/entrega2/architecture.pdf) |
+| Ejecución y revisión | [Guía](docs/semestre2/entrega2/README.md) | [run-guide.pdf](deliverables/entrega2/run-guide.pdf) |
+| Lenguaje intermedio, ejemplos y supuestos | [Referencia TAC](docs/semestre2/entrega2/tac-design.md) | [tac-reference.pdf](deliverables/entrega2/tac-reference.pdf) |
+
+- [Instrucciones originales completas](docs/semestre2/entrega2/instructions.md): transcripción en español de las cuatro páginas, flujo de seis pasos y rúbrica de 25/65/10 puntos. El PDF docente original se conserva localmente, ignorado; no es necesario para una copia nueva del repositorio.
+- [Batería de aceptación](docs/semestre2/entrega2/acceptance.md): comandos, resultados esperados y límites de la evidencia.
+- [Índice y política de versiones de entregables](deliverables/README.md): regenerar los PDF al cambiar sus fuentes y versionarlos juntos. Los enlaces externos de los PDF apuntan a rutas de una rama, no a permalinks inmutables.
+
+## Pruebas reproducibles
+
+La [política de reproducción](docs/semestre2/entrega2/acceptance.md#reproducible-tests) describe las dependencias y la separación entre pruebas focalizadas y verificaciones completas. Ejemplos desde la raíz:
+
+```sh
+go test ./internal/compiscript -run '^TestComplexSourceFilesCLI$' -count=1 -v
 go test ./internal/compiscript ./cmd/ide -run '^Test(ValuesEffects|DynamicExceptions|IndependentT9|IndependentT10|MixedAcceptanceAPI)' -count=1
 node --test web/*.test.cjs
 ```
 
-La suite completa puede regenerar archivos ANTLR ignorados: ejecutarla en una copia aislada, siguiendo la [política de reproducción](docs/semestre2/entrega2/acceptance.md#reproducible-tests). Las pruebas de VM/DOM no certifican apariencia real del navegador; CodeMirror conserva dependencias CDN. Entrega 1 mantiene su [matriz histórica](docs/semestre2/entrega1/compliance.md).
+La primera prueba cubre siete fuentes complejas mediante la CLI construida; las otras ejercitan contratos del compilador/API y conexiones VM/DOM de la interfaz. Node.js es necesario para las pruebas web integradas; no requieren `npm install`. Las pruebas no sustituyen una revisión visual del navegador.
 
-## Requisitos
+Para reproducir sin red se requieren módulos Go previamente almacenados, `GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local` y HOME/TMPDIR/GOCACHE externos. La suite completa puede regenerar archivos ANTLR ignorados: ejecutarla en una copia aislada. La regeneración requiere Java y el jar ANTLR 4.13.2 en `tools/antlr/`; el runtime Go es v4.13.1. Una caché existente no demuestra que una instalación nueva funcione sin red. Véase también la [verificación global](docs/verificacion_global.md).
 
-- Go **1.26.1+**
-- Node.js para pruebas web; entorno observado: Go 1.27.2 y Node 24.21.0.
-- Java para regenerar ANTLR; entorno observado: Java 17.0.20.1 y jar ANTLR 4.13.2 en caché. El runtime Go es v4.13.1 según `go.mod`.
-- Graphviz opcional para renderizar archivos DOT generados
+## Mapa del repositorio
 
-## Estructura del proyecto
-
-```text
-cmd/
-  ide/     # Servidor web para la interfaz gráfica
-  yalex/   # CLI del lexer
-  yapar/   # CLI del parser y comparador
-
-internal/
-  dfa/        # Árbol sintáctico, followpos, DFA y minimización
-  generator/  # Generadores standalone
-  lexbuild/   # Pipeline reutilizable de YALex
-  lexer/      # Simulador léxico
-  regex/      # Normalización y postfix para regex
-  shared/     # Tipos compartidos
-  yalex/      # Parser y expansor de YALex
-  yapar/      # Gramática, tablas, backends, visualización y comparación
-
-docs/
-testdata/
-web/
-  # Interfaz gráfica Furlantran
-```
-
-## Uso rápido
-
-### 0. Ejecutar la interfaz gráfica
-
-Levantar la IDE web local:
-
-```bash
-go run ./cmd/ide
-```
-
-Luego abrir:
-
-```text
-http://localhost:8080
-```
-
-Desde la interfaz se puede:
-
-- cargar o editar archivos `.yal`, `.yalp` y entradas de prueba;
-- seleccionar métodos `LL(1)`, `SLR(1)` y `LALR`;
-- ver tokens, tablas, resumen de aceptación y autómata cuando el método lo permite.
-
-### 1. Ejecutar YALex
-
-Tokenizar una entrada con una especificación `.yal`:
-
-```bash
-go run ./cmd/yalex -yal testdata/lexer.yal -src testdata/test.lisp
-```
-
-Generar un lexer standalone:
-
-```bash
-go run ./cmd/yalex -yal testdata/lexer.yal -out lexer_gen.go
-```
-
-Generar el árbol en formato DOT:
-
-```bash
-go run ./cmd/yalex -yal testdata/lexer.yal -tree
-```
-
-Notas importantes:
-
-- `-yal` es obligatorio.
-- Debe usarse al menos una salida: `-src`, `-out` o `-tree`.
-- `-tree` escribe `tree.dot` en el directorio actual.
-
-### 2. Ejecutar YAPar
-
-Fixtures disponibles para probar el parser:
-
-| Archivo | Uso |
+| Ruta | Contenido |
 |---|---|
-| `testdata/yapar/arithmetic.yalp` | Especificación del parser. |
-| `testdata/yapar/arithmetic.yal` | Especificación del lexer. |
-| `testdata/yapar/valid.expr` | Entrada válida. |
-| `testdata/yapar/invalid.expr` | Entrada inválida. |
+| `cmd/compiscript-tac`, `cmd/compiscript`, `cmd/ide` | CLI de compilación, CLI de análisis y servidor del IDE |
+| `internal/compiscript/` | Frontend, análisis semántico, TAC y pruebas del núcleo |
+| `testdata/compiscript/` | Fuentes de ejemplo, aceptación y casos complejos |
+| `web/` | Interfaz Furlantran y pruebas de conexiones |
+| `docs/semestre2/entrega2/` | Fuentes de documentación actual e instrucciones canónicas |
+| `deliverables/entrega2/` | Cuatro exportaciones PDF versionadas |
+| `docs/semestre2/entrega1/`, `docs/semestre1/` | Entregas anteriores e historia técnica |
+| `cmd/yalex`, `cmd/yapar`, otros paquetes de `internal/` | Herramientas históricas de lexer/parser y soporte compartido |
+| `scripts/`, `tools/` | Utilidades y herramientas de generación existentes |
+| `odd/`, `openspec/` | Contexto y registros del desarrollo |
 
-Construir el parser con el método por defecto:
+Las especificaciones de texto `lex` y `yapar`, el ejemplo `input.txt`, el material `ins`, `lr0.dot`, `lr0.png` y las imágenes históricas se conservan como entradas o evidencia, no como basura de compilación.
 
-```bash
-go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp
-```
+## Alcance y comprobaciones pendientes
 
-Mostrar tabla SLR en texto:
+El informe documenta traducción de construcciones válidas del AST, funciones/closures, objetos/listas, valores dinámicos y try/catch, junto con las guardas estáticas y los fallos de ejecución previstos por el IR. Esto no certifica todos los programas, terminación ni una calificación. Los desplazamientos usan celdas abstractas, no una ABI física; no se entrega un ensamblador ni un intérprete de producto.
 
-```bash
-go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method slr -table
-```
+Antes de presentar: ejecutar la batería en el entorno de evaluación, revisar carga/edición/guardado y paneles en un navegador real, confirmar disponibilidad de los recursos CDN CodeMirror/Viz.js, acceso a GitHub y contribuciones individuales reales. La disponibilidad sin conexión del navegador no está garantizada. Consultar los [controles humanos pendientes](docs/semestre2/entrega2/report.md#remaining-requirement-gaps-and-presentation-checks).
 
-Exportar autómata LALR en DOT:
+## Herramientas históricas: YALex y YAPar
 
-```bash
-go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method lalr -format dot
-```
+El trabajo del primer semestre sigue disponible; no es el punto de entrada principal de Entrega 2. YALex procesa especificaciones léxicas y YAPar construye/compara analizadores. Para comandos, métodos y generación standalone, consultar la [documentación técnica del semestre 1](docs/semestre1/documentacion_tecnica.md) y las [demostraciones reproducibles de YAPar](docs/semestre1/parte2/guia_demos_yapar.md), en lugar de duplicar aquí sus manuales.
 
-Exportar tabla LL(1) en JSON:
-
-```bash
-go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -method ll1 -format json
-```
-
-Tokenizar y parsear una entrada real:
-
-```bash
-go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -yal testdata/yapar/arithmetic.yal -src testdata/yapar/valid.expr
-```
-
-## Comparar métodos de parsing
-
-YAPar puede comparar `ll1`, `lr0`, `slr`, `lr1` y `lalr` desde la CLI:
-
-```bash
-go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -compare
-go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -compare -format json
-go run ./cmd/yapar -yalp testdata/yapar/arithmetic.yalp -yal testdata/yapar/arithmetic.yal -src testdata/yapar/valid.expr -compare
-```
-
-> Si ves rutas como `mi_parser.yalp` o `entrada.txt` en notas históricas, trátalas como placeholders. Los comandos anteriores usan fixtures reales del repositorio.
-
-## Flags principales de `cmd/yapar`
-
-| Flag | Descripción | Notas |
-|---|---|---|
-| `-yalp` | Ruta del parser `.yalp`. | Obligatorio. |
-| `-method` | Método solicitado. | `ll1`, `lr0`, `slr`, `lr1`, `lalr`. |
-| `-compare` | Ejecuta comparación entre métodos. | Ignora `-method`; no permite `-out` ni `-format dot`. |
-| `-format` | Formato de visualización. | `text`, `json`, `dot`. |
-| `-table` | Atajo para tabla en texto. | Equivale a salida `text`. |
-| `-yal` | Lexer `.yal`. | Debe usarse junto con `-src`. |
-| `-src` | Archivo fuente a tokenizar y parsear. | Debe usarse junto con `-yal`. |
-| `-out` | Genera parser standalone LL1, SLR o LALR. | No usar con `-compare`; requiere una gramática válida para el método. |
-
-## Parser standalone
-
-La CLI permite generar parsers **LL1, SLR y LALR**. LL1 usa un runtime predictivo;
-SLR y LALR comparten el runtime LR. Los [ejemplos reproducibles](docs/semestre1/parte2/guia_demos_yapar.md#parser-standalone-ll1)
-incluyen generación, compilación y ejecución con tokens JSON válidos e inválidos.
-
-El parser generado con `-out` consume tokens en JSON:
-
-El token de tipo `$` está reservado para el fin de entrada y lo agrega el
-runtime. No debe incluirse en el JSON: los parsers integrados y standalone lo
-rechazan con un diagnóstico de ubicación. Un lexema cuyo texto sea `$` no es
-el marcador si su tipo de token es otro.
-
-```bash
-go run parser_gen.go -tokens tokens.json
-```
-
-Formato esperado:
-
-```json
-[
-  { "type": "ID", "lexeme": "x", "line": 1 }
-]
-```
-
-## Integración lexer-parser standalone
-
-Los parsers generados también pueden leer fuente mediante
-`-lexer <ejecutable> -src <archivo>`, sin preparar JSON manualmente. El lexer
-generado ofrece `-format json`; su salida de texto sigue siendo el valor
-predeterminado. Véase la [integración reproducible](docs/semestre1/parte2/guia_demos_yapar.md#integración-lexer-parser-standalone).
-
-## Limitaciones conocidas
-
-- `lr0` y `lr1` aparecen en la comparación y en `-method`, pero hoy son placeholders no implementados.
-- `-format dot` no aplica al modo comparativo y no todos los métodos tienen autómata exportable.
-- El parser standalone no garantiza soporte completo para todos los métodos.
-- La interfaz gráfica depende del servidor local `cmd/ide` y de assets web en `web/`.
-
-## Más documentación
-
-- [`docs/verificacion_global.md`](docs/verificacion_global.md): verificación global, entorno ANTLR y corrección reproducible de los avisos de `go vet`.
-- [`docs/semestre1/parte2/guia_demos_yapar.md`](docs/semestre1/parte2/guia_demos_yapar.md): casos YAPar reproducibles, comandos y resultados esperados en CLI e IDE.
-- [`docs/semestre1/documentacion_tecnica.md`](docs/semestre1/documentacion_tecnica.md): arquitectura, estado real y detalle técnico.
-- [`docs/semestre1/parte2/`](docs/semestre1/parte2/): planeación y backlogs históricos.
-- [`docs/semestre2/entrega1/compliance.md`](docs/semestre2/entrega1/compliance.md): current Compiscript requirement status, source contradictions, and remaining work.
-- [`docs/semestre2/entrega1/acceptance.md`](docs/semestre2/entrega1/acceptance.md): current Compiscript acceptance and generator gates.
-- [`docs/semestre2/entrega1/evidence/contributions.md`](docs/semestre2/entrega1/evidence/contributions.md): contribution counts derived from Git history.
+La Entrega 1 de Compiscript conserva su [matriz histórica](docs/semestre2/entrega1/compliance.md), [aceptación](docs/semestre2/entrega1/acceptance.md) y [evidencia de contribuciones](docs/semestre2/entrega1/evidence/contributions.md). Estos registros no reemplazan el informe actual ni se reinterpretan como evidencia nueva.

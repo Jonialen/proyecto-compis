@@ -3,3 +3,8 @@
 .atl/
 # Local ANTLR tool cache; the verified checksum remains tracked.
 tools/antlr/*.jar
+# Local metadata and obsolete root export
+.DS_Store
+/README.pdf
+# Keep the human-provided original locally; instructions.md is canonical in Git.
+/docs/semestre2/entrega2/Proyecto_2__Compiladores.pdf

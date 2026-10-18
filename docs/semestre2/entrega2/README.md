@@ -11,6 +11,22 @@ Compiscript produces typed, located three-address code and a static extended-sym
 | Full instruction syntax, translation examples and backend assumptions | [TAC reference](tac-design.md) |
 | Successful/failed executable battery and evidence boundaries | [Acceptance](acceptance.md) |
 | Load/edit/compile/analyze, panels and HTTP guards | [IDE guide](ide.md) |
+| Complete four-page assignment, original page boundaries and rubric | [Canonical instructions](instructions.md) |
+
+### Downloadable PDF packet
+
+- [Technical report](../../../deliverables/entrega2/report.pdf)
+- [Architecture](../../../deliverables/entrega2/architecture.pdf)
+- [Run and review guide](../../../deliverables/entrega2/run-guide.pdf)
+- [Detailed TAC reference, translation examples and assumptions](../../../deliverables/entrega2/tac-reference.pdf)
+
+The PDFs are readable exports of the editable Markdown sources above, not new
+implementation or browser-certification evidence. Keep the four PDFs together for
+packet links; other references open repository branch/source-path URLs, not immutable
+permalinks. See the [deliverables index and version policy](../../../deliverables/README.md).
+The [canonical instructions](instructions.md) preserve the complete assignment;
+the original `Proyecto_2__Compiladores.pdf` stays local and ignored. Regenerate the
+packet after changing its Markdown sources and version both together.
 
 ## Prerequisites
 
