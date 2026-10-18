@@ -1,16 +1,17 @@
 # Compiscript three-address code
 
 This is the scalar, control-flow, lexical-function, object and collection subset of Entrega 2,
-not the complete assignment. Functions use explicit calls/returns and deterministic
+not every construct accepted by Analyze. The [report](report.md) maps the PDF and
+remaining requirement gaps. Functions use explicit calls/returns and deterministic
 abstract-cell activation records, including direct/mutual recursion, retained closures
 and inferred function aliases. Objects include inherited fields, construction,
 virtual methods, retained receivers and strings. Lists include references, literals,
 indexed reads/writes and foreach. Compilation JSON includes extended symbols and
-storage layouts; IDE integration remains separate work.
+storage layouts; the [IDE](ide.md) uses the same core and server-rendered TAC text.
 The separate `compiscript.Compile(source []byte)` library API generates typed,
 source-located TAC for numeric and boolean programs with `if/else`, `while`,
-`do-while`, `for`, `switch`, typed direct/indirect calls and returns. Existing analysis reports remain unchanged except for the
-corrected optional-for-header mapping described below. The separate `compiscript-tac` command compiles this
+`do-while`, `for`, `switch`, typed direct/indirect calls and returns. Existing analysis contracts remain unchanged except for the
+corrected optional-for-header mapping and missing-body recovery described below. The separate `compiscript-tac` command compiles this
 subset without changing the existing analysis command's interface or exit policy.
 
 ## Command quick path
@@ -112,7 +113,7 @@ analysis or binding model is introduced. Constants get storage only when emitted
 procedure/control/layout labels and unemitted source symbols get no invented
 offset or size. Control labels include their owning `main`/frame space because
 their names may repeat across procedures. This is a static report, not a runtime
-interpreter or an implementation of IDE/report deliverables T7/T8.
+interpreter. The [architecture](architecture.md) describes its CLI/IDE consumers.
 
 ## Representation
 
@@ -662,21 +663,25 @@ For `let x=missing;`, the existing semantic diagnostic is returned instead of
 attempting code generation. The default command renders the same TAC; JSON
 exposes the complete report.
 
-## Remaining Entrega 2 work
+## Remaining boundaries
 
 - Stronger definite-initialization analysis for switch bindings.
-- Target-machine byte sizes/offsets and calling ABI, main/global storage layout,
+- Target-machine byte sizes/offsets and calling ABI,
   garbage collection and target-specific lexical links. Abstract retained lexical
   environments and function parameter/local/temporary/result/control cells are
   implemented, not this target layout.
-- Source-to-TAC output in the IDE and successful/failed end-to-end examples.
+- Accepted-but-unsupported source constructs are a concrete broad-translation
+  requirement gap, not a completed PDF outcome; see the [report](report.md#remaining-requirement-gaps-and-presentation-checks).
+- Source-to-TAC IDE output, static main/global layouts and mixed successful/failed
+  examples are implemented; real-browser visual evaluation remains pending.
 
 Future memory access needs distinct opcodes and explicit operands, as direct calls
 already have; operations must not be smuggled into numeric symbol strings.
 Object and collection references use the explicit value/storage contract;
 they are not encoded as scalar operand strings.
-The inherited frontend panic for some malformed for headers is unchanged; this
-slice adds no blanket recovery and does not claim all malformed input is covered.
+The missing-loop-body panic was corrected with a guarded block lookup; the
+[acceptance battery](acceptance.md#recovery-choice-and-limits) checks located,
+atomic rejection without blanket recovery. This is not proof for all malformed input.
 
 ## Verification
 

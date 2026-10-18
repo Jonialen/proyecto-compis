@@ -11,6 +11,8 @@ The IDE uses the same `compiscript.Compile` facade as the CLI. It displays gener
 
 **Clear .cps** clears the editor and invalidates results. Editing, loading another file, or switching between Compiscript and YAPar invalidates pending requests so late responses cannot replace newer outputs. A file read captures its original editor target; subsequent edits or uploads to that target supersede the read. **Save** retains the existing local-file export. YAPar's lexer, grammar, input, methods and analysis flow remain available.
 
+The server listens on `:8080` (all interfaces) and serves the relative `web` directory; use a trusted local environment and launch from the repository root. No documentation check started a listener. For prerequisites and the public local curl example, see the [run guide](README.md).
+
 ## HTTP contract
 
 `POST /api/compiscript/compile` accepts exactly `{"source":"let x = 1;"}` as `application/json` (optional charset parameters are accepted). The endpoint invokes `Compile` once and returns its complete, unchanged `CompilationReport` fields plus `tacText`, rendered on the server by `report.TAC.String()`. The browser never formats TAC from JSON. Analyze remains at `POST /api/compiscript/analyze` with its previous report shape.

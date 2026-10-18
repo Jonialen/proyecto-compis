@@ -4,7 +4,8 @@ The final battery combines retained closures, object references, typed nested li
 iteration, switch transfer and recursion through the existing compiler. It also
 checks malformed input through Parse, Analyze, Compile, built CLIs and the HTTP
 mux. This is executable compiler evidence, not a physical runtime or visual IDE
-certification. The formal report and PDF requirement matrix are separate work.
+certification. The [technical report and PDF matrix](report.md) distinguish this
+battery from complete assignment compliance and list concrete remaining gaps.
 
 ## Quick path
 
