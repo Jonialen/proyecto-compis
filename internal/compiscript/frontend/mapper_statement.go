@@ -226,7 +226,14 @@ func (m *statementMapper) blocks(tree antlr.Tree) (blocks []*ast.BlockStmt) {
 	return blocks
 }
 
-func (m *statementMapper) firstBlock(tree antlr.Tree) *ast.BlockStmt { return m.blocks(tree)[0] }
+func (m *statementMapper) firstBlock(tree antlr.Tree) *ast.BlockStmt {
+	if blocks := m.blocks(tree); len(blocks) > 0 {
+		return blocks[0]
+	}
+	// Parser recovery may stop before the required body. Keep it absent;
+	// recoverProgram uses the located syntax diagnostics to reject the statement.
+	return nil
+}
 
 func (m *statementMapper) firstExpression(tree antlr.Tree) ast.Expression {
 	if expressions := m.directExpressions(tree); len(expressions) > 0 {

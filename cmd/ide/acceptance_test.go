@@ -284,3 +284,69 @@ func TestAcceptanceRequirementEvidence(t *testing.T) {
 		t.Fatalf("multibyte diagnostic span = %+v", span)
 	}
 }
+
+// Recovery must cross the real mux without a panic or a partial compilation.
+func TestMixedAcceptanceAPI(t *testing.T) {
+	mixed, err := os.ReadFile("../../testdata/compiscript/tac/acceptance.cps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct{ name, source, phase string }{
+		{"mixed", string(mixed), ""},
+		{"valid while", "let n=0;while(n<2){n=n+1;}", ""},
+		{"valid do", "let n=0;do{n=n+1;}while(n<2);", ""},
+		{"valid for", "let n=0;for(let i=0;i<2;i=i+1){n=n+1;}", ""},
+		{"valid foreach", "let n=0;foreach(x in [1,1]){n=n+x;}", ""},
+		{"malformed for", "for(let i=0; i<;i=i+1){", "syntax"},
+		{"while", "while(true)", "syntax"},
+		{"do", "do", "syntax"},
+		{"foreach", "foreach(x in [1])", "syntax"},
+		{"for", "for(let i=0; i<2; i=i+1)", "syntax"},
+		{"const", "const rows:integer[][]=[[1]];rows[0][0]=2;", "semantic"},
+		{"shape", "let rows:integer[][]=[[1]];rows[0]=true;", "semantic"},
+		{"unsupported", "let a=[1];if(false){print(a[0]);}", "codegen"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			source := []byte(tt.source)
+			hash := sha256.Sum256(source)
+			body, _ := json.Marshal(map[string]string{"source": tt.source})
+			bodyHash := sha256.Sum256(body)
+			want := compiscript.Compile(source)
+			if tt.phase == "" {
+				if want.TAC == nil || want.Codegen == nil || len(want.Diagnostics) != 0 {
+					t.Fatalf("mixed fixture rejected: %+v", want.Diagnostics)
+				}
+			} else {
+				found := false
+				for _, d := range want.Diagnostics {
+					found = found || string(d.Phase) == tt.phase
+					if d.Span.Start.Line < 1 || d.Span.Start.Column < 1 {
+						t.Fatalf("unlocated diagnostic: %+v", d)
+					}
+				}
+				if !found || want.TAC != nil || want.Codegen != nil {
+					t.Fatalf("non-atomic failure: %+v", want)
+				}
+			}
+			text := ""
+			if want.TAC != nil {
+				text = want.TAC.String()
+			}
+			compileJSON, _ := json.Marshal(struct {
+				compiscript.CompilationReport
+				Text string `json:"tacText"`
+			}{want, text})
+			analyzeJSON, _ := json.Marshal(compiscript.Analyze(source))
+			for endpoint, expected := range map[string][]byte{"compile": compileJSON, "analyze": analyzeJSON} {
+				rec := request(t, http.MethodPost, "/api/compiscript/"+endpoint, "application/json", string(body))
+				if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/json" || rec.Body.String() != string(expected)+"\n" {
+					t.Fatalf("%s HTTP report: %d %v %s; want %s", endpoint, rec.Code, rec.Header(), rec.Body, expected)
+				}
+			}
+			if sha256.Sum256(source) != hash || sha256.Sum256(body) != bodyHash {
+				t.Fatal("source/request changed")
+			}
+		})
+	}
+}
