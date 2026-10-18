@@ -33,43 +33,48 @@ func TestClosureCLIAtomicRejection(t *testing.T) {
 		`function f():integer{return 1;} let alias=f; function bad(){print(1);} let x=alias();`,
 	} {
 		t.Run(source, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "input.cps")
-			if err := os.WriteFile(path, []byte(source), 0600); err != nil {
-				t.Fatal(err)
-			}
-			want := Compile([]byte(source))
-			if want.TAC != nil || len(want.Diagnostics) == 0 {
-				t.Fatalf("fixture: %+v", want)
-			}
-			for _, format := range []string{"tac", "json"} {
-				cmd := exec.Command(cli, "-format="+format, path)
-				var stdout, stderr bytes.Buffer
-				cmd.Stdout, cmd.Stderr = &stdout, &stderr
-				err := cmd.Run()
-				exit, ok := err.(*exec.ExitError)
-				if !ok || exit.ExitCode() != 1 {
-					t.Fatalf("exit=%v", err)
-				}
-				if format == "tac" {
-					var diagnostics bytes.Buffer
-					for _, d := range want.Diagnostics {
-						fmt.Fprintf(&diagnostics, "%s %s at %d:%d: %s\n", d.Phase, d.Code, d.Span.Start.Line, d.Span.Start.Column, d.Message)
-					}
-					if stdout.Len() != 0 || stderr.String() != diagnostics.String() {
-						t.Fatalf("stdout=%q stderr=%q", &stdout, &stderr)
-					}
-				} else {
-					encoded, _ := json.MarshalIndent(want, "", "  ")
-					if stdout.String() != string(encoded)+"\n" || stderr.Len() != 0 {
-						t.Fatalf("stdout=%q stderr=%q", &stdout, &stderr)
-					}
-				}
-			}
-			after, err := os.ReadFile(path)
-			if err != nil || sha256.Sum256(after) != sha256.Sum256([]byte(source)) {
-				t.Fatal("rejected source changed")
-			}
+			assertClosureCLIRejection(t, cli, source)
 		})
+	}
+}
+
+func assertClosureCLIRejection(t *testing.T, cli, source string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "input.cps")
+	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	want := Compile([]byte(source))
+	if want.TAC != nil || len(want.Diagnostics) == 0 {
+		t.Fatalf("fixture: %+v", want)
+	}
+	for _, format := range []string{"tac", "json"} {
+		cmd := exec.Command(cli, "-format="+format, path)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		err := cmd.Run()
+		exit, ok := err.(*exec.ExitError)
+		if !ok || exit.ExitCode() != 1 {
+			t.Fatalf("exit=%v", err)
+		}
+		if format == "tac" {
+			var diagnostics bytes.Buffer
+			for _, d := range want.Diagnostics {
+				fmt.Fprintf(&diagnostics, "%s %s at %d:%d: %s\n", d.Phase, d.Code, d.Span.Start.Line, d.Span.Start.Column, d.Message)
+			}
+			if stdout.Len() != 0 || stderr.String() != diagnostics.String() {
+				t.Fatalf("stdout=%q stderr=%q", &stdout, &stderr)
+			}
+		} else {
+			encoded, _ := json.MarshalIndent(want, "", "  ")
+			if stdout.String() != string(encoded)+"\n" || stderr.Len() != 0 {
+				t.Fatalf("stdout=%q stderr=%q", &stdout, &stderr)
+			}
+		}
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || sha256.Sum256(after) != sha256.Sum256([]byte(source)) {
+		t.Fatal("rejected source changed")
 	}
 }
 

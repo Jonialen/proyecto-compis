@@ -34,6 +34,7 @@ type testFrame struct {
 	environments map[int]*testEnvironment
 	lexical      *testEnvironment
 	layouts      map[int]tac.EnvironmentLayout
+	classes      map[string]*tac.ClassLayout
 }
 
 func (f *testFrame) globalStore() (map[string]frameValue, error) {
@@ -111,6 +112,13 @@ func (f *testFrame) globalOperand(o tac.Operand) bool {
 
 func (f *testFrame) read(o tac.Operand) (frameValue, error) {
 	if o.Kind == tac.Literal {
+		if o.Type == model.TypeNull {
+			return frameValue{model.TypeNull, nil}, nil
+		}
+		if o.Type == model.TypeString {
+			v, e := strconv.Unquote(o.Value)
+			return frameValue{o.Type, v}, e
+		}
 		if o.Type == model.TypeBoolean {
 			v, e := strconv.ParseBool(o.Value)
 			return frameValue{o.Type, v}, e
@@ -150,10 +158,19 @@ func (f *testFrame) read(o tac.Operand) (frameValue, error) {
 	if value.kind != o.Type {
 		return value, fmt.Errorf("operand type mismatch: %s", o)
 	}
+	if err := f.checkObjectType(o, value); err != nil {
+		return value, err
+	}
 	return value, nil
 }
 
 func (f *testFrame) write(o tac.Operand, value frameValue) error {
+	if value.kind == model.TypeNull && (o.Type == model.TypeClass || o.Type == model.TypeString) {
+		value.kind = o.Type
+	}
+	if err := f.checkObjectType(o, value); err != nil {
+		return err
+	}
 	if (o.Kind != tac.Symbol && o.Kind != tac.Temporary) || o.Type != value.kind {
 		return fmt.Errorf("invalid destination: %s", o)
 	}
@@ -239,6 +256,9 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 		}
 		procedures[p.Label] = p
 	}
+	if err := f.loadClasses(program.Classes, procedures); err != nil {
+		return values, err
+	}
 	for steps := 0; ; steps++ {
 		if steps >= 10000 {
 			return values, fmt.Errorf("instruction budget exceeded")
@@ -255,6 +275,11 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 		i := f.tape[f.pc]
 		f.pc++
 		switch i.Op {
+		case tac.NewObject, tac.LoadField, tac.StoreField, tac.BindMethod:
+			if err := f.objectInstruction(i, procedures); err != nil {
+				return values, err
+			}
+			continue
 		case tac.EnterEnvironment:
 			if err := f.enterTestEnvironment(i.Environment); err != nil {
 				return values, err
@@ -269,7 +294,7 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 			if env == nil || p.LexicalScope != i.Environment {
 				return values, fmt.Errorf("undefined closure environment")
 			}
-			if err := f.write(i.Target, frameValue{model.TypeFunction, testClosure{p, env}}); err != nil {
+			if err := f.write(i.Target, frameValue{model.TypeFunction, testClosure{procedure: p, environment: env}}); err != nil {
 				return values, err
 			}
 			continue
@@ -293,6 +318,7 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 		case tac.Call, tac.CallIndirect:
 			p, exists := procedures[i.Callee]
 			var lexical *testEnvironment
+			var receiver *testObject
 			if i.Op == tac.CallIndirect {
 				v, e := f.read(i.Left)
 				if e != nil {
@@ -303,6 +329,7 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 					return values, fmt.Errorf("invalid function value")
 				}
 				p, lexical, exists = closure.procedure, closure.environment, true
+				receiver = closure.receiver
 				if err := checkClosureSignature(i, p); err != nil {
 					return values, err
 				}
@@ -331,7 +358,18 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 				return values, e
 			}
 			callee.layouts, callee.lexical = f.layouts, lexical
+			callee.classes = f.classes
 			callee.environments = map[int]*testEnvironment{}
+			if p.Receiver != nil {
+				if receiver == nil {
+					return values, fmt.Errorf("missing bound receiver")
+				}
+				if e := callee.write(*p.Receiver, frameValue{model.TypeClass, receiver}); e != nil {
+					return values, e
+				}
+			} else if receiver != nil {
+				return values, fmt.Errorf("unexpected bound receiver")
+			}
 			for j, formal := range p.Parameters {
 				if e := callee.write(formal, args[j]); e != nil {
 					return values, e
@@ -362,6 +400,9 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 				if value.kind != f.procedure.ResultKind || f.procedure.Frame.Slots[3].Role != "result" {
 					return values, fmt.Errorf("invalid result cell")
 				}
+				if err := f.checkObjectType(tac.Operand{Type: f.procedure.ResultKind, Class: f.procedure.ResultClass}, value); err != nil {
+					return values, err
+				}
 				f.cells[3] = value
 				if e := continuation.caller.write(continuation.target, f.cells[3].(frameValue)); e != nil {
 					return values, e
@@ -386,7 +427,7 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 		result := frameValue{kind: i.Target.Type}
 		switch i.Op {
 		case tac.Copy, tac.Negate:
-			if left.kind != result.kind {
+			if left.kind != result.kind && !(i.Op == tac.Copy && left.kind == model.TypeNull && (result.kind == model.TypeClass || result.kind == model.TypeString)) {
 				return values, fmt.Errorf("missing explicit conversion")
 			}
 		case tac.IntegerToFloat:
@@ -398,7 +439,7 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 				return values, fmt.Errorf("invalid boolean negation")
 			}
 		default:
-			if i.Right == nil || left.kind != right.kind {
+			if i.Right == nil || (left.kind != right.kind && !((i.Op == tac.Equal || i.Op == tac.NotEqual) && (left.kind == model.TypeNull || right.kind == model.TypeNull))) {
 				return values, fmt.Errorf("invalid binary operand types")
 			}
 		}
@@ -422,7 +463,14 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 		case tac.GreaterEqual:
 			result.value = left.value.(float64) >= right.value.(float64)
 		case tac.Add:
-			result.value = left.value.(float64) + right.value.(float64)
+			if left.kind == model.TypeString {
+				if left.value == nil || right.value == nil {
+					return values, fmt.Errorf("null string operand")
+				}
+				result.value = left.value.(string) + right.value.(string)
+			} else {
+				result.value = left.value.(float64) + right.value.(float64)
+			}
 		case tac.Subtract:
 			result.value = left.value.(float64) - right.value.(float64)
 		case tac.Multiply:

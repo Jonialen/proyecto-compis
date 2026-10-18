@@ -6,10 +6,13 @@ import (
 )
 
 type binding struct {
-	operand  Operand
-	mutable  bool
-	function *functionInfo
-	typeOf   model.Type
+	operand     Operand
+	mutable     bool
+	function    *functionInfo
+	typeOf      model.Type
+	field       *FieldLayout
+	class       *classInfo
+	typeClasses []string
 }
 
 type environment struct {
@@ -79,7 +82,9 @@ func generate(program ast.Program, scopes model.ScopeSnapshots, forceClosures bo
 		return generate(program, scopes, true)
 	}
 	l.program.PeakTemporaries = l.pool.peak
+	l.resolveEnvironmentTypes()
 	l.program.Environments = l.registry.environmentLayouts()
+	l.program.Classes = l.registry.classLayouts()
 	return &l.program, l.diagnostics
 }
 
@@ -104,6 +109,9 @@ func (l *lowerer) environment(parent *environment, kind model.ScopeKind, span as
 }
 
 func (l *lowerer) statements(env *environment, statements ast.Statements) bool {
+	if !l.predeclareClasses(env, statements) {
+		return false
+	}
 	if !l.predeclare(env, statements) {
 		return false
 	}
@@ -117,15 +125,24 @@ func (l *lowerer) statements(env *environment, statements ast.Statements) bool {
 
 func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 	switch n := statement.(type) {
+	case ast.ClassDeclStmt:
+		return l.classBody(env, n)
 	case ast.FunctionDeclStmt:
 		return l.functionBody(env, n)
 	case ast.ReturnStmt:
 		return l.returnStatement(env, n)
 	case ast.VarDeclStmt:
-		return l.declaration(env, n.Name, n.Initializer, n.Span)
+		return l.declaration(env, n.Name, n.Initializer, n.Span, n.Type == nil)
 	case ast.ConstDeclStmt:
-		return l.declaration(env, n.Name, n.Value, n.Span)
+		return l.declaration(env, n.Name, n.Value, n.Span, n.Type == nil)
 	case ast.AssignStmt:
+		if target, ok := n.Target.(ast.PropertyAccessExpr); ok {
+			value, success := l.propertyStore(env, target.Receiver, target.Name, n.Value, n.Span)
+			if success {
+				l.pool.release(value)
+			}
+			return success
+		}
 		target, ok := n.Target.(ast.IdentifierExpr)
 		if !ok {
 			return l.unsupported(n.Span, "only identifier assignment is supported")
@@ -136,6 +153,13 @@ func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 		}
 		if !ok || !value.mutable {
 			return l.unsupported(n.Span, "assignment requires an active mutable numeric binding")
+		}
+		if value.field != nil {
+			stored, success := l.propertyStore(env, ast.ThisExpr{Span: target.Span}, target.Name, n.Value, n.Span)
+			if success {
+				l.pool.release(stored)
+			}
+			return success
 		}
 		l.reference(value.operand)
 		return l.store(env, value.operand, n.Value, n.Span)
@@ -174,7 +198,7 @@ func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 	}
 }
 
-func (l *lowerer) declaration(env *environment, name string, initializer ast.Expression, span ast.Span) bool {
+func (l *lowerer) declaration(env *environment, name string, initializer ast.Expression, span ast.Span, inferred bool) bool {
 	if initializer == nil {
 		return l.unsupported(span, "numeric declarations require an initializer")
 	}
@@ -189,12 +213,22 @@ func (l *lowerer) declaration(env *environment, name string, initializer ast.Exp
 			if !storedValue(symbol.Type.Kind) {
 				return l.unsupported(span, "only integer, float and boolean declarations are supported")
 			}
-			target := symbolOperand(env.id, symbol)
+			target := l.typedOperand(env, symbolOperand(env.id, symbol), symbol.Type)
 			// Do not activate the new name until its initializer has read outer bindings.
-			if !l.store(env, target, initializer, span) {
+			value, ok := l.expression(env, initializer)
+			if !ok {
 				return false
 			}
-			env.active[name] = binding{operand: target, mutable: symbol.Mutable, typeOf: symbol.Type}
+			if inferred && target.Type == model.TypeClass {
+				// Inference follows the initializer's declaration identity, not a
+				// textual type name that a nested class may now shadow.
+				target.Class = value.Class
+			}
+			if !l.storeValue(target, value, initializer.SourceSpan(), span) {
+				return false
+			}
+			env.active[name] = binding{operand: target, mutable: symbol.Mutable, typeOf: symbol.Type, typeClasses: l.expressionTypeClasses(env, initializer)}
+			l.recordStorageIdentity(env.id, target)
 			return true
 		}
 	}
@@ -206,10 +240,14 @@ func (l *lowerer) store(env *environment, target Operand, expression ast.Express
 	if !ok {
 		return false
 	}
+	return l.storeValue(target, value, expression.SourceSpan(), span)
+}
+
+func (l *lowerer) storeValue(target, value Operand, valueSpan, span ast.Span) bool {
 	if target.Type == model.TypeFloat {
-		value = l.widen(value, expression.SourceSpan())
+		value = l.widen(value, valueSpan)
 	}
-	if target.Type != value.Type {
+	if !l.assignable(target, value) {
 		return l.unsupported(span, "numeric store type mismatch")
 	}
 	l.program.Instructions = append(l.program.Instructions, Instruction{Op: Copy, Target: target, Left: value, Span: span})
@@ -222,4 +260,6 @@ func numeric(kind model.TypeKind) bool { return kind == model.TypeInteger || kin
 func scalar(kind model.TypeKind) bool { return numeric(kind) || kind == model.TypeBoolean }
 
 // Storage capability is deliberately separate from scalar arithmetic capability.
-func storedValue(kind model.TypeKind) bool { return scalar(kind) || kind == model.TypeFunction }
+func storedValue(kind model.TypeKind) bool {
+	return scalar(kind) || kind == model.TypeFunction || kind == model.TypeString || kind == model.TypeClass
+}

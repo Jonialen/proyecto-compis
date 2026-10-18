@@ -18,6 +18,7 @@ type testEnvironment struct {
 type testClosure struct {
 	procedure   *tac.Procedure
 	environment *testEnvironment
+	receiver    *testObject
 }
 
 func testOperandScope(o tac.Operand) int {
@@ -123,6 +124,17 @@ func (f *testFrame) enterTestEnvironment(id int) error {
 			}
 			env.cells[o.Value] = value
 		}
+		if o := f.procedure.Receiver; o != nil {
+			offset, err := f.ownedOffset(*o)
+			if err != nil {
+				return err
+			}
+			value, ok := f.cells[offset].(frameValue)
+			if !ok || !environmentBinding(env, *o) {
+				return fmt.Errorf("undefined receiver parameter")
+			}
+			env.cells[o.Value] = value
+		}
 	}
 	f.environments[id] = env
 	return nil
@@ -146,6 +158,9 @@ func (f *testFrame) readEnvironment(o tac.Operand) (bool, frameValue, error) {
 	if v.kind != o.Type {
 		return true, v, fmt.Errorf("environment type mismatch")
 	}
+	if err := f.checkObjectType(o, v); err != nil {
+		return true, v, err
+	}
 	return true, v, nil
 }
 
@@ -156,6 +171,9 @@ func (f *testFrame) writeEnvironment(o tac.Operand, v frameValue) (bool, error) 
 	// Formal arguments are staged in existing frame cells before the explicit
 	// function-scope entry moves them into retained lexical cells.
 	if f.procedure != nil && f.pc == 0 && f.findEnvironment(f.procedure.ScopeID) == nil {
+		if f.procedure.Receiver != nil && *f.procedure.Receiver == o {
+			return false, nil
+		}
 		for _, parameter := range f.procedure.Parameters {
 			if parameter == o {
 				return false, nil
@@ -181,6 +199,28 @@ func checkClosureSignature(i tac.Instruction, p *tac.Procedure) error {
 	for j, parameter := range p.Parameters {
 		if parameter.Type != s.Params[j].Kind {
 			return fmt.Errorf("indirect call signature mismatch")
+		}
+	}
+	if len(i.TypeClasses) != 0 {
+		if len(i.TypeClasses) != len(p.Parameters)+1 {
+			return fmt.Errorf("indirect call signature mismatch")
+		}
+		for j, parameter := range p.Parameters {
+			if i.TypeClasses[j] != parameter.Class {
+				return fmt.Errorf("indirect call signature mismatch")
+			}
+		}
+		if i.TypeClasses[len(p.Parameters)] != p.ResultClass {
+			return fmt.Errorf("indirect call signature mismatch")
+		}
+	} else {
+		if p.ResultClass != "" {
+			return fmt.Errorf("indirect call signature mismatch")
+		}
+		for _, parameter := range p.Parameters {
+			if parameter.Class != "" {
+				return fmt.Errorf("indirect call signature mismatch")
+			}
 		}
 	}
 	if (p.ResultKind == model.TypeNull && i.Target.Kind != "") || (p.ResultKind != model.TypeNull && i.Target.Type != p.ResultKind) {

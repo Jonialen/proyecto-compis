@@ -9,9 +9,29 @@ import (
 
 func (l *lowerer) expression(env *environment, expression ast.Expression) (Operand, bool) {
 	switch n := expression.(type) {
+	case ast.NewExpr:
+		return l.newObject(env, n)
+	case ast.ThisExpr:
+		return l.thisValue(env, n.Span)
+	case ast.PropertyAccessExpr:
+		if n.Receiver == nil {
+			return Operand{}, l.unsupported(n.Span, "unsupported expression in numeric TAC")
+		}
+		return l.property(env, n.Receiver, n.Name, n.Span)
+	case ast.PropertyAssignExpr:
+		if n.Receiver == nil || n.Value == nil {
+			return Operand{}, l.unsupported(n.Span, "unsupported expression in numeric TAC")
+		}
+		return l.propertyStore(env, n.Receiver, n.Name, n.Value, n.Span)
 	case ast.CallExpr:
 		return l.call(env, n, false)
 	case ast.LiteralExpr:
+		if strings.HasPrefix(n.Lexeme, "\"") {
+			return Operand{Kind: Literal, Value: n.Lexeme, Type: model.TypeString}, true
+		}
+		if n.Lexeme == "null" {
+			return Operand{Kind: Literal, Value: n.Lexeme, Type: model.TypeNull}, true
+		}
 		if n.Lexeme == "true" || n.Lexeme == "false" {
 			return Operand{Kind: Literal, Value: n.Lexeme, Type: model.TypeBoolean}, true
 		}
@@ -24,6 +44,9 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 		}
 	case ast.IdentifierExpr:
 		if value, ok := env.lookup(n.Name); ok {
+			if value.field != nil || (value.function != nil && value.function.method != nil) {
+				return l.property(env, ast.ThisExpr{Span: n.Span}, n.Name, n.Span)
+			}
 			if value.function != nil {
 				return l.closure(value.function, n.Span), true
 			}
@@ -67,6 +90,12 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 			}
 			comparison := n.Operator == "==" || n.Operator == "!=" || n.Operator == "<" || n.Operator == "<=" || n.Operator == ">" || n.Operator == ">="
 			if !numeric(left.Type) || !numeric(right.Type) {
+				if n.Operator == "+" && left.Type == model.TypeString && right.Type == model.TypeString {
+					return l.operation(Add, left, &right, model.TypeString, n.Span), true
+				}
+				if (n.Operator == "==" || n.Operator == "!=") && ((left.Type == model.TypeString && right.Type == model.TypeString) || (left.Type == model.TypeClass && right.Type == model.TypeClass) || left.Type == model.TypeNull || right.Type == model.TypeNull) {
+					return l.operation(Opcode(n.Operator), left, &right, model.TypeBoolean, n.Span), true
+				}
 				if (n.Operator == "==" || n.Operator == "!=") && left.Type == model.TypeBoolean && right.Type == model.TypeBoolean {
 					return l.operation(Opcode(n.Operator), left, &right, model.TypeBoolean, n.Span), true
 				}
@@ -125,6 +154,7 @@ func (l *lowerer) operation(op Opcode, left Operand, right *Operand, kind model.
 		target = l.pool.acquire(kind)
 	}
 	target.Type = kind
+	target.Class = ""
 	l.program.Instructions = append(l.program.Instructions, Instruction{Op: op, Target: target, Left: left, Right: right, Span: span})
 	if left.Kind == Temporary && left.Value != target.Value {
 		l.pool.release(left)

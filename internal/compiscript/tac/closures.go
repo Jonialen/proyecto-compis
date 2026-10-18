@@ -1,6 +1,7 @@
 package tac
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,6 +22,9 @@ type EnvironmentLayout struct {
 func newFunctionRegistry(scopes model.ScopeSnapshots) *functionRegistry {
 	r := &functionRegistry{environments: map[int]EnvironmentLayout{}}
 	for _, scope := range scopes {
+		if scope.Kind == model.ScopeClass {
+			r.closures = true
+		}
 		for _, symbol := range scope.Symbols {
 			if (symbol.Kind == model.SymbolFunction && scope.Kind != model.ScopeGlobal) || (symbol.Type.Kind == model.TypeFunction && symbol.Kind != model.SymbolFunction) {
 				r.closures = true
@@ -35,10 +39,30 @@ func (l *lowerer) enterEnvironment(scope model.ScopeSnapshot) {
 		return
 	}
 	layout := EnvironmentLayout{ScopeID: scope.ID, ParentID: scope.ParentID, Bindings: []Operand{}}
+	if c := l.classScope(scope.ParentID); c != nil {
+		layout.ParentID = c.owner
+	}
 	for _, symbol := range scope.Symbols {
 		if symbol.Kind == model.SymbolVariable || symbol.Kind == model.SymbolConstant || symbol.Kind == model.SymbolParameter {
-			layout.Bindings = append(layout.Bindings, symbolOperand(scope.ID, symbol))
+			o := symbolOperand(scope.ID, symbol)
+			if symbol.Type.Kind == model.TypeClass {
+				o.Class = l.classForType(scope.ID, symbol.Type.Name)
+			}
+			layout.Bindings = append(layout.Bindings, o)
 		}
+	}
+	// Receivers use the same layout builder and ordering invariant as ordinary
+	// parameters. A nested function retains its enclosing receiver instead.
+	var receiverClass *classInfo
+	if l.current != nil {
+		if scope.Kind == model.ScopeClass && scope.ID == l.current.scopeID {
+			receiverClass = l.classScope(scope.ID)
+		} else if l.current.method != nil && scope.ParentID == l.current.method.layout.ScopeID && scope.Kind == model.ScopeFunction {
+			receiverClass = l.current.method
+		}
+	}
+	if receiverClass != nil {
+		layout.Bindings = append(layout.Bindings, Operand{Kind: Symbol, Value: fmt.Sprintf("s%d.$this", scope.ID), Type: model.TypeClass, Class: receiverClass.layout.ID})
 	}
 	sort.Slice(layout.Bindings, func(i, j int) bool { return layout.Bindings[i].Value < layout.Bindings[j].Value })
 	l.registry.environments[scope.ID] = layout
@@ -72,6 +96,9 @@ func operandScope(o Operand) int {
 func (l *lowerer) owns(f *functionInfo, o Operand) bool {
 	id := operandScope(o)
 	for id != 0 {
+		if id == f.scopeID {
+			return true
+		}
 		found := false
 		for _, scope := range l.scopes {
 			if scope.ID != id {

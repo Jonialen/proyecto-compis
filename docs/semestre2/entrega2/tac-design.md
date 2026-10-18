@@ -1,9 +1,10 @@
 # Compiscript three-address code
 
-This is the scalar, control-flow and lexical-function subset of Entrega 2,
+This is the scalar, control-flow, lexical-function and object subset of Entrega 2,
 not the complete assignment. Functions use explicit calls/returns and deterministic
 abstract-cell activation records, including direct/mutual recursion, retained closures
-and inferred function aliases. Objects and collections remain separate future units.
+and inferred function aliases. Objects include inherited fields, construction,
+virtual methods, retained receivers and strings. Collections remain a future unit.
 The separate `compiscript.Compile(source []byte)` library API generates typed,
 source-located TAC for numeric and boolean programs with `if/else`, `while`,
 `do-while`, `for`, `switch`, typed direct/indirect calls and returns. Existing analysis reports remain unchanged except for the
@@ -406,20 +407,95 @@ and writable across cases and nested blocks; no default values are invented.
 The switch example computes `total = 6` without print. It demonstrates ordered
 dispatch, implicit exit, switch break and continue through a switch to a for post.
 
+## Objects, bound methods and strings
+
+Generate the print-free object example with either CLI format:
+
+```sh
+go run ./cmd/compiscript-tac testdata/compiscript/tac/objects.cps
+go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/objects.cps
+```
+
+The bounded test oracle executes the emitted JSON to `observed = 9`,
+`first = 11`, `second = 12`, `independent = 21`, `shared = 30`, and
+`label = "counter:ready"`. The CLI generates TAC; it is not an interpreter.
+
+### Allocation and initialization
+
+Each allocation has reference identity and its own initially undefined field
+cells. Copies, class parameters/results, field stores, and subtype assignments
+retain that identity; they do not copy the instance's fields. Equality compares
+object identity. A null class reference can be stored and compared, but member
+access faults with `null receiver` in the oracle.
+
+Construction evaluates arguments once, left-to-right, and snapshots them across
+initializer calls. Then **all inherited and own field initializers run
+base-to-derived, in declaration order within each class**. Only afterward does
+the selected nearest constructor run once. A subclass without its own constructor
+uses the nearest inherited constructor; a subclass with its own constructor does
+not automatically call any ancestor constructor. This ordering is the explicit
+S3 user decision, not a default borrowed from JavaScript or TypeScript.
+
+A field without an initializer remains undefined until written. Reading it faults
+with `undefined field`; no zero, empty string, or null default is fabricated.
+Constant field initializers can write their own field exactly once; ordinary
+mutability and member access remain governed by Analyze. Initializers and methods
+are validated even when their class is unused. Unsupported code rejects the
+entire compilation.
+
+### Explicit object IR
+
+| Operation/metadata | Contract |
+| --- | --- |
+| `Program.classes` | Optional class layouts in semantic-scope order. Each declaration has a scope-qualified `id`, name, parent identity, lexical scope, source span, field layout, virtual method table and initializer procedure. |
+| Field layout | Inherited fields retain their declaration identity, owner and offset. Own fields append in declaration order. Cells carry full semantic types, optional nominal class identities, mutability and source spans. Offsets count abstract cells, not bytes. |
+| `newObject`, `class`, `target` | Allocate fresh undefined field cells and retain the actual defining lexical environments for the class hierarchy. Allocation identity is distinct from static layout identity. |
+| `loadField`, `left`, `class`, `member`, `offset`, `target` | Read one field from the selected receiver after validating nominal ownership and layout identity. |
+| `storeField`, `left`, `right`, `class`, `member`, `offset` | Read receiver and value before mutation. The receiver is retained across RHS calls; no receiver expression is evaluated again. |
+| `bindMethod`, `left`, `class`, `member`, `target` | Select the implementation from the receiver's actual class and pair it with that receiver and its defining environment. Selection happens before argument evaluation. |
+| `bindMethod`, `callee` | Internal initializer selection names the exact initializer procedure instead of virtual dispatch. Construction emits one initializer call per class, then at most one constructor call. |
+| `Procedure.receiver` | Optional implicit receiver cell, separate from explicit source parameters. It enters the same frame/environment infrastructure as parameters. Nested functions capture that lexical cell, not a caller's current receiver. |
+| Operand `class`, `Procedure.resultClass`, call `typeClasses` | Optional scope-qualified nominal identities for class values and full indirect-call signature checks. An indirect call checks parameter/result identities as well as kinds and arity before invocation. |
+
+Bound methods use existing `callIndirect`, frames, results, initialization guards,
+retained environments and temporary allocation. Escaped nested functions keep
+their lexical `this`; bound method aliases keep the receiver selected when the
+alias was created. Unqualified field/method names use the analyzer's lexical class
+scope: inherited property access remains available through `this`, but an
+inherited field is not inserted as a new unqualified lexical binding.
+
+Strings support literals, storage, typed parameters/results, concatenation and
+equality/inequality. String and class storage compatibility is separate from
+numeric arithmetic; references are not accepted as arbitrary numeric operands.
+Nominal class metadata is omitted when unused, preserving prior supported TAC
+text/JSON. The oracle rejects malformed class identities, inheritance cycles,
+field offsets/owners, missing initializers/methods and incompatible dynamic calls.
+These guards document an abstract backend contract, not new static diagnostics.
+
+Inferred aliases retain the initializer's scope-qualified class identity even
+when a nested class shadows its textual type name. The same identity is recorded
+in environment/frame storage; field reads and function results retain their
+declaring origins. Explicit annotations and existing typed stores still enforce
+their declared nominal identities. This uses private lowering metadata rather
+than changing Analyze or introducing another frontend binding model.
+
 ### Supported source
 
 The implemented source slice supports initialized integer/float/boolean variables
 and constants, identifier assignment, lexical blocks, grouping, unary minus,
 and `+`, `-`, `*`, `/`, comparisons, boolean logic, `if/else`, the loops/switch/transfers above,
-and the lexical-function/call/return subset described above.
+and the lexical-function/call/return and object/string subsets described above.
 Unsupported statements, operators, expressions, types,
 and missing initializers must be reported explicitly with source locations.
 No partial TAC may escape after lexical, syntax, semantic, or lowering errors.
 Original source bytes are preserved; Compile retains the matching Analyze diagnostics/scopes.
 Numeric expression statements are supported; their final temporary is released
 without a store. Except for the for-post case above, assignment expressions
-(including property assignments), ternaries, strings, general null values, lists, objects/classes,
-print and foreach are not lowered. Transfers without an enclosing
+(other than supported property stores), ternaries, general null declarations, lists,
+print and foreach are not lowered. Null is supported as a class/string storage
+value or equality operand, not a new general scalar type. Field declarations need
+semantic storage types; inferred error-type fields are still rejected rather than
+guessing a type not recorded by Analyze. Transfers without an enclosing
 eligible construct are rejected. Unsupported input is not silently skipped.
 Unsupported declarations report `only integer, float and boolean declarations are supported`.
 Legacy unsupported-expression/statement and missing-initializer diagnostics retain
@@ -464,7 +540,7 @@ exposes the complete report.
 ## Remaining Entrega 2 work
 
 - Foreach lowering and stronger definite-initialization analysis for switch bindings.
-- Object allocation, constructors, fields, methods, `this`, lists and indexing.
+- Lists and indexing; object allocation/fields/methods/receivers are implemented above.
 - Target-machine byte sizes/offsets and calling ABI, main/global storage layout,
   garbage collection and target-specific lexical links. Abstract retained lexical
   environments and function parameter/local/temporary/result/control cells are

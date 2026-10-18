@@ -34,6 +34,8 @@ type Procedure struct {
 	Globals         []Operand      `json:"globals,omitempty"`
 	LexicalScope    int            `json:"lexicalScope,omitempty"`
 	Captures        []Operand      `json:"captures,omitempty"`
+	Receiver        *Operand       `json:"receiver,omitempty"`
+	ResultClass     string         `json:"resultClass,omitempty"`
 }
 
 func symbolOperand(scope int, symbol model.Symbol) Operand {
@@ -48,8 +50,11 @@ func (l *lowerer) layout(p *Procedure) bool {
 	add("continuation", nil, false)
 	add("controlLink", nil, false)
 	add("globalAccessLink", nil, false)
-	if scalar(p.ResultKind) {
+	if callValue(p.ResultKind) {
 		add("result", nil, false)
+	}
+	if p.Receiver != nil {
+		add("parameter", p.Receiver, false)
 	}
 	for _, parameter := range p.Parameters {
 		parameter := parameter
@@ -79,13 +84,21 @@ func (l *lowerer) layout(p *Procedure) bool {
 			continue
 		}
 		for _, symbol := range scope.Symbols {
+			if symbol.Kind == model.SymbolClass || symbol.Kind == model.SymbolField || symbol.Kind == model.SymbolMethod {
+				continue
+			}
 			if symbol.Kind == model.SymbolParameter || symbol.Kind == model.SymbolFunction {
 				continue
 			}
 			if !storedValue(symbol.Type.Kind) || (symbol.Kind != model.SymbolVariable && symbol.Kind != model.SymbolConstant) {
 				return l.unsupported(symbol.Span, "unsupported function-owned binding")
 			}
-			locals = append(locals, local{symbolOperand(scope.ID, symbol), symbol.Span})
+			o := symbolOperand(scope.ID, symbol)
+			if symbol.Type.Kind == model.TypeClass {
+				o.Class = l.classForType(scope.ID, symbol.Type.Name)
+				o = l.storageIdentity(o)
+			}
+			locals = append(locals, local{o, symbol.Span})
 		}
 	}
 	sort.Slice(locals, func(i, j int) bool {

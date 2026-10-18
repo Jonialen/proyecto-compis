@@ -16,19 +16,23 @@ func statementCall(expression ast.Expression) (ast.CallExpr, bool) {
 func (l *lowerer) call(env *environment, n ast.CallExpr, statement bool) (Operand, bool) {
 	identifier, direct := n.Callee.(ast.IdentifierExpr)
 	bound, found := env.lookup(identifier.Name)
-	if !direct || !found || (bound.function == nil && bound.typeOf.Kind != model.TypeFunction) {
+	if direct && (!found || (bound.function == nil && bound.typeOf.Kind != model.TypeFunction)) {
 		return Operand{}, l.unsupported(n.Span, "only direct global function calls are supported")
 	}
 	f := bound.function
 	signature := bound.typeOf
+	if !direct {
+		signature = l.expressionType(env, n.Callee)
+	}
 	if f != nil {
 		signature = f.typeOf
 	}
+	typeClasses := l.expressionTypeClasses(env, n.Callee)
 	if signature.Result == nil {
 		return Operand{}, l.unsupported(n.Span, "missing function value signature")
 	}
 	kind := signature.Result.Kind
-	if !scalar(kind) && kind != model.TypeNull {
+	if !callValue(kind) && kind != model.TypeNull {
 		return Operand{}, l.unsupported(n.Span, "unsupported function signature")
 	}
 	if kind == model.TypeNull && !statement {
@@ -39,7 +43,7 @@ func (l *lowerer) call(env *environment, n ast.CallExpr, statement bool) (Operan
 	}
 	// Select and freeze the function value BEFORE any argument can reassign an
 	// alias or reenter its defining block. Direct global calls keep their old IR.
-	indirect := f == nil || f.definingScope != l.globalID
+	indirect := f == nil || f.definingScope != l.globalID || f.method != nil
 	var selected Operand
 	if indirect {
 		var ok bool
@@ -49,38 +53,26 @@ func (l *lowerer) call(env *environment, n ast.CallExpr, statement bool) (Operan
 		}
 		selected = l.freeze(selected, n.Callee.SourceSpan())
 	}
-	arguments := make([]Operand, 0, len(n.Arguments))
-	for i, expression := range n.Arguments {
-		value, ok := l.expression(env, expression)
-		if !ok {
-			return Operand{}, false
-		}
-		if signature.Params[i].Kind == model.TypeFloat {
-			value = l.widen(value, expression.SourceSpan())
-		}
-		if !scalar(signature.Params[i].Kind) || value.Type != signature.Params[i].Kind {
-			return Operand{}, l.unsupported(expression.SourceSpan(), "call argument type mismatch")
-		}
-		for _, later := range n.Arguments[i+1:] {
-			if hasCall(later) {
-				value = l.freeze(value, expression.SourceSpan())
-				break
-			}
-		}
-		arguments = append(arguments, value)
+	arguments, ok := l.arguments(env, n.Arguments, signature.Params, typeClasses)
+	if !ok {
+		return Operand{}, false
 	}
-	if f != nil {
+	if f != nil && f.method == nil {
 		if l.current != nil {
 			l.current.edges = append(l.current.edges, f)
 		}
 		l.registry.calls = append(l.registry.calls, mainCall{callee: f, span: n.Span, available: availableBindings(env), caller: l.current})
 	}
 	var target Operand
-	if scalar(kind) {
+	if callValue(kind) {
 		target = l.pool.acquire(kind)
+		target = l.typedOperand(env, target, *signature.Result)
+		if len(typeClasses) != 0 {
+			target.Class = typeClasses[len(signature.Params)]
+		}
 	}
 	if indirect {
-		l.program.Instructions = append(l.program.Instructions, Instruction{Op: CallIndirect, Target: target, Left: selected, Arguments: arguments, Signature: &signature, Span: n.Span})
+		l.program.Instructions = append(l.program.Instructions, Instruction{Op: CallIndirect, Target: target, Left: selected, Arguments: arguments, Signature: &signature, TypeClasses: typeClasses, Span: n.Span})
 		l.pool.release(selected)
 	} else {
 		l.program.Instructions = append(l.program.Instructions, Instruction{Op: Call, Target: target, Callee: f.label, Arguments: arguments, Span: n.Span})
@@ -98,6 +90,7 @@ func (l *lowerer) freeze(value Operand, span ast.Span) Operand {
 		return value
 	}
 	target := l.pool.acquire(value.Type)
+	target.Class = value.Class
 	l.program.Instructions = append(l.program.Instructions, Instruction{Op: Copy, Target: target, Left: value, Span: span})
 	return target
 }
@@ -123,11 +116,7 @@ func hasCall(expression ast.Expression) bool {
 	case ast.PropertyAssignExpr:
 		return hasCall(n.Receiver) || hasCall(n.Value)
 	case ast.NewExpr:
-		for _, arg := range n.Arguments {
-			if hasCall(arg) {
-				return true
-			}
-		}
+		return true // Field initializers and the constructor can call arbitrary code.
 	case ast.ArrayExpr:
 		for _, arg := range n.Elements {
 			if hasCall(arg) {

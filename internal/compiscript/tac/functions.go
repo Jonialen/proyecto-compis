@@ -17,6 +17,8 @@ type functionInfo struct {
 	captures      map[string]Operand
 	definingScope int
 	scopeID       int
+	method        *classInfo
+	typeClasses   []string
 }
 
 type mainCall struct {
@@ -32,6 +34,7 @@ type functionRegistry struct {
 	closures      bool
 	needsClosures bool
 	environments  map[int]EnvironmentLayout
+	classes       []*classInfo
 }
 
 func (l *lowerer) predeclare(global *environment, statements ast.Statements) bool {
@@ -46,7 +49,7 @@ func (l *lowerer) predeclare(global *environment, statements ast.Statements) boo
 				continue
 			}
 			for _, symbol := range scope.Symbols {
-				if symbol.Name == n.Name && symbol.Span == n.Span && symbol.Kind == model.SymbolFunction {
+				if symbol.Name == n.Name && symbol.Span == n.Span && (symbol.Kind == model.SymbolFunction || symbol.Kind == model.SymbolMethod) {
 					copy := symbol
 					found = &copy
 					break
@@ -59,15 +62,20 @@ func (l *lowerer) predeclare(global *environment, statements ast.Statements) boo
 		if n.Body == nil {
 			return l.unsupported(n.Span, "bodyless functions are unsupported")
 		}
-		if len(found.Type.Params) != len(n.Parameters) || (!scalar(found.Type.Result.Kind) && found.Type.Result.Kind != model.TypeNull) {
+		if len(found.Type.Params) != len(n.Parameters) || (!callValue(found.Type.Result.Kind) && found.Type.Result.Kind != model.TypeNull) {
 			return l.unsupported(n.Span, "unsupported function signature")
 		}
 		for i, parameter := range found.Type.Params {
-			if n.Parameters[i].Type == nil || !scalar(parameter.Kind) {
+			if n.Parameters[i].Type == nil || !callValue(parameter.Kind) {
 				return l.unsupported(n.Span, "unsupported function signature")
 			}
 		}
 		f := &functionInfo{label: symbolOperand(global.id, *found).Value, typeOf: found.Type, globals: map[string]Operand{}, captures: map[string]Operand{}, definingScope: global.id}
+		f.typeClasses = l.signatureClasses(global, found.Type)
+		if c := l.classScope(global.id); c != nil {
+			f.method = c
+			f.definingScope = c.owner
+		}
 		l.registry.ordered = append(l.registry.ordered, f)
 		global.active[n.Name] = binding{function: f}
 	}
@@ -88,6 +96,15 @@ func (l *lowerer) functionBody(global *environment, n ast.FunctionDeclStmt) bool
 		return false
 	}
 	p := Procedure{Label: f.label, ScopeID: env.id, Span: n.Span, ResultKind: f.typeOf.Result.Kind, Parameters: []Operand{}}
+	p.ResultClass = child.typedOperand(global, Operand{Type: p.ResultKind}, *f.typeOf.Result).Class
+	if len(f.typeClasses) != 0 {
+		p.ResultClass = f.typeClasses[len(f.typeOf.Params)]
+	}
+	if f.method != nil {
+		receiver := Operand{Kind: Symbol, Value: fmt.Sprintf("s%d.$this", env.id), Type: model.TypeClass, Class: f.method.layout.ID}
+		p.Receiver = &receiver
+		env.active["$this"] = binding{operand: receiver, typeOf: model.Type{Kind: model.TypeClass, Name: f.method.layout.Name}}
+	}
 	f.scopeID = env.id
 	if l.registry.closures {
 		p.LexicalScope = f.definingScope
@@ -100,7 +117,10 @@ func (l *lowerer) functionBody(global *environment, n ast.FunctionDeclStmt) bool
 			}
 			for _, symbol := range scope.Symbols {
 				if symbol.Name == parameter.Name && symbol.Kind == model.SymbolParameter && symbol.Type.Kind == f.typeOf.Params[i].Kind {
-					operand := symbolOperand(env.id, symbol)
+					operand := child.typedOperand(env, symbolOperand(env.id, symbol), symbol.Type)
+					if len(f.typeClasses) != 0 {
+						operand.Class = f.typeClasses[i]
+					}
 					env.active[symbol.Name] = binding{operand: operand, mutable: symbol.Mutable, typeOf: symbol.Type}
 					p.Parameters = append(p.Parameters, operand)
 					found = true
@@ -153,8 +173,20 @@ func (l *lowerer) returnStatement(env *environment, n ast.ReturnStmt) bool {
 	if kind == model.TypeFloat {
 		value = l.widen(value, n.Value.SourceSpan())
 	}
-	if value.Type != kind {
+	expected := l.typedOperand(env, Operand{Type: kind}, *l.current.typeOf.Result)
+	if len(l.current.typeClasses) != 0 {
+		expected.Class = l.current.typeClasses[len(l.current.typeOf.Params)]
+	}
+	if !l.assignable(expected, value) {
 		return l.unsupported(n.Span, "return type mismatch")
+	}
+	if value.Type == model.TypeNull {
+		// Null receives its declared reference type at the result-cell boundary,
+		// exactly as it does at a typed store or formal parameter boundary.
+		target := l.typedOperand(env, l.pool.acquire(kind), *l.current.typeOf.Result)
+		target.Class = expected.Class
+		l.program.Instructions = append(l.program.Instructions, Instruction{Op: Copy, Target: target, Left: value, Span: n.Span})
+		value = target
 	}
 	l.program.Instructions = append(l.program.Instructions, Instruction{Op: Return, ReturnValue: &value, Span: n.Span})
 	l.pool.release(value)

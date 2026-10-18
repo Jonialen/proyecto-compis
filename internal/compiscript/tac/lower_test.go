@@ -79,6 +79,7 @@ func TestGenerateConditionsPreservesASTAndScopes(t *testing.T) {
 		"let x=true; if(x&&!false){let x=!x;}else if(!x)x=true;",
 		"let x=0; while(x<2){x=x+1;} do{let x=x+1;}while(false); for(let i=x;i<4;(i=i+1)){if(i==3)continue;}",
 		"let x=0; switch(1<2){case false:let y=1; case true:{let y=2; x=y;} default:x=3;}",
+		`class Box{let n:integer=2;function get():integer{function nested():integer{return this.n;}return nested();}}let box=new Box();let x=box.get();`,
 	} {
 		source := []byte(text)
 		program, parseDiagnostics := frontend.Parse(source)

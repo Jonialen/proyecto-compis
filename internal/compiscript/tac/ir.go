@@ -22,6 +22,7 @@ type Operand struct {
 	Kind  OperandKind    `json:"kind"`
 	Value string         `json:"value"`
 	Type  model.TypeKind `json:"type"`
+	Class string         `json:"class,omitempty"`
 }
 
 func (o Operand) String() string { return o.Value + ":" + string(o.Type) }
@@ -51,6 +52,10 @@ const (
 	EnterEnvironment Opcode = "enterEnvironment"
 	MakeClosure      Opcode = "makeClosure"
 	CallIndirect     Opcode = "callIndirect"
+	NewObject        Opcode = "newObject"
+	LoadField        Opcode = "loadField"
+	StoreField       Opcode = "storeField"
+	BindMethod       Opcode = "bindMethod"
 )
 
 type Instruction struct {
@@ -65,10 +70,23 @@ type Instruction struct {
 	ReturnValue *Operand    `json:"returnValue,omitempty"`
 	Environment int         `json:"environment,omitempty"`
 	Signature   *model.Type `json:"signature,omitempty"`
+	Class       string      `json:"class,omitempty"`
+	Member      string      `json:"member,omitempty"`
+	Offset      *int        `json:"offset,omitempty"`
+	Receiver    *Operand    `json:"receiver,omitempty"`
+	TypeClasses []string    `json:"typeClasses,omitempty"`
 }
 
 func (i Instruction) String() string {
 	switch i.Op {
+	case NewObject:
+		return fmt.Sprintf("%s = newObject %s", i.Target, i.Class)
+	case LoadField:
+		return fmt.Sprintf("%s = loadField %s %s[%d]", i.Target, i.Left, i.Class, *i.Offset)
+	case StoreField:
+		return fmt.Sprintf("storeField %s %s[%d] = %s", i.Left, i.Class, *i.Offset, i.Right)
+	case BindMethod:
+		return fmt.Sprintf("%s = bindMethod %s %s.%s", i.Target, i.Left, i.Class, i.Member)
 	case EnterEnvironment:
 		return fmt.Sprintf("enter environment s%d", i.Environment)
 	case MakeClosure:
@@ -111,11 +129,21 @@ type Program struct {
 	PeakTemporaries int                 `json:"peakTemporaries"`
 	Procedures      []Procedure         `json:"procedures,omitempty"`
 	Environments    []EnvironmentLayout `json:"environments,omitempty"`
+	Classes         []ClassLayout       `json:"classes,omitempty"`
 }
 
 // String renders instructions in execution order with one trailing newline each.
 func (p Program) String() string {
 	var out strings.Builder
+	for _, class := range p.Classes {
+		fmt.Fprintf(&out, "class %s parent %s [fields=%d initializer=%s]:\n", class.ID, class.Parent, len(class.Fields), class.Initializer)
+		for _, field := range class.Fields {
+			fmt.Fprintf(&out, "  field %d %s:%s mutable=%t\n", field.Offset, field.ID, field.Type.Kind, field.Mutable)
+		}
+		for _, method := range class.Methods {
+			fmt.Fprintf(&out, "  method %s = %s\n", method.Name, method.Callee)
+		}
+	}
 	for _, env := range p.Environments {
 		bindings := make([]string, len(env.Bindings))
 		for i, o := range env.Bindings {
