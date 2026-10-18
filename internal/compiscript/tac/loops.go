@@ -13,18 +13,29 @@ func (l *lowerer) loopTransfer(span ast.Span, continuing bool) bool {
 	if len(l.loops) == 0 {
 		return l.unsupported(span, "loop transfer requires an enclosing loop")
 	}
-	target := l.loops[len(l.loops)-1].exit
-	if continuing {
-		target = l.loops[len(l.loops)-1].next
+	for i := len(l.loops) - 1; i >= 0; i-- {
+		target := l.loops[i].exit
+		if continuing {
+			target = l.loops[i].next
+			if target == "" {
+				continue
+			}
+		}
+		l.control(Jump, target, span)
+		return true
 	}
-	l.control(Jump, target, span)
-	return true
+	return l.unsupported(span, "loop transfer requires an enclosing loop")
 }
 
 func (l *lowerer) loopBody(env *environment, body *ast.BlockStmt, exit, next string) bool {
+	return l.transferBody(exit, next, func() bool { return l.statement(env, *body) })
+}
+
+// Loops and switches share one LIFO; switches have no continue destination.
+func (l *lowerer) transferBody(exit, next string, body func() bool) bool {
 	l.loops = append(l.loops, loopTargets{exit: exit, next: next})
 	defer func() { l.loops = l.loops[:len(l.loops)-1] }()
-	return l.statement(env, *body)
+	return body()
 }
 
 func (l *lowerer) whileStatement(env *environment, n ast.WhileStmt) bool {

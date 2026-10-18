@@ -1,9 +1,9 @@
 # Compiscript three-address code
 
-This is the numeric, conditional and loop subset of Entrega 2, not the complete assignment.
+This is the numeric, conditional, loop and boolean-switch subset of Entrega 2, not the complete assignment.
 The separate `compiscript.Compile(source []byte)` library API generates typed,
 source-located TAC for numeric and boolean programs with `if/else`, `while`,
-`do-while` and `for`. Existing analysis reports remain unchanged except for the
+`do-while`, `for` and `switch`. Existing analysis reports remain unchanged except for the
 corrected optional-for-header mapping described below. The separate `compiscript-tac` command compiles this
 subset without changing the existing analysis command's interface or exit policy.
 
@@ -19,6 +19,8 @@ go run ./cmd/compiscript-tac testdata/compiscript/tac/conditions.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/conditions.cps
 go run ./cmd/compiscript-tac testdata/compiscript/tac/loops.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/loops.cps
+go run ./cmd/compiscript-tac testdata/compiscript/tac/switch.cps
+go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/switch.cps
 go run ./cmd/compiscript-tac -h
 ```
 
@@ -123,7 +125,7 @@ not a product runtime or optimizer.
 | `do-while` | Body, condition, repeat if true | Condition |
 | `for` | Initializer once, condition, body, post, repeat | Post, then condition |
 
-`break` exits the nearest loop, skipping a for post. An omitted for condition is
+`break` exits the nearest loop or switch, skipping a for post when exiting that loop. An omitted for condition is
 true; initializer and post are optional independently. Nested and consecutive
 loops retain separate transfer targets. All bodies and posts are statically
 validated even when a literal condition prevents execution; rejection emits no TAC.
@@ -152,11 +154,47 @@ semantic policies are unchanged; other existing analysis reports are preserved.
 The terminating loop example computes `total = 13` without print or a product
 runtime. It exercises while-continue, do-while and for break/continue.
 
+### Boolean switches
+
+The selector must be boolean; cases retain the analyzer's compatible-type and
+statically unique-case rules. Numeric selectors remain semantic errors, as required
+by the team policy in `../entrega1/compliance.md`. The selector is evaluated once,
+even for an empty or default-only switch. Case expressions execute in source order
+until the first match; default runs only if none match. Every selected body exits
+implicitly, including an empty case: there is no fallthrough.
+
+Dispatch precedes all body labels. A selector temporary stays live and unchanged
+through every comparison; each comparison uses a separate boolean result slot.
+All tests and bodies are lowered and validated, including unselected source.
+Any error discards the whole TAC program. No new opcodes or runtime are introduced.
+
+Switch and loop frames share one transfer stack. `break` exits its nearest frame;
+`continue` skips switch frames to the nearest loop's condition or for-post label.
+A switch alone does not make `continue` legal.
+
+Case statements share the incoming **semantic** scope and symbol IDs; only real
+blocks create child scopes. TAC conservatively requires shared bindings to be
+initialized before the switch. A case may initialize and use its own local
+declaration, but later cases and code after the switch cannot read or assign that
+case-only binding. This restriction also applies to default-only switches and to
+declarations inside nested switches sharing the same scope. Such uses report
+`TAC_UNSUPPORTED` in phase `codegen` with the located message
+`switch binding is not guaranteed initialized on this path`.
+
+This is a code-generation capability restriction, not a change to language scope
+or analysis reports. Blocked names cannot silently fall back to an outer binding
+shadowed by an earlier case declaration. A declaration's own initializer still
+reads the outer name before activation. Initialized outer bindings remain readable
+and writable across cases and nested blocks; no default values are invented.
+
+The switch example computes `total = 6` without print. It demonstrates ordered
+dispatch, implicit exit, switch break and continue through a switch to a for post.
+
 ### Supported source
 
 The implemented source slice supports initialized integer/float/boolean variables
 and constants, identifier assignment, lexical blocks, grouping, unary minus,
-and `+`, `-`, `*`, `/`, comparisons, boolean logic, `if/else`, and the loops/transfers above.
+and `+`, `-`, `*`, `/`, comparisons, boolean logic, `if/else`, and the loops/switch/transfers above.
 Unsupported statements, operators, expressions, types,
 and missing initializers must be reported explicitly with source locations.
 No partial TAC may escape after lexical, syntax, semantic, or lowering errors.
@@ -164,8 +202,8 @@ Original source bytes are preserved; Compile retains the matching Analyze diagno
 Numeric expression statements are supported; their final temporary is released
 without a store. Except for the for-post case above, assignment expressions
 (including property assignments), ternaries, strings, null, lists, objects/classes,
-print, functions, calls, foreach and switch are not lowered. Out-of-loop transfers
-are rejected. Unsupported input is not silently skipped.
+print, functions, calls and foreach are not lowered. Transfers without an enclosing
+eligible construct are rejected. Unsupported input is not silently skipped.
 Unsupported declarations report `only integer, float and boolean declarations are supported`.
 Legacy unsupported-expression/statement and missing-initializer diagnostics retain
 their numeric wording for compatibility; all supported scalar declarations require
@@ -208,7 +246,7 @@ exposes the complete report.
 
 ## Remaining Entrega 2 work
 
-- Foreach and switch, including switch-specific break targets.
+- Foreach lowering and stronger definite-initialization analysis for switch bindings.
 - Calls, parameters, returns, recursion, nested functions and closures. Capture
   analysis must retain binding edges; a `Captured` flag alone is insufficient.
 - Object allocation, constructors, fields, methods, `this`, lists and indexing.
@@ -242,3 +280,6 @@ temporaries, and check skipped/demanded division traps, truth tables, nested joi
 branch scopes, source preservation and deterministic bounded temporary allocation.
 Loop tests use the same bounded interpreter for optional clauses, backedges,
 nearest transfers, scope shadowing, numeric promotion and short-circuit traps.
+Switch tests reuse that interpreter for dispatch order, selector lifetime, skipped
+traps, implicit exit, nested transfers, case initialization restrictions and bounded
+temporary pressure. CLI tests cover text/JSON success and atomic skipped-body rejection.

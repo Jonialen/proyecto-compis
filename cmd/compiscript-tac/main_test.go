@@ -85,7 +85,7 @@ func TestCLICompilesNumericSources(t *testing.T) {
 }
 
 func TestCLICompilationErrorsHaveNoPartialTAC(t *testing.T) {
-	for _, source := range []string{"let x=1; print(x);", "let x=missing;", "function f()", "let x:integer;"} {
+	for _, source := range []string{"let x=1; print(x);", "let x=missing;", "function f()", "let x:integer;", "switch(true){default:let a=1;} let b=a;"} {
 		t.Run(source, func(t *testing.T) {
 			path := fixture(t, source)
 			code, out, errOut := execute(t, path)
@@ -162,6 +162,31 @@ func TestCLILoopSources(t *testing.T) {
 	}
 }
 
+func TestCLISwitchSources(t *testing.T) {
+	source := "let x=0; switch(1<2){case false:x=1; case true:x=2; default:x=3;}"
+	path := fixture(t, source)
+	report := compiscript.Compile([]byte(source))
+	if report.TAC == nil || len(report.Diagnostics) != 0 {
+		t.Fatalf("compile: %+v", report.Diagnostics)
+	}
+	wantText := "s1.x:integer = 0:integer\nt0:boolean = 1:integer < 2:integer\nt1:boolean = t0:boolean == false:boolean\nif t1:boolean goto L1\nt1:boolean = t0:boolean == true:boolean\nif t1:boolean goto L2\ngoto L3\nL1:\ns1.x:integer = 1:integer\ngoto L0\nL2:\ns1.x:integer = 2:integer\ngoto L0\nL3:\ns1.x:integer = 3:integer\ngoto L0\nL0:\n"
+	for repeat := 0; repeat < 2; repeat++ {
+		code, out, errOut := execute(t, path)
+		if code != 0 || out != wantText || errOut != "" {
+			t.Fatalf("exit=%d stdout=%q stderr=%q", code, out, errOut)
+		}
+		code, out, errOut = execute(t, "-format=json", path)
+		want, err := json.MarshalIndent(report, "", "  ")
+		if err != nil || code != 0 || out != string(want)+"\n" || errOut != "" {
+			t.Fatalf("JSON exit=%d stdout=%q stderr=%q err=%v", code, out, errOut, err)
+		}
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != source {
+		t.Fatalf("source changed: %q %v", after, err)
+	}
+}
+
 func TestCLIRejectsSkippedUnsupportedCode(t *testing.T) {
 	for _, tt := range []struct{ source, wantError string }{
 		{"if(false){print(1);}", "codegen TAC_UNSUPPORTED at 1:11: unsupported statement in numeric TAC\n"},
@@ -170,6 +195,7 @@ func TestCLIRejectsSkippedUnsupportedCode(t *testing.T) {
 		{"for(;false;5%2){}", "codegen TAC_UNSUPPORTED at 1:12: unsupported expression in numeric TAC\n"},
 		{"break;", "semantic SEM_TRANSFER at 1:1: break outside loop or switch\n"},
 		{"continue;", "semantic SEM_TRANSFER at 1:1: continue outside loop\n"},
+		{"switch(true){case true:break; default:print(1);}", "codegen TAC_UNSUPPORTED at 1:39: unsupported statement in numeric TAC\n"},
 	} {
 		t.Run(tt.source, func(t *testing.T) {
 			path := fixture(t, tt.source)

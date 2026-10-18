@@ -85,7 +85,7 @@ func TestLoopStaticRejection(t *testing.T) {
 		"const x=0; for(;false;x=1){}", "for(;false;missing=1){}",
 		"for(let i=0;false;i=i+1){} i=1;", "do{let x=true;}while(x);",
 		"break;", "continue;", "while(false){} break;", "for(;;){break;} continue;",
-		"foreach(x in [1,2]){}", "switch(true){case true:break;}",
+		"foreach(x in [1,2]){}", "switch(true){case true:print(1);}",
 		"let x=[1]; for(;false;x[0]=2){}", "while(1){}", "let x=0; for(;false;x=true){}",
 	} {
 		t.Run(source, func(t *testing.T) {

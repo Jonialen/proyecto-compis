@@ -13,9 +13,10 @@ type binding struct {
 }
 
 type environment struct {
-	id     int
-	parent *environment
-	active map[string]binding
+	id      int
+	parent  *environment
+	active  map[string]binding
+	blocked map[string]bool
 }
 
 func (e *environment) lookup(name string) (binding, bool) {
@@ -23,8 +24,23 @@ func (e *environment) lookup(name string) (binding, bool) {
 		if value, ok := current.active[name]; ok {
 			return value, true
 		}
+		if current.blocked[name] {
+			return binding{}, false
+		}
 	}
 	return binding{}, false
+}
+
+func (e *environment) unavailable(name string) bool {
+	for current := e; current != nil; current = current.parent {
+		if _, ok := current.active[name]; ok {
+			return false
+		}
+		if current.blocked[name] {
+			return true
+		}
+	}
+	return false
 }
 
 type lowerer struct {
@@ -88,6 +104,9 @@ func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 			return l.unsupported(n.Span, "only identifier assignment is supported")
 		}
 		value, ok := env.lookup(target.Name)
+		if !ok && env.unavailable(target.Name) {
+			return l.unsupported(target.Span, "switch binding is not guaranteed initialized on this path")
+		}
 		if !ok || !value.mutable {
 			return l.unsupported(n.Span, "assignment requires an active mutable numeric binding")
 		}
@@ -103,6 +122,8 @@ func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 		return l.doWhileStatement(env, n)
 	case ast.ForStmt:
 		return l.forStatement(env, n)
+	case ast.SwitchStmt:
+		return l.switchStatement(env, n)
 	case ast.BreakStmt:
 		return l.loopTransfer(n.Span, false)
 	case ast.ContinueStmt:

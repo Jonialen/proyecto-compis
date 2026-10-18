@@ -78,6 +78,7 @@ func TestGenerateConditionsPreservesASTAndScopes(t *testing.T) {
 	for _, text := range []string{
 		"let x=true; if(x&&!false){let x=!x;}else if(!x)x=true;",
 		"let x=0; while(x<2){x=x+1;} do{let x=x+1;}while(false); for(let i=x;i<4;(i=i+1)){if(i==3)continue;}",
+		"let x=0; switch(1<2){case false:let y=1; case true:{let y=2; x=y;} default:x=3;}",
 	} {
 		source := []byte(text)
 		program, parseDiagnostics := frontend.Parse(source)
@@ -102,7 +103,7 @@ func TestGenerateConditionsPreservesASTAndScopes(t *testing.T) {
 }
 
 func TestGenerateRejectsOutOfLoopTransfers(t *testing.T) {
-	for _, source := range []string{"break;", "continue;", "while(false){} break;", "for(;;){break;} continue;"} {
+	for _, source := range []string{"break;", "continue;", "while(false){} break;", "for(;;){break;} continue;", "switch(true){default:continue;}", "switch(true){case true:break;} break;", "switch(true){case true:print(1);}"} {
 		t.Run(source, func(t *testing.T) {
 			program, diagnostics := frontend.Parse([]byte(source))
 			if len(diagnostics) != 0 {

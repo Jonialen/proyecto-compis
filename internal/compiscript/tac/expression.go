@@ -24,6 +24,9 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 		if value, ok := env.lookup(n.Name); ok {
 			return value.operand, true
 		}
+		if env.unavailable(n.Name) {
+			return Operand{}, l.unsupported(n.Span, "switch binding is not guaranteed initialized on this path")
+		}
 	case ast.GroupExpr:
 		return l.expression(env, n.Expression)
 	case ast.UnaryExpr:
