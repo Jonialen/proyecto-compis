@@ -15,6 +15,34 @@ import (
 
 var cliPath string
 
+func TestCLIDirectFunctions(t *testing.T) {
+	source := `let x=f(2); function f(a:integer):integer{return a+1;}`
+	path := fixture(t, source)
+	code, out, errOut := execute(t, path)
+	if code != 0 || errOut != "" {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, out, errOut)
+	}
+	r := compiscript.Compile([]byte(source))
+	if r.TAC == nil || len(r.Diagnostics) != 0 {
+		t.Fatalf("compile: %+v", r.Diagnostics)
+	}
+	for repeat := 0; repeat < 2; repeat++ {
+		code, out, errOut := execute(t, path)
+		if code != 0 || out != r.TAC.String() || errOut != "" {
+			t.Fatalf("exit=%d stdout=%q stderr=%q", code, out, errOut)
+		}
+		code, out, errOut = execute(t, "-format=json", path)
+		want, err := json.MarshalIndent(r, "", "  ")
+		if err != nil || code != 0 || out != string(want)+"\n" || errOut != "" {
+			t.Fatalf("exit=%d stdout=%q stderr=%q encode=%v", code, out, errOut, err)
+		}
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != source {
+		t.Fatalf("source changed: %q %v", after, err)
+	}
+}
+
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "compiscript-tac-cli-test-")
 	if err != nil {
@@ -189,6 +217,10 @@ func TestCLISwitchSources(t *testing.T) {
 
 func TestCLIRejectsSkippedUnsupportedCode(t *testing.T) {
 	for _, tt := range []struct{ source, wantError string }{
+		{"function f(){f();}", "codegen TAC_UNSUPPORTED at 1:1: recursive call cycles are unsupported\n"},
+		{"function f(a){return;}", "codegen TAC_UNSUPPORTED at 1:1: unsupported function signature\n"},
+		{"function f(){print(1);}", "codegen TAC_UNSUPPORTED at 1:14: unsupported statement in numeric TAC\n"},
+		{"function f(){} let x=f()==null;", "codegen TAC_UNSUPPORTED at 1:22: null-result calls are statement-only\n"},
 		{"if(false){print(1);}", "codegen TAC_UNSUPPORTED at 1:11: unsupported statement in numeric TAC\n"},
 		{"let x=true||((5%2)>0);", "codegen TAC_UNSUPPORTED at 1:15: unsupported expression in numeric TAC\n"},
 		{"while(false){print(1);}", "codegen TAC_UNSUPPORTED at 1:14: unsupported statement in numeric TAC\n"},

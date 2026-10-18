@@ -84,7 +84,7 @@ func TestCompileRepeatedExpressions(t *testing.T) {
 func TestCompileRejectsUnsupportedWithoutPartialTAC(t *testing.T) {
 	for _, tt := range []struct{ source, rejected, message string }{
 		{`print(1);`, `print(1);`, "unsupported statement in numeric TAC"},
-		{`function f() {return;}`, `function f() {return;}`, "unsupported statement in numeric TAC"},
+		{`function f(a) {return;}`, `function f(a) {return;}`, "unsupported function signature"},
 		{`let y=[1,2];`, `let y=[1,2];`, "only integer, float and boolean declarations are supported"},
 		{`let y="text";`, `let y="text";`, "only integer, float and boolean declarations are supported"},
 		{`let y:integer;`, `let y:integer;`, "numeric declarations require an initializer"},

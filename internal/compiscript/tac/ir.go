@@ -46,19 +46,39 @@ const (
 	Label          Opcode = "label"
 	Jump           Opcode = "jump"
 	BranchTrue     Opcode = "branchTrue"
+	Call           Opcode = "call"
+	Return         Opcode = "return"
 )
 
 type Instruction struct {
-	Op     Opcode   `json:"op"`
-	Target Operand  `json:"target"`
-	Left   Operand  `json:"left"`
-	Right  *Operand `json:"right,omitempty"`
-	Span   ast.Span `json:"span"`
-	Label  string   `json:"label,omitempty"`
+	Op          Opcode    `json:"op"`
+	Target      Operand   `json:"target"`
+	Left        Operand   `json:"left"`
+	Right       *Operand  `json:"right,omitempty"`
+	Span        ast.Span  `json:"span"`
+	Label       string    `json:"label,omitempty"`
+	Callee      string    `json:"callee,omitempty"`
+	Arguments   []Operand `json:"arguments,omitempty"`
+	ReturnValue *Operand  `json:"returnValue,omitempty"`
 }
 
 func (i Instruction) String() string {
 	switch i.Op {
+	case Call:
+		args := make([]string, len(i.Arguments))
+		for n, arg := range i.Arguments {
+			args[n] = arg.String()
+		}
+		call := "call " + i.Callee + "(" + strings.Join(args, ", ") + ")"
+		if i.Target.Kind != "" {
+			return i.Target.String() + " = " + call
+		}
+		return call
+	case Return:
+		if i.ReturnValue != nil {
+			return "return " + i.ReturnValue.String()
+		}
+		return "return"
 	case Copy:
 		return fmt.Sprintf("%s = %s", i.Target, i.Left)
 	case Negate, IntegerToFloat, LogicalNot:
@@ -77,13 +97,40 @@ func (i Instruction) String() string {
 type Program struct {
 	Instructions    []Instruction `json:"instructions"`
 	PeakTemporaries int           `json:"peakTemporaries"`
+	Procedures      []Procedure   `json:"procedures,omitempty"`
 }
 
 // String renders instructions in execution order with one trailing newline each.
 func (p Program) String() string {
 	var out strings.Builder
+	if len(p.Procedures) != 0 {
+		fmt.Fprintln(&out, "main:")
+	}
 	for _, instruction := range p.Instructions {
 		fmt.Fprintln(&out, instruction.String())
+	}
+	for _, procedure := range p.Procedures {
+		formals := make([]string, len(procedure.Parameters))
+		for i, parameter := range procedure.Parameters {
+			formals[i] = parameter.String()
+		}
+		fmt.Fprintf(&out, "procedure %s(%s) -> %s [scope=%d frame=%d cells]:\n", procedure.Label, strings.Join(formals, ", "), procedure.ResultKind, procedure.ScopeID, procedure.Frame.Cells)
+		for _, slot := range procedure.Frame.Slots {
+			fmt.Fprintf(&out, "  cell %d %s", slot.Offset, slot.Role)
+			if slot.Operand != nil && slot.Dynamic {
+				fmt.Fprintf(&out, " %s", slot.Operand.Value)
+			} else if slot.Operand != nil {
+				fmt.Fprintf(&out, " %s", slot.Operand)
+			}
+			if slot.Dynamic {
+				fmt.Fprint(&out, " dynamic")
+			}
+			fmt.Fprintln(&out)
+		}
+		for _, instruction := range procedure.Instructions {
+			fmt.Fprintln(&out, instruction.String())
+		}
+		fmt.Fprintln(&out, "end "+procedure.Label)
 	}
 	return out.String()
 }

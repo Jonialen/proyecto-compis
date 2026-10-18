@@ -9,6 +9,8 @@ import (
 
 func (l *lowerer) expression(env *environment, expression ast.Expression) (Operand, bool) {
 	switch n := expression.(type) {
+	case ast.CallExpr:
+		return l.call(env, n, false)
 	case ast.LiteralExpr:
 		if n.Lexeme == "true" || n.Lexeme == "false" {
 			return Operand{Kind: Literal, Value: n.Lexeme, Type: model.TypeBoolean}, true
@@ -21,7 +23,8 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 			return Operand{Kind: Literal, Value: n.Lexeme, Type: kind}, true
 		}
 	case ast.IdentifierExpr:
-		if value, ok := env.lookup(n.Name); ok {
+		if value, ok := env.lookup(n.Name); ok && value.function == nil {
+			l.reference(value.operand)
 			return value.operand, true
 		}
 		if env.unavailable(n.Name) {
@@ -52,6 +55,9 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 				return Operand{}, false
 			}
 			// Keep the left value live through the complete recursive RHS.
+			if hasCall(n.Right) {
+				left = l.freeze(left, n.Left.SourceSpan())
+			}
 			right, ok := l.expression(env, n.Right)
 			if !ok {
 				return Operand{}, false

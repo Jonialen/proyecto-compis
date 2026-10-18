@@ -1,15 +1,14 @@
 package tac
 
 import (
-	"fmt"
-
 	"genanalex/internal/compiscript/ast"
 	"genanalex/internal/compiscript/model"
 )
 
 type binding struct {
-	operand Operand
-	mutable bool
+	operand  Operand
+	mutable  bool
+	function *functionInfo
 }
 
 type environment struct {
@@ -50,6 +49,9 @@ type lowerer struct {
 	diagnostics model.Diagnostics
 	nextLabel   int
 	loops       []loopTargets
+	registry    *functionRegistry
+	current     *functionInfo
+	globalID    int
 }
 
 // Generate lowers a semantically validated AST using its matching scope inventory.
@@ -57,7 +59,11 @@ type lowerer struct {
 func Generate(program ast.Program, scopes model.ScopeSnapshots) (*Program, model.Diagnostics) {
 	l := lowerer{scopes: scopes, program: Program{Instructions: []Instruction{}}, diagnostics: model.Diagnostics{}}
 	global := l.environment(nil, model.ScopeGlobal, program.Span)
-	if global == nil || !l.statements(global, program.Statements) {
+	if global == nil {
+		return nil, l.diagnostics
+	}
+	l.globalID = global.id
+	if !l.predeclare(global, program.Statements) || !l.statements(global, program.Statements) || !l.resolveCalls() {
 		return nil, l.diagnostics
 	}
 	l.program.PeakTemporaries = l.pool.peak
@@ -94,6 +100,13 @@ func (l *lowerer) statements(env *environment, statements ast.Statements) bool {
 
 func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 	switch n := statement.(type) {
+	case ast.FunctionDeclStmt:
+		if env.id != l.globalID || l.current != nil {
+			return l.unsupported(n.Span, "nested functions and closures are unsupported")
+		}
+		return l.functionBody(env, n)
+	case ast.ReturnStmt:
+		return l.returnStatement(env, n)
 	case ast.VarDeclStmt:
 		return l.declaration(env, n.Name, n.Initializer, n.Span)
 	case ast.ConstDeclStmt:
@@ -110,6 +123,7 @@ func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 		if !ok || !value.mutable {
 			return l.unsupported(n.Span, "assignment requires an active mutable numeric binding")
 		}
+		l.reference(value.operand)
 		return l.store(env, value.operand, n.Value, n.Span)
 	case ast.BlockStmt:
 		child := l.environment(env, model.ScopeBlock, n.Span)
@@ -129,6 +143,13 @@ func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 	case ast.ContinueStmt:
 		return l.loopTransfer(n.Span, true)
 	case ast.ExprStmt:
+		if call, ok := statementCall(n.Expression); ok {
+			value, success := l.call(env, call, true)
+			if success {
+				l.pool.release(value)
+			}
+			return success
+		}
 		value, ok := l.expression(env, n.Expression)
 		if ok {
 			l.pool.release(value)
@@ -154,7 +175,7 @@ func (l *lowerer) declaration(env *environment, name string, initializer ast.Exp
 			if !scalar(symbol.Type.Kind) {
 				return l.unsupported(span, "only integer, float and boolean declarations are supported")
 			}
-			target := Operand{Kind: Symbol, Value: fmt.Sprintf("s%d.%s", env.id, name), Type: symbol.Type.Kind}
+			target := symbolOperand(env.id, symbol)
 			// Do not activate the new name until its initializer has read outer bindings.
 			if !l.store(env, target, initializer, span) {
 				return false

@@ -52,6 +52,12 @@ func (l *lowerer) switchStatement(env *environment, n ast.SwitchStmt) bool {
 	if selector.Type != model.TypeBoolean {
 		return l.unsupported(n.Value.SourceSpan(), "condition requires a boolean value")
 	}
+	for _, c := range n.Cases {
+		if !c.Default && hasCall(c.Value) {
+			selector = l.freeze(selector, n.Value.SourceSpan())
+			break
+		}
+	}
 	exit := l.labelName()
 	labels := make([]string, len(n.Cases))
 	fallback := exit
