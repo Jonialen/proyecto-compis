@@ -85,8 +85,8 @@ func TestCompileRejectsUnsupportedWithoutPartialTAC(t *testing.T) {
 	for _, tt := range []struct{ source, rejected, message string }{
 		{`print(1);`, `print(1);`, "unsupported statement in numeric TAC"},
 		{`function f(a) {return;}`, `function f(a) {return;}`, "unsupported function signature"},
-		{`let y=[1,2];`, `let y=[1,2];`, "only integer, float and boolean declarations are supported"},
-		{`let y=["text"];`, `let y=["text"];`, "only integer, float and boolean declarations are supported"},
+		{`let y=[1%2,2];`, `1%2`, "unsupported expression in numeric TAC"},
+		{`let y=[true?"a":"b"];`, `true?"a":"b"`, "unsupported expression in numeric TAC"},
 		{`let y:integer;`, `let y:integer;`, "numeric declarations require an initializer"},
 		{`let y=5%2;`, `5%2`, "unsupported expression in numeric TAC"},
 		{`let y=true?1:2;`, `true?1:2`, "unsupported expression in numeric TAC"},

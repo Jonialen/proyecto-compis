@@ -9,6 +9,14 @@ import (
 
 func (l *lowerer) expression(env *environment, expression ast.Expression) (Operand, bool) {
 	switch n := expression.(type) {
+	case ast.AssignExpr:
+		if target, ok := n.Target.(ast.IndexExpr); ok {
+			return l.indexAssignment(env, target, n.Value, n.Span)
+		}
+	case ast.ArrayExpr:
+		return l.listLiteral(env, n, Operand{})
+	case ast.IndexExpr:
+		return l.indexRead(env, n)
 	case ast.NewExpr:
 		return l.newObject(env, n)
 	case ast.ThisExpr:
@@ -93,7 +101,7 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 				if n.Operator == "+" && left.Type == model.TypeString && right.Type == model.TypeString {
 					return l.operation(Add, left, &right, model.TypeString, n.Span), true
 				}
-				if (n.Operator == "==" || n.Operator == "!=") && ((left.Type == model.TypeString && right.Type == model.TypeString) || (left.Type == model.TypeClass && right.Type == model.TypeClass) || left.Type == model.TypeNull || right.Type == model.TypeNull) {
+				if (n.Operator == "==" || n.Operator == "!=") && ((left.Type == model.TypeList && right.Type == model.TypeList) || (left.Type == model.TypeString && right.Type == model.TypeString) || (left.Type == model.TypeClass && right.Type == model.TypeClass) || left.Type == model.TypeNull || right.Type == model.TypeNull) {
 					return l.operation(Opcode(n.Operator), left, &right, model.TypeBoolean, n.Span), true
 				}
 				if (n.Operator == "==" || n.Operator == "!=") && left.Type == model.TypeBoolean && right.Type == model.TypeBoolean {
@@ -155,6 +163,7 @@ func (l *lowerer) operation(op Opcode, left Operand, right *Operand, kind model.
 	}
 	target.Type = kind
 	target.Class = ""
+	target.Shape = ""
 	l.program.Instructions = append(l.program.Instructions, Instruction{Op: op, Target: target, Left: left, Right: right, Span: span})
 	if left.Kind == Temporary && left.Value != target.Value {
 		l.pool.release(left)

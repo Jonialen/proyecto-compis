@@ -136,6 +136,9 @@ func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 	case ast.ConstDeclStmt:
 		return l.declaration(env, n.Name, n.Value, n.Span, n.Type == nil)
 	case ast.AssignStmt:
+		if target, ok := n.Target.(ast.IndexExpr); ok {
+			return l.indexStore(env, target, n.Value, n.Span)
+		}
 		if target, ok := n.Target.(ast.PropertyAccessExpr); ok {
 			value, success := l.propertyStore(env, target.Receiver, target.Name, n.Value, n.Span)
 			if success {
@@ -174,6 +177,8 @@ func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 		return l.doWhileStatement(env, n)
 	case ast.ForStmt:
 		return l.forStatement(env, n)
+	case ast.ForeachStmt:
+		return l.foreachStatement(env, n)
 	case ast.SwitchStmt:
 		return l.switchStatement(env, n)
 	case ast.BreakStmt:
@@ -181,6 +186,11 @@ func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 	case ast.ContinueStmt:
 		return l.loopTransfer(n.Span, true)
 	case ast.ExprStmt:
+		if assignment, ok := n.Expression.(ast.AssignExpr); ok {
+			if target, ok := assignment.Target.(ast.IndexExpr); ok {
+				return l.indexStore(env, target, assignment.Value, assignment.Span)
+			}
+		}
 		if call, ok := statementCall(n.Expression); ok {
 			value, success := l.call(env, call, true)
 			if success {
@@ -214,15 +224,19 @@ func (l *lowerer) declaration(env *environment, name string, initializer ast.Exp
 				return l.unsupported(span, "only integer, float and boolean declarations are supported")
 			}
 			target := l.typedOperand(env, symbolOperand(env.id, symbol), symbol.Type)
+			if inferred && target.Type == model.TypeList {
+				target.Class = l.expressionClass(env, initializer)
+			}
 			// Do not activate the new name until its initializer has read outer bindings.
-			value, ok := l.expression(env, initializer)
+			value, ok := l.expressionExpected(env, initializer, target)
 			if !ok {
 				return false
 			}
-			if inferred && target.Type == model.TypeClass {
+			if inferred && (target.Type == model.TypeClass || target.Type == model.TypeList) {
 				// Inference follows the initializer's declaration identity, not a
 				// textual type name that a nested class may now shadow.
 				target.Class = value.Class
+				target.Shape = value.Shape
 			}
 			if !l.storeValue(target, value, initializer.SourceSpan(), span) {
 				return false
@@ -236,7 +250,7 @@ func (l *lowerer) declaration(env *environment, name string, initializer ast.Exp
 }
 
 func (l *lowerer) store(env *environment, target Operand, expression ast.Expression, span ast.Span) bool {
-	value, ok := l.expression(env, expression)
+	value, ok := l.expressionExpected(env, expression, target)
 	if !ok {
 		return false
 	}
@@ -261,5 +275,5 @@ func scalar(kind model.TypeKind) bool { return numeric(kind) || kind == model.Ty
 
 // Storage capability is deliberately separate from scalar arithmetic capability.
 func storedValue(kind model.TypeKind) bool {
-	return scalar(kind) || kind == model.TypeFunction || kind == model.TypeString || kind == model.TypeClass
+	return scalar(kind) || kind == model.TypeFunction || kind == model.TypeString || kind == model.TypeClass || kind == model.TypeList
 }

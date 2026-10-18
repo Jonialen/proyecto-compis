@@ -290,7 +290,7 @@ func TestFunctionOracleRejectsInvalidFrames(t *testing.T) {
 func TestCompileFunctionRejectionsAreAtomic(t *testing.T) {
 	for _, source := range []string{
 		`function f(a){return;} f(1);`,
-		`function f(a:string[]){return;} f(["x"]);`,
+		`function f(a:string[]){print(a[0]);} f(["x"]);`,
 		`function f(){print(1);}`,
 		`function f(){return;} let x=f();`,
 		`function f(){return;} function g(){return f();}`,

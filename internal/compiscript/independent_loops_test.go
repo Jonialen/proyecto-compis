@@ -71,7 +71,7 @@ func TestIndependentLoopAtomicErrors(t *testing.T) {
 		"let x=0;while(false){(x=1);}",
 		"for(let i=0;false;i=i+1){}let x=i;",
 		"do{let x=1;}while(x>0);",
-		"while(false){foreach(x in [1]){}}",
+		"while(false){foreach(x in [1]){print(x);}}",
 		"while(false){switch(1){case 1:break;}}",
 	} {
 		t.Run(source, func(t *testing.T) {

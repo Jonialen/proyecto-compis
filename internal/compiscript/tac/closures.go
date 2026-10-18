@@ -45,6 +45,9 @@ func (l *lowerer) enterEnvironment(scope model.ScopeSnapshot) {
 	for _, symbol := range scope.Symbols {
 		if symbol.Kind == model.SymbolVariable || symbol.Kind == model.SymbolConstant || symbol.Kind == model.SymbolParameter {
 			o := symbolOperand(scope.ID, symbol)
+			if symbol.Type.Kind == model.TypeList {
+				o = l.listStorageType(scope.ID, o, symbol.Type)
+			}
 			if symbol.Type.Kind == model.TypeClass {
 				o.Class = l.classForType(scope.ID, symbol.Type.Name)
 			}

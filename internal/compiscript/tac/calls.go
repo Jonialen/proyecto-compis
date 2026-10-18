@@ -91,6 +91,7 @@ func (l *lowerer) freeze(value Operand, span ast.Span) Operand {
 	}
 	target := l.pool.acquire(value.Type)
 	target.Class = value.Class
+	target.Shape = value.Shape
 	l.program.Instructions = append(l.program.Instructions, Instruction{Op: Copy, Target: target, Left: value, Span: span})
 	return target
 }

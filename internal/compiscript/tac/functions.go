@@ -97,6 +97,7 @@ func (l *lowerer) functionBody(global *environment, n ast.FunctionDeclStmt) bool
 	}
 	p := Procedure{Label: f.label, ScopeID: env.id, Span: n.Span, ResultKind: f.typeOf.Result.Kind, Parameters: []Operand{}}
 	p.ResultClass = child.typedOperand(global, Operand{Type: p.ResultKind}, *f.typeOf.Result).Class
+	p.ResultShape = child.typedOperand(global, Operand{Type: p.ResultKind}, *f.typeOf.Result).Shape
 	if len(f.typeClasses) != 0 {
 		p.ResultClass = f.typeClasses[len(f.typeOf.Params)]
 	}
@@ -166,16 +167,16 @@ func (l *lowerer) returnStatement(env *environment, n ast.ReturnStmt) bool {
 	if n.Value == nil {
 		return l.unsupported(n.Span, "scalar functions require a return value")
 	}
-	value, ok := l.expression(env, n.Value)
+	expected := l.typedOperand(env, Operand{Type: kind}, *l.current.typeOf.Result)
+	if len(l.current.typeClasses) != 0 {
+		expected.Class = l.current.typeClasses[len(l.current.typeOf.Params)]
+	}
+	value, ok := l.expressionExpected(env, n.Value, expected)
 	if !ok {
 		return false
 	}
 	if kind == model.TypeFloat {
 		value = l.widen(value, n.Value.SourceSpan())
-	}
-	expected := l.typedOperand(env, Operand{Type: kind}, *l.current.typeOf.Result)
-	if len(l.current.typeClasses) != 0 {
-		expected.Class = l.current.typeClasses[len(l.current.typeOf.Params)]
 	}
 	if !l.assignable(expected, value) {
 		return l.unsupported(n.Span, "return type mismatch")

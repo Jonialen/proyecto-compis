@@ -36,6 +36,7 @@ type Procedure struct {
 	Captures        []Operand      `json:"captures,omitempty"`
 	Receiver        *Operand       `json:"receiver,omitempty"`
 	ResultClass     string         `json:"resultClass,omitempty"`
+	ResultShape     string         `json:"resultShape,omitempty"`
 }
 
 func symbolOperand(scope int, symbol model.Symbol) Operand {
@@ -94,6 +95,9 @@ func (l *lowerer) layout(p *Procedure) bool {
 				return l.unsupported(symbol.Span, "unsupported function-owned binding")
 			}
 			o := symbolOperand(scope.ID, symbol)
+			if symbol.Type.Kind == model.TypeList {
+				o = l.storageIdentity(l.listStorageType(scope.ID, o, symbol.Type))
+			}
 			if symbol.Type.Kind == model.TypeClass {
 				o.Class = l.classForType(scope.ID, symbol.Type.Name)
 				o = l.storageIdentity(o)

@@ -28,6 +28,13 @@ func (f *testFrame) classIs(actual, expected string) bool {
 	return false
 }
 func (f *testFrame) checkObjectType(o tac.Operand, v frameValue) error {
+	if o.Type == model.TypeList && v.value != nil {
+		list, ok := v.value.(*testList)
+		if !ok || list == nil || !f.listTypeFits(o, list.typeOf) {
+			return fmt.Errorf("list type mismatch")
+		}
+		return nil
+	}
 	if o.Type != model.TypeClass || v.value == nil {
 		return nil
 	}
@@ -176,13 +183,13 @@ func (f *testFrame) objectInstruction(i tac.Instruction, procedures map[string]*
 			return fmt.Errorf("immutable field already initialized")
 		}
 	}
-	if value.kind == model.TypeNull && (field.Type.Kind == model.TypeClass || field.Type.Kind == model.TypeString) {
+	if value.kind == model.TypeNull && (field.Type.Kind == model.TypeClass || field.Type.Kind == model.TypeString || field.Type.Kind == model.TypeList) {
 		value.kind = field.Type.Kind
 	}
 	if value.kind != field.Type.Kind {
 		return fmt.Errorf("field type mismatch")
 	}
-	if err := f.checkObjectType(tac.Operand{Type: field.Type.Kind, Class: field.Class}, value); err != nil {
+	if err := f.checkObjectType(tac.Operand{Type: field.Type.Kind, Class: field.Class, Shape: field.Shape}, value); err != nil {
 		return err
 	}
 	object.fields[*i.Offset] = value

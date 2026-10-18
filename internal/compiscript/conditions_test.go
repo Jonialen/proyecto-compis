@@ -150,7 +150,7 @@ func TestConditionalStaticRejection(t *testing.T) {
 	for _, source := range []string{
 		`let x=false&&((5%2)>0);`, `let x=true||((5%2)>0);`,
 		`if(false){print(1);}`, `if(true){}else{let s=5%2;}`,
-		`if(false){foreach(x in [1,2]){}}`, `let x=true||(missing>0);`,
+		`if(false){foreach(x in [1,2]){print(x);}}`, `let x=true||(missing>0);`,
 		`if(true){let x=1;} x=2;`, `let x=false&&(true+1>0);`,
 		`let x=null;`, `let x=true?1:2;`, `if(false){let x=0; x=(x=2);}`,
 		`if(false){switch(1){case 1: break;}}`,

@@ -27,6 +27,7 @@ type FieldLayout struct {
 	Offset  int        `json:"offset"`
 	Type    model.Type `json:"type"`
 	Class   string     `json:"class,omitempty"`
+	Shape   string     `json:"shape,omitempty"`
 	Mutable bool       `json:"mutable"`
 	Span    ast.Span   `json:"span"`
 }
@@ -161,7 +162,7 @@ func (l *lowerer) prepareClass(c *classInfo) bool {
 					return l.unsupported(symbol.Span, "unsupported field type")
 				}
 				o := l.typedOperand(c.env, Operand{Type: symbol.Type.Kind}, symbol.Type)
-				c.layout.Fields = append(c.layout.Fields, FieldLayout{ID: fmt.Sprintf("s%d.%s", scope.ID, symbol.Name), Name: symbol.Name, Owner: c.layout.ID, Offset: len(c.layout.Fields), Type: symbol.Type, Class: o.Class, Mutable: symbol.Mutable, Span: symbol.Span})
+				c.layout.Fields = append(c.layout.Fields, FieldLayout{ID: fmt.Sprintf("s%d.%s", scope.ID, symbol.Name), Name: symbol.Name, Owner: c.layout.ID, Offset: len(c.layout.Fields), Type: symbol.Type, Class: o.Class, Shape: o.Shape, Mutable: symbol.Mutable, Span: symbol.Span})
 			}
 		}
 	}
@@ -264,6 +265,7 @@ func (l *lowerer) property(env *environment, receiver ast.Expression, name strin
 	if field != nil {
 		target := l.pool.acquire(field.Type.Kind)
 		target.Class = field.Class
+		target.Shape = field.Shape
 		offset := field.Offset
 		l.program.Instructions = append(l.program.Instructions, Instruction{Op: LoadField, Target: target, Left: o, Class: o.Class, Offset: &offset, Member: field.ID, Span: span})
 		l.pool.release(o)
@@ -296,14 +298,15 @@ func (l *lowerer) fieldStore(env *environment, receiver Operand, field FieldLayo
 		return Operand{}, l.unsupported(span, "assignment requires a mutable field")
 	}
 	receiver = l.freeze(receiver, span)
-	v, ok := l.expression(env, value)
+	expected := Operand{Type: field.Type.Kind, Class: field.Class, Shape: field.Shape}
+	v, ok := l.expressionExpected(env, value, expected)
 	if !ok {
 		return Operand{}, false
 	}
 	if field.Type.Kind == model.TypeFloat {
 		v = l.widen(v, value.SourceSpan())
 	}
-	if !l.assignable(Operand{Type: field.Type.Kind, Class: field.Class}, v) {
+	if !l.assignable(expected, v) {
 		return Operand{}, l.unsupported(span, "field store type mismatch")
 	}
 	offset := field.Offset

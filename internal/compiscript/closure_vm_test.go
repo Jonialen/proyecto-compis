@@ -197,9 +197,12 @@ func checkClosureSignature(i tac.Instruction, p *tac.Procedure) error {
 		return fmt.Errorf("indirect call signature mismatch")
 	}
 	for j, parameter := range p.Parameters {
-		if parameter.Type != s.Params[j].Kind {
+		if parameter.Type != s.Params[j].Kind || parameter.Shape != testListShape(s.Params[j]) {
 			return fmt.Errorf("indirect call signature mismatch")
 		}
+	}
+	if p.ResultShape != testListShape(*s.Result) {
+		return fmt.Errorf("indirect call signature mismatch")
 	}
 	if len(i.TypeClasses) != 0 {
 		if len(i.TypeClasses) != len(p.Parameters)+1 {

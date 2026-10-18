@@ -165,7 +165,7 @@ func (f *testFrame) read(o tac.Operand) (frameValue, error) {
 }
 
 func (f *testFrame) write(o tac.Operand, value frameValue) error {
-	if value.kind == model.TypeNull && (o.Type == model.TypeClass || o.Type == model.TypeString) {
+	if value.kind == model.TypeNull && (o.Type == model.TypeClass || o.Type == model.TypeString || o.Type == model.TypeList) {
 		value.kind = o.Type
 	}
 	if err := f.checkObjectType(o, value); err != nil {
@@ -240,6 +240,11 @@ func newTestFrame(p *tac.Procedure, globals map[string]frameValue, continuation 
 func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 	globals := map[string]frameValue{}
 	values := map[string]any{}
+	defer func() {
+		for name, value := range globals {
+			values[name] = value.value
+		}
+	}()
 	labels, err := frameLabels(program.Instructions)
 	if err != nil {
 		return values, err
@@ -275,6 +280,11 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 		i := f.tape[f.pc]
 		f.pc++
 		switch i.Op {
+		case tac.NewList, tac.ListLength, tac.LoadIndex, tac.StoreIndex:
+			if err := f.collectionInstruction(i); err != nil {
+				return values, err
+			}
+			continue
 		case tac.NewObject, tac.LoadField, tac.StoreField, tac.BindMethod:
 			if err := f.objectInstruction(i, procedures); err != nil {
 				return values, err
@@ -400,7 +410,7 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 				if value.kind != f.procedure.ResultKind || f.procedure.Frame.Slots[3].Role != "result" {
 					return values, fmt.Errorf("invalid result cell")
 				}
-				if err := f.checkObjectType(tac.Operand{Type: f.procedure.ResultKind, Class: f.procedure.ResultClass}, value); err != nil {
+				if err := f.checkObjectType(tac.Operand{Type: f.procedure.ResultKind, Class: f.procedure.ResultClass, Shape: f.procedure.ResultShape}, value); err != nil {
 					return values, err
 				}
 				f.cells[3] = value
@@ -427,7 +437,7 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 		result := frameValue{kind: i.Target.Type}
 		switch i.Op {
 		case tac.Copy, tac.Negate:
-			if left.kind != result.kind && !(i.Op == tac.Copy && left.kind == model.TypeNull && (result.kind == model.TypeClass || result.kind == model.TypeString)) {
+			if left.kind != result.kind && !(i.Op == tac.Copy && left.kind == model.TypeNull && (result.kind == model.TypeClass || result.kind == model.TypeString || result.kind == model.TypeList)) {
 				return values, fmt.Errorf("missing explicit conversion")
 			}
 		case tac.IntegerToFloat:

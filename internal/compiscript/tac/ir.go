@@ -23,6 +23,7 @@ type Operand struct {
 	Value string         `json:"value"`
 	Type  model.TypeKind `json:"type"`
 	Class string         `json:"class,omitempty"`
+	Shape string         `json:"shape,omitempty"`
 }
 
 func (o Operand) String() string { return o.Value + ":" + string(o.Type) }
@@ -56,6 +57,10 @@ const (
 	LoadField        Opcode = "loadField"
 	StoreField       Opcode = "storeField"
 	BindMethod       Opcode = "bindMethod"
+	NewList          Opcode = "newList"
+	ListLength       Opcode = "listLength"
+	LoadIndex        Opcode = "loadIndex"
+	StoreIndex       Opcode = "storeIndex"
 )
 
 type Instruction struct {
@@ -75,10 +80,23 @@ type Instruction struct {
 	Offset      *int        `json:"offset,omitempty"`
 	Receiver    *Operand    `json:"receiver,omitempty"`
 	TypeClasses []string    `json:"typeClasses,omitempty"`
+	Index       *Operand    `json:"index,omitempty"`
 }
 
 func (i Instruction) String() string {
 	switch i.Op {
+	case NewList:
+		values := make([]string, len(i.Arguments))
+		for n, value := range i.Arguments {
+			values[n] = value.String()
+		}
+		return fmt.Sprintf("%s = newList [%s]", i.Target, strings.Join(values, ", "))
+	case ListLength:
+		return fmt.Sprintf("%s = listLength %s", i.Target, i.Left)
+	case LoadIndex:
+		return fmt.Sprintf("%s = loadIndex %s[%s]", i.Target, i.Left, i.Index)
+	case StoreIndex:
+		return fmt.Sprintf("storeIndex %s[%s] = %s", i.Left, i.Index, i.Right)
 	case NewObject:
 		return fmt.Sprintf("%s = newObject %s", i.Target, i.Class)
 	case LoadField:

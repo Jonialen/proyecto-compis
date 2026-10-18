@@ -1,10 +1,12 @@
 # Compiscript three-address code
 
-This is the scalar, control-flow, lexical-function and object subset of Entrega 2,
+This is the scalar, control-flow, lexical-function, object and collection subset of Entrega 2,
 not the complete assignment. Functions use explicit calls/returns and deterministic
 abstract-cell activation records, including direct/mutual recursion, retained closures
 and inferred function aliases. Objects include inherited fields, construction,
-virtual methods, retained receivers and strings. Collections remain a future unit.
+virtual methods, retained receivers and strings. Lists include references, literals,
+indexed reads/writes and foreach; IDE integration and extended compilation symbols
+remain separate work.
 The separate `compiscript.Compile(source []byte)` library API generates typed,
 source-located TAC for numeric and boolean programs with `if/else`, `while`,
 `do-while`, `for`, `switch`, typed direct/indirect calls and returns. Existing analysis reports remain unchanged except for the
@@ -31,6 +33,8 @@ go run ./cmd/compiscript-tac testdata/compiscript/tac/recursion.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/recursion.cps
 go run ./cmd/compiscript-tac testdata/compiscript/tac/closures.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/closures.cps
+go run ./cmd/compiscript-tac testdata/compiscript/tac/collections.cps
+go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/collections.cps
 go run ./cmd/compiscript-tac -h
 ```
 
@@ -479,20 +483,75 @@ declaring origins. Explicit annotations and existing typed stores still enforce
 their declared nominal identities. This uses private lowering metadata rather
 than changing Analyze or introducing another frontend binding model.
 
+## Lists, indexing and foreach
+
+Lists are fixed-length references, not copied arrays. Assignment, arguments, results,
+fields and nested elements retain reference identity; `==`/`!=` compare identities.
+Each execution of a literal allocates a distinct reference, even for `[]`. Contextual
+empty, nested and ragged literals use the existing semantic element types. Scalar
+arithmetic validation is unchanged. No source `.length` member or append API exists.
+
+| Instruction | Operands | Contract |
+| --- | --- | --- |
+| `newList` | `target`, ordered `arguments` | Read element values, then allocate a fresh reference |
+| `listLength` | `target`, `left` | Read the reference's internal length into an integer |
+| `loadIndex` | `target`, `left`, `index` | Bounds-check the integer index and read one element |
+| `storeIndex` | `left`, `index`, `right` | Bounds/type-check and replace one element without resizing |
+
+Operand `shape` records the complete slash-separated element-kind chain: an
+`integer[][]` operand has `type: "list"`, `shape: "list/integer"`. Nominal leaves
+also retain their declaration-qualified `class` identity, including under shadowing.
+Fields and procedure results carry matching optional `shape`/`resultShape` metadata;
+indirect signatures check the complete nested shape and nominal origins before
+entering a callee. These fields are omitted from programs that do not use lists.
+Function-valued list elements also retain their original parameter/result nominal
+identities through nested indexing, inferred aliases and foreach bindings. Extracting
+a function never re-resolves its signature's class names in the extraction scope;
+the existing indirect-call guard still rejects incompatible replacements before
+executing the selected function body.
+
+Literal elements and collection/index/RHS expressions evaluate once, left to right.
+List and index operands are frozen before later effects can reassign their source
+bindings. Reads precede destination writes; live values use the existing temporary
+pool and invocation frames, including recursive callers. A store checks its target
+bounds after evaluating its RHS, so an RHS effect may precede a runtime bounds fault.
+
+Foreach evaluates its iterable once and retains that initial reference and internal
+length. This is the practical fixed-length policy: no source operation can resize a
+list. Reassigning the source binding does not redirect iteration; mutations of the
+retained list are visible to subsequent entries. Each real body entry enters its
+existing semantic block scope, initializes a fresh mutable iteration binding and
+then executes the body. Assigning that binding does not replace the element itself;
+mutating an object/list reference through it still affects aliases. Escaping closures
+retain distinct entry cells. Continue advances the private index; break exits;
+nested loops/switches reuse the existing nearest-transfer stack.
+
+Semantic const-root, type and static-bounds diagnostics remain authoritative and
+discard the entire TAC report. Dynamic null/bounds/type faults are IR backend
+obligations, exercised only by the bounded test oracle, not new Analyze diagnostics.
+The analyzer permits covariant list views (including numeric widening); the oracle
+widens integer element reads through a float view and guards incompatible later
+reads after alias mutation. It never silently reinterprets an incompatible nominal
+object or nested shape. Lists are not a product execution engine or a target ABI.
+
+`collections.cps` exercises shared nested lists and captured iteration cells. Its
+CLI-emitted JSON executes in tests to `shared = 9`, `sum = 12`, `first = 3`,
+`second = 6`, `continued = 4`; the CLI itself emits code, not those values.
+
 ### Supported source
 
 The implemented source slice supports initialized integer/float/boolean variables
 and constants, identifier assignment, lexical blocks, grouping, unary minus,
 and `+`, `-`, `*`, `/`, comparisons, boolean logic, `if/else`, the loops/switch/transfers above,
-and the lexical-function/call/return and object/string subsets described above.
+and the lexical-function/call/return, object/string and collection subsets described above.
 Unsupported statements, operators, expressions, types,
 and missing initializers must be reported explicitly with source locations.
 No partial TAC may escape after lexical, syntax, semantic, or lowering errors.
 Original source bytes are preserved; Compile retains the matching Analyze diagnostics/scopes.
 Numeric expression statements are supported; their final temporary is released
 without a store. Except for the for-post case above, assignment expressions
-(other than supported property stores), ternaries, general null declarations, lists,
-print and foreach are not lowered. Null is supported as a class/string storage
+(other than supported property/index stores), ternaries, general null declarations
+and print are not lowered. Null is supported as a class/string/list storage
 value or equality operand, not a new general scalar type. Field declarations need
 semantic storage types; inferred error-type fields are still rejected rather than
 guessing a type not recorded by Analyze. Transfers without an enclosing
@@ -539,8 +598,7 @@ exposes the complete report.
 
 ## Remaining Entrega 2 work
 
-- Foreach lowering and stronger definite-initialization analysis for switch bindings.
-- Lists and indexing; object allocation/fields/methods/receivers are implemented above.
+- Stronger definite-initialization analysis for switch bindings.
 - Target-machine byte sizes/offsets and calling ABI, main/global storage layout,
   garbage collection and target-specific lexical links. Abstract retained lexical
   environments and function parameter/local/temporary/result/control cells are
@@ -549,8 +607,8 @@ exposes the complete report.
 
 Future memory access needs distinct opcodes and explicit operands, as direct calls
 already have; operations must not be smuggled into numeric symbol strings.
-Object and collection references can extend the explicit value/storage contract;
-they are not encoded as scalar operand strings in this unit.
+Object and collection references use the explicit value/storage contract;
+they are not encoded as scalar operand strings.
 The inherited frontend panic for some malformed for headers is unchanged; this
 slice adds no blanket recovery and does not claim all malformed input is covered.
 

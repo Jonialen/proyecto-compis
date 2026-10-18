@@ -67,7 +67,7 @@ func TestCompileFunctionAtomicRejectionRegressions(t *testing.T) {
 	}{
 		{"shadow", "function f():integer { return 1; } { let f=2; f(); }", ""},
 		{"untyped parameter", "function f(x):integer { return 1; }", "unsupported function signature"},
-		{"list parameter", "function f(x:string[]):integer { return 1; }", "unsupported function signature"},
+		{"list parameter unsupported body", "function f(x:string[]):integer { return 1%2; }", "unsupported expression"},
 		{"unused unsupported body", "function f() { print(1); }", "unsupported statement"},
 		{"null declaration", "function f() {} let x=f();", "only integer, float and boolean declarations are supported"},
 		{"null call return", "function f() {} function g() { return f(); }", "null-result procedures only return null or no value"},

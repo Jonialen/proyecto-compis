@@ -1,6 +1,8 @@
 package tac
 
 import (
+	"strings"
+
 	"genanalex/internal/compiscript/ast"
 	"genanalex/internal/compiscript/model"
 )
@@ -11,16 +13,16 @@ func (l *lowerer) arguments(env *environment, expressions ast.Expressions, param
 	}
 	args := make([]Operand, 0, len(expressions))
 	for i, expression := range expressions {
-		value, ok := l.expression(env, expression)
+		expected := l.typedOperand(env, Operand{Type: params[i].Kind}, params[i])
+		if len(typeClasses) != 0 {
+			expected.Class = typeClasses[i]
+		}
+		value, ok := l.expressionExpected(env, expression, expected)
 		if !ok {
 			return nil, false
 		}
 		if params[i].Kind == model.TypeFloat {
 			value = l.widen(value, expression.SourceSpan())
-		}
-		expected := l.typedOperand(env, Operand{Type: params[i].Kind}, params[i])
-		if len(typeClasses) != 0 {
-			expected.Class = typeClasses[i]
 		}
 		if !callValue(params[i].Kind) || !l.assignable(expected, value) {
 			return nil, l.unsupported(expression.SourceSpan(), "call argument type mismatch")
@@ -40,6 +42,53 @@ func (l *lowerer) arguments(env *environment, expressions ast.Expressions, param
 // frontend pass. Runtime member selection still uses the actual receiver class.
 func (l *lowerer) expressionType(env *environment, expression ast.Expression) model.Type {
 	switch n := expression.(type) {
+	case ast.AssignExpr:
+		if _, ok := n.Target.(ast.IndexExpr); ok {
+			return l.expressionType(env, n.Target)
+		}
+	case ast.ArrayExpr:
+		var element model.Type
+		for _, e := range n.Elements {
+			t := l.expressionType(env, e)
+			element = mergeListElementTypes(element, t)
+		}
+		t := model.Type{Kind: model.TypeList, Name: "list"}
+		if element.Kind != "" {
+			t.Element = &element
+		}
+		return t
+	case ast.IndexExpr:
+		t := l.expressionType(env, n.Collection)
+		if t.Element != nil {
+			return *t.Element
+		}
+	case ast.LiteralExpr:
+		kind := model.TypeInteger
+		switch {
+		case n.Lexeme == "null":
+			kind = model.TypeNull
+		case n.Lexeme == "true" || n.Lexeme == "false":
+			kind = model.TypeBoolean
+		case strings.HasPrefix(n.Lexeme, "\""):
+			kind = model.TypeString
+		case strings.Contains(n.Lexeme, "."):
+			kind = model.TypeFloat
+		}
+		return model.Type{Kind: kind}
+	case ast.UnaryExpr:
+		if n.Operator == "!" {
+			return model.Type{Kind: model.TypeBoolean}
+		}
+		return l.expressionType(env, n.Operand)
+	case ast.BinaryExpr:
+		if n.Operator != "+" && n.Operator != "-" && n.Operator != "*" && n.Operator != "/" {
+			return model.Type{Kind: model.TypeBoolean}
+		}
+		a, b := l.expressionType(env, n.Left), l.expressionType(env, n.Right)
+		if n.Operator == "/" || b.Kind == model.TypeFloat {
+			return model.Type{Kind: model.TypeFloat}
+		}
+		return a
 	case ast.IdentifierExpr:
 		b, _ := env.lookup(n.Name)
 		if b.function != nil {
@@ -80,6 +129,22 @@ func (l *lowerer) expressionType(env *environment, expression ast.Expression) mo
 // queries never evaluate the source again or mutate semantic snapshots.
 func (l *lowerer) expressionClass(env *environment, expression ast.Expression) string {
 	switch n := expression.(type) {
+	case ast.AssignExpr:
+		if _, ok := n.Target.(ast.IndexExpr); ok {
+			return l.expressionClass(env, n.Value)
+		}
+	case ast.IndexExpr:
+		return l.expressionClass(env, n.Collection)
+	case ast.ArrayExpr:
+		var origin string
+		for _, e := range n.Elements {
+			if c := l.expressionClass(env, e); c != "" {
+				if origin == "" || l.assignable(Operand{Type: model.TypeClass, Class: c}, Operand{Type: model.TypeClass, Class: origin}) {
+					origin = c
+				}
+			}
+		}
+		return origin
 	case ast.IdentifierExpr:
 		b, _ := env.lookup(n.Name)
 		if b.field != nil {
@@ -120,6 +185,25 @@ func (l *lowerer) functionTypeClasses(label string) []string {
 
 func (l *lowerer) expressionTypeClasses(env *environment, expression ast.Expression) []string {
 	switch n := expression.(type) {
+	case ast.ArrayExpr:
+		// A function-valued list retains its element signature's declaration
+		// origins, not names resolved at a later indexing/alias use site. Empty
+		// nested literals do not establish the homogeneous element signature.
+		for _, element := range n.Elements {
+			t := l.expressionType(env, element)
+			for t.Kind == model.TypeList && t.Element != nil {
+				t = *t.Element
+			}
+			if t.Kind == model.TypeFunction {
+				return l.expressionTypeClasses(env, element)
+			}
+		}
+	case ast.IndexExpr:
+		return l.expressionTypeClasses(env, n.Collection)
+	case ast.AssignExpr:
+		if _, ok := n.Target.(ast.IndexExpr); ok {
+			return l.expressionTypeClasses(env, n.Target)
+		}
 	case ast.IdentifierExpr:
 		b, _ := env.lookup(n.Name)
 		if b.function != nil {
@@ -138,7 +222,7 @@ func (l *lowerer) expressionTypeClasses(env *environment, expression ast.Express
 }
 
 func (l *lowerer) recordStorageIdentity(scope int, operand Operand) {
-	if operand.Type != model.TypeClass {
+	if operand.Type != model.TypeClass && operand.Type != model.TypeList {
 		return
 	}
 	layout, ok := l.registry.environments[scope]
@@ -166,10 +250,18 @@ func (l *lowerer) storageIdentity(operand Operand) Operand {
 // Reference storage is separate from numeric arithmetic. Nominal identities are
 // semantic scope-qualified class declarations, never merely the kind "class".
 func callValue(kind model.TypeKind) bool {
-	return scalar(kind) || kind == model.TypeString || kind == model.TypeClass
+	return scalar(kind) || kind == model.TypeString || kind == model.TypeClass || kind == model.TypeList
 }
 
 func (l *lowerer) typedOperand(env *environment, o Operand, t model.Type) Operand {
+	if t.Kind == model.TypeList && t.Element != nil {
+		e := l.typedOperand(env, Operand{Type: t.Element.Kind}, *t.Element)
+		o.Shape = string(e.Type)
+		if e.Shape != "" {
+			o.Shape += "/" + e.Shape
+		}
+		o.Class = e.Class
+	}
 	if t.Kind == model.TypeClass {
 		if c := l.findClass(env, t.Name); c != nil {
 			o.Class = c.layout.ID
@@ -180,10 +272,13 @@ func (l *lowerer) typedOperand(env *environment, o Operand, t model.Type) Operan
 
 func (l *lowerer) assignable(target, value Operand) bool {
 	if value.Type == model.TypeNull {
-		return target.Type == model.TypeClass || target.Type == model.TypeString
+		return target.Type == model.TypeClass || target.Type == model.TypeString || target.Type == model.TypeList
 	}
 	if target.Type != value.Type {
 		return false
+	}
+	if target.Type == model.TypeList {
+		return target.Shape != "" && value.Shape != "" && l.elementAssignable(listElement(target), listElement(value))
 	}
 	if target.Type != model.TypeClass {
 		return true
@@ -218,6 +313,18 @@ func (l *lowerer) classForType(scope int, name string) string {
 func (l *lowerer) resolveEnvironmentTypes() {
 	for id, layout := range l.registry.environments {
 		for i, o := range layout.Bindings {
+			if o.Type == model.TypeList && o.Shape == "" {
+				for _, scope := range l.scopes {
+					if scope.ID == id {
+						for _, symbol := range scope.Symbols {
+							if symbolOperand(id, symbol).Value == o.Value {
+								layout.Bindings[i] = l.listStorageType(id, o, symbol.Type)
+							}
+						}
+					}
+				}
+				continue
+			}
 			if o.Type != model.TypeClass || o.Class != "" {
 				continue
 			}
