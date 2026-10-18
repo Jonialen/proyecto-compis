@@ -9,6 +9,7 @@ type binding struct {
 	operand  Operand
 	mutable  bool
 	function *functionInfo
+	typeOf   model.Type
 }
 
 type environment struct {
@@ -57,16 +58,28 @@ type lowerer struct {
 // Generate lowers a semantically validated AST using its matching scope inventory.
 // It never mutates its inputs and discards the whole program on unsupported input.
 func Generate(program ast.Program, scopes model.ScopeSnapshots) (*Program, model.Diagnostics) {
-	l := lowerer{scopes: scopes, program: Program{Instructions: []Instruction{}}, diagnostics: model.Diagnostics{}}
+	return generate(program, scopes, false)
+}
+
+func generate(program ast.Program, scopes model.ScopeSnapshots, forceClosures bool) (*Program, model.Diagnostics) {
+	l := lowerer{scopes: scopes, program: Program{Instructions: []Instruction{}}, diagnostics: model.Diagnostics{}, registry: newFunctionRegistry(scopes)}
+	l.registry.closures = l.registry.closures || forceClosures
 	global := l.environment(nil, model.ScopeGlobal, program.Span)
 	if global == nil {
 		return nil, l.diagnostics
 	}
 	l.globalID = global.id
-	if !l.predeclare(global, program.Statements) || !l.statements(global, program.Statements) || !l.resolveCalls() {
+	if !l.statements(global, program.Statements) || !l.resolveCalls() {
 		return nil, l.diagnostics
 	}
+	// A discarded function expression has no alias symbol in the inventory.
+	// Retry once with explicit environments rather than altering legacy programs
+	// merely because they declare ordinary direct-call functions.
+	if l.registry.needsClosures && !l.registry.closures {
+		return generate(program, scopes, true)
+	}
 	l.program.PeakTemporaries = l.pool.peak
+	l.program.Environments = l.registry.environmentLayouts()
 	return &l.program, l.diagnostics
 }
 
@@ -82,6 +95,7 @@ func (l *lowerer) environment(parent *environment, kind model.ScopeKind, span as
 	}
 	for _, scope := range l.scopes {
 		if scope.Kind == kind && scope.ParentID == parentID && scope.Span == span {
+			l.enterEnvironment(scope)
 			return &environment{id: scope.ID, parent: parent, active: map[string]binding{}}
 		}
 	}
@@ -90,6 +104,9 @@ func (l *lowerer) environment(parent *environment, kind model.ScopeKind, span as
 }
 
 func (l *lowerer) statements(env *environment, statements ast.Statements) bool {
+	if !l.predeclare(env, statements) {
+		return false
+	}
 	for _, statement := range statements {
 		if !l.statement(env, statement) {
 			return false
@@ -101,9 +118,6 @@ func (l *lowerer) statements(env *environment, statements ast.Statements) bool {
 func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 	switch n := statement.(type) {
 	case ast.FunctionDeclStmt:
-		if env.id != l.globalID || l.current != nil {
-			return l.unsupported(n.Span, "nested functions and closures are unsupported")
-		}
 		return l.functionBody(env, n)
 	case ast.ReturnStmt:
 		return l.returnStatement(env, n)
@@ -172,7 +186,7 @@ func (l *lowerer) declaration(env *environment, name string, initializer ast.Exp
 			if symbol.Name != name || symbol.Span != span {
 				continue
 			}
-			if !scalar(symbol.Type.Kind) {
+			if !storedValue(symbol.Type.Kind) {
 				return l.unsupported(span, "only integer, float and boolean declarations are supported")
 			}
 			target := symbolOperand(env.id, symbol)
@@ -180,7 +194,7 @@ func (l *lowerer) declaration(env *environment, name string, initializer ast.Exp
 			if !l.store(env, target, initializer, span) {
 				return false
 			}
-			env.active[name] = binding{operand: target, mutable: symbol.Mutable}
+			env.active[name] = binding{operand: target, mutable: symbol.Mutable, typeOf: symbol.Type}
 			return true
 		}
 	}
@@ -206,3 +220,6 @@ func (l *lowerer) store(env *environment, target Operand, expression ast.Express
 func numeric(kind model.TypeKind) bool { return kind == model.TypeInteger || kind == model.TypeFloat }
 
 func scalar(kind model.TypeKind) bool { return numeric(kind) || kind == model.TypeBoolean }
+
+// Storage capability is deliberately separate from scalar arithmetic capability.
+func storedValue(kind model.TypeKind) bool { return scalar(kind) || kind == model.TypeFunction }

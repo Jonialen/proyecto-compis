@@ -224,7 +224,6 @@ func TestFunctionGlobalInitializationAndVisibility(t *testing.T) {
 func TestFunctionCapabilityDiagnostics(t *testing.T) {
 	for _, tt := range []struct{ source, rejected, message string }{
 		{`function f(a){return;}`, `function f(a){return;}`, "unsupported function signature"},
-		{`function f(){function nested(){return;}}`, `function nested(){return;}`, "nested functions and closures are unsupported"},
 		{`function f(){} let x=f()==null;`, `f()==null`, "null-result calls are statement-only"},
 		{`let x=f(); let g=1; function f():integer{return g;}`, `f();`, "call requires initialized global binding s1.g"},
 		{`function a():integer{return b();} let x=a(); let g=1; function b():integer{return g;}`, `a();`, "call requires initialized global binding s1.g"},
@@ -292,13 +291,11 @@ func TestCompileFunctionRejectionsAreAtomic(t *testing.T) {
 	for _, source := range []string{
 		`function f(a){return;} f(1);`,
 		`function f(a:string){return;} f("x");`,
-		`function f(){function g(){return;} return;}`,
 		`function f(){print(1);}`,
 		`function f(){return;} let x=f();`,
 		`function f(){return;} function g(){return f();}`,
 		`let x=f(); let g=1; function f():integer{return g;}`,
 		`function f():integer{return g();} let x=f(); let a=1; function g():integer{return a;}`,
-		`function f():integer{return 1;} let alias=f; let x=alias();`,
 	} {
 		t.Run(source, func(t *testing.T) {
 			if diagnostics := Analyze([]byte(source)).Diagnostics; len(diagnostics) != 0 {

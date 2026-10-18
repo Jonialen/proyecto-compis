@@ -29,47 +29,59 @@ func (o Operand) String() string { return o.Value + ":" + string(o.Type) }
 type Opcode string
 
 const (
-	Copy           Opcode = "copy"
-	Add            Opcode = "+"
-	Subtract       Opcode = "-"
-	Multiply       Opcode = "*"
-	Divide         Opcode = "/"
-	Negate         Opcode = "neg"
-	IntegerToFloat Opcode = "i2f"
-	Equal          Opcode = "=="
-	NotEqual       Opcode = "!="
-	Less           Opcode = "<"
-	LessEqual      Opcode = "<="
-	Greater        Opcode = ">"
-	GreaterEqual   Opcode = ">="
-	LogicalNot     Opcode = "!"
-	Label          Opcode = "label"
-	Jump           Opcode = "jump"
-	BranchTrue     Opcode = "branchTrue"
-	Call           Opcode = "call"
-	Return         Opcode = "return"
+	Copy             Opcode = "copy"
+	Add              Opcode = "+"
+	Subtract         Opcode = "-"
+	Multiply         Opcode = "*"
+	Divide           Opcode = "/"
+	Negate           Opcode = "neg"
+	IntegerToFloat   Opcode = "i2f"
+	Equal            Opcode = "=="
+	NotEqual         Opcode = "!="
+	Less             Opcode = "<"
+	LessEqual        Opcode = "<="
+	Greater          Opcode = ">"
+	GreaterEqual     Opcode = ">="
+	LogicalNot       Opcode = "!"
+	Label            Opcode = "label"
+	Jump             Opcode = "jump"
+	BranchTrue       Opcode = "branchTrue"
+	Call             Opcode = "call"
+	Return           Opcode = "return"
+	EnterEnvironment Opcode = "enterEnvironment"
+	MakeClosure      Opcode = "makeClosure"
+	CallIndirect     Opcode = "callIndirect"
 )
 
 type Instruction struct {
-	Op          Opcode    `json:"op"`
-	Target      Operand   `json:"target"`
-	Left        Operand   `json:"left"`
-	Right       *Operand  `json:"right,omitempty"`
-	Span        ast.Span  `json:"span"`
-	Label       string    `json:"label,omitempty"`
-	Callee      string    `json:"callee,omitempty"`
-	Arguments   []Operand `json:"arguments,omitempty"`
-	ReturnValue *Operand  `json:"returnValue,omitempty"`
+	Op          Opcode      `json:"op"`
+	Target      Operand     `json:"target"`
+	Left        Operand     `json:"left"`
+	Right       *Operand    `json:"right,omitempty"`
+	Span        ast.Span    `json:"span"`
+	Label       string      `json:"label,omitempty"`
+	Callee      string      `json:"callee,omitempty"`
+	Arguments   []Operand   `json:"arguments,omitempty"`
+	ReturnValue *Operand    `json:"returnValue,omitempty"`
+	Environment int         `json:"environment,omitempty"`
+	Signature   *model.Type `json:"signature,omitempty"`
 }
 
 func (i Instruction) String() string {
 	switch i.Op {
-	case Call:
+	case EnterEnvironment:
+		return fmt.Sprintf("enter environment s%d", i.Environment)
+	case MakeClosure:
+		return fmt.Sprintf("%s = closure %s environment s%d", i.Target, i.Callee, i.Environment)
+	case Call, CallIndirect:
 		args := make([]string, len(i.Arguments))
 		for n, arg := range i.Arguments {
 			args[n] = arg.String()
 		}
 		call := "call " + i.Callee + "(" + strings.Join(args, ", ") + ")"
+		if i.Op == CallIndirect {
+			call = "callIndirect " + i.Left.String() + "(" + strings.Join(args, ", ") + ")"
+		}
 		if i.Target.Kind != "" {
 			return i.Target.String() + " = " + call
 		}
@@ -95,14 +107,22 @@ func (i Instruction) String() string {
 }
 
 type Program struct {
-	Instructions    []Instruction `json:"instructions"`
-	PeakTemporaries int           `json:"peakTemporaries"`
-	Procedures      []Procedure   `json:"procedures,omitempty"`
+	Instructions    []Instruction       `json:"instructions"`
+	PeakTemporaries int                 `json:"peakTemporaries"`
+	Procedures      []Procedure         `json:"procedures,omitempty"`
+	Environments    []EnvironmentLayout `json:"environments,omitempty"`
 }
 
 // String renders instructions in execution order with one trailing newline each.
 func (p Program) String() string {
 	var out strings.Builder
+	for _, env := range p.Environments {
+		bindings := make([]string, len(env.Bindings))
+		for i, o := range env.Bindings {
+			bindings[i] = o.String()
+		}
+		fmt.Fprintf(&out, "environment s%d parent s%d (%s)\n", env.ScopeID, env.ParentID, strings.Join(bindings, ", "))
+	}
 	if len(p.Procedures) != 0 {
 		fmt.Fprintln(&out, "main:")
 	}
@@ -115,6 +135,9 @@ func (p Program) String() string {
 			formals[i] = parameter.String()
 		}
 		fmt.Fprintf(&out, "procedure %s(%s) -> %s [scope=%d frame=%d cells]:\n", procedure.Label, strings.Join(formals, ", "), procedure.ResultKind, procedure.ScopeID, procedure.Frame.Cells)
+		if procedure.LexicalScope != 0 {
+			fmt.Fprintf(&out, "  lexical environment s%d\n", procedure.LexicalScope)
+		}
 		for _, slot := range procedure.Frame.Slots {
 			fmt.Fprintf(&out, "  cell %d %s", slot.Offset, slot.Role)
 			if slot.Operand != nil && slot.Dynamic {

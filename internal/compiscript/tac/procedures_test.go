@@ -16,6 +16,7 @@ func TestGenerateFunctionsPreservesASTAndScopes(t *testing.T) {
 		`let g=1; function f(a:integer):integer{{let a=a+g;} return a;} let x=f(2);`,
 		`function f(){function nested(){return;} return;}`,
 		`function f(){f();}`,
+		`function zero():integer{return 0;} let saved=zero; function install(seed:integer){let count=seed; function next():integer{count=count+1;return count;} saved=next;} install(10); let first=saved();`,
 	} {
 		program, diags := frontend.Parse([]byte(source))
 		scopes, semDiags := semantic.Analyze(program)

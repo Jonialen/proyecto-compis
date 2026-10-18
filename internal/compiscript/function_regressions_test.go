@@ -65,8 +65,6 @@ func TestCompileFunctionAtomicRejectionRegressions(t *testing.T) {
 	for _, tt := range []struct {
 		name, source, message string
 	}{
-		{"nested declaration", "function f() { function g() {} }", "nested functions"},
-		{"alias", "function f():integer { return 1; } let a=f; let x=a();", ""},
 		{"shadow", "function f():integer { return 1; } { let f=2; f(); }", ""},
 		{"untyped parameter", "function f(x):integer { return 1; }", "unsupported function signature"},
 		{"string parameter", "function f(x:string):integer { return 1; }", "unsupported function signature"},
@@ -82,7 +80,6 @@ func TestCompileFunctionAtomicRejectionRegressions(t *testing.T) {
 		{"duplicate parameter", "function f(a:integer,a:integer):integer { return a; }", ""},
 		{"unused null declaration", "function f() {} function g() { let x=f(); }", "only integer, float and boolean declarations are supported"},
 		{"null operand", "function f() {} let x=f()==null;", ""},
-		{"same name alias", "function f():integer { return 1; } { let f=f; let x=f(); }", ""},
 		{"parameter shadows callee", "function f():integer { return 1; } function g(f:integer):integer { return f(); }", ""},
 		{"conservative dependency", "let x=f(); let g=2; function f():integer { if(false) { return g; } return 1; }", "call requires initialized global binding s1.g"},
 		{"syntax error", "function f( {", ""},

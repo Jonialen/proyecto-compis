@@ -21,16 +21,19 @@ type frameContinuation struct {
 	target tac.Operand
 }
 type testFrame struct {
-	procedure *tac.Procedure
-	tape      []tac.Instruction
-	labels    map[string]int
-	pc        int
-	depth     int
-	cells     []any
-	offsets   map[string]int
-	main      map[string]frameValue
-	globals   map[string]frameValue
-	mainPeak  int
+	procedure    *tac.Procedure
+	tape         []tac.Instruction
+	labels       map[string]int
+	pc           int
+	depth        int
+	cells        []any
+	offsets      map[string]int
+	main         map[string]frameValue
+	globals      map[string]frameValue
+	mainPeak     int
+	environments map[int]*testEnvironment
+	lexical      *testEnvironment
+	layouts      map[int]tac.EnvironmentLayout
 }
 
 func (f *testFrame) globalStore() (map[string]frameValue, error) {
@@ -93,6 +96,9 @@ func frameLabels(tape []tac.Instruction) (map[string]int, error) {
 
 func (f *testFrame) globalOperand(o tac.Operand) bool {
 	if f.procedure == nil {
+		if len(f.layouts) != 0 {
+			return o.Kind == tac.Symbol && f.layouts[testOperandScope(o)].ParentID == 0 && testOperandScope(o) != 0
+		}
 		return o.Kind == tac.Symbol
 	}
 	for _, global := range f.procedure.Globals {
@@ -117,6 +123,9 @@ func (f *testFrame) read(o tac.Operand) (frameValue, error) {
 	}
 	var value frameValue
 	var found bool
+	if handled, v, e := f.readEnvironment(o); handled {
+		return v, e
+	}
 	if f.globalOperand(o) {
 		store, err := f.globalStore()
 		if err != nil {
@@ -147,6 +156,9 @@ func (f *testFrame) read(o tac.Operand) (frameValue, error) {
 func (f *testFrame) write(o tac.Operand, value frameValue) error {
 	if (o.Kind != tac.Symbol && o.Kind != tac.Temporary) || o.Type != value.kind {
 		return fmt.Errorf("invalid destination: %s", o)
+	}
+	if handled, e := f.writeEnvironment(o, value); handled {
+		return e
 	}
 	if f.globalOperand(o) {
 		store, err := f.globalStore()
@@ -216,6 +228,9 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 		return values, err
 	}
 	f := &testFrame{tape: program.Instructions, labels: labels, main: map[string]frameValue{}, globals: globals, mainPeak: program.PeakTemporaries}
+	if err := f.loadEnvironments(program.Environments); err != nil {
+		return values, err
+	}
 	procedures := map[string]*tac.Procedure{}
 	for i := range program.Procedures {
 		p := &program.Procedures[i]
@@ -240,6 +255,24 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 		i := f.tape[f.pc]
 		f.pc++
 		switch i.Op {
+		case tac.EnterEnvironment:
+			if err := f.enterTestEnvironment(i.Environment); err != nil {
+				return values, err
+			}
+			continue
+		case tac.MakeClosure:
+			p, ok := procedures[i.Callee]
+			env := f.findEnvironment(i.Environment)
+			if !ok {
+				return values, fmt.Errorf("undefined closure procedure")
+			}
+			if env == nil || p.LexicalScope != i.Environment {
+				return values, fmt.Errorf("undefined closure environment")
+			}
+			if err := f.write(i.Target, frameValue{model.TypeFunction, testClosure{p, env}}); err != nil {
+				return values, err
+			}
+			continue
 		case tac.Label:
 			continue
 		case tac.Jump:
@@ -257,13 +290,33 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 				f.pc = f.labels[i.Label]
 			}
 			continue
-		case tac.Call:
+		case tac.Call, tac.CallIndirect:
 			p, exists := procedures[i.Callee]
+			var lexical *testEnvironment
+			if i.Op == tac.CallIndirect {
+				v, e := f.read(i.Left)
+				if e != nil {
+					return values, e
+				}
+				closure, ok := v.value.(testClosure)
+				if v.kind != model.TypeFunction || !ok || closure.procedure == nil || closure.environment == nil {
+					return values, fmt.Errorf("invalid function value")
+				}
+				p, lexical, exists = closure.procedure, closure.environment, true
+				if err := checkClosureSignature(i, p); err != nil {
+					return values, err
+				}
+			} else if exists && p.LexicalScope != 0 {
+				lexical = f.findEnvironment(p.LexicalScope)
+			}
 			if !exists {
 				return values, fmt.Errorf("undefined procedure")
 			}
 			if len(i.Arguments) != len(p.Parameters) {
 				return values, fmt.Errorf("argument count mismatch")
+			}
+			if err := f.checkCallRequirements(p, lexical); err != nil {
+				return values, err
 			}
 			// All arguments read from the caller BEFORE constructing the callee.
 			args := make([]frameValue, len(i.Arguments))
@@ -277,6 +330,8 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 			if e != nil {
 				return values, e
 			}
+			callee.layouts, callee.lexical = f.layouts, lexical
+			callee.environments = map[int]*testEnvironment{}
 			for j, formal := range p.Parameters {
 				if e := callee.write(formal, args[j]); e != nil {
 					return values, e

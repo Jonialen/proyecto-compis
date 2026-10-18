@@ -1,11 +1,12 @@
 # Compiscript three-address code
 
-This is the scalar, control-flow and direct-global-function subset of Entrega 2,
+This is the scalar, control-flow and lexical-function subset of Entrega 2,
 not the complete assignment. Functions use explicit calls/returns and deterministic
-abstract-cell activation records, including direct and mutual recursion; closures remain deferred.
+abstract-cell activation records, including direct/mutual recursion, retained closures
+and inferred function aliases. Objects and collections remain separate future units.
 The separate `compiscript.Compile(source []byte)` library API generates typed,
 source-located TAC for numeric and boolean programs with `if/else`, `while`,
-`do-while`, `for`, `switch`, typed direct calls and returns. Existing analysis reports remain unchanged except for the
+`do-while`, `for`, `switch`, typed direct/indirect calls and returns. Existing analysis reports remain unchanged except for the
 corrected optional-for-header mapping described below. The separate `compiscript-tac` command compiles this
 subset without changing the existing analysis command's interface or exit policy.
 
@@ -27,6 +28,8 @@ go run ./cmd/compiscript-tac testdata/compiscript/tac/functions.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/functions.cps
 go run ./cmd/compiscript-tac testdata/compiscript/tac/recursion.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/recursion.cps
+go run ./cmd/compiscript-tac testdata/compiscript/tac/closures.cps
+go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/closures.cps
 go run ./cmd/compiscript-tac -h
 ```
 
@@ -87,10 +90,12 @@ not permission to omit instructions. There is no product TAC executor in this un
 The source compiler assigns symbol names `s<scope-id>.<source-name>` from
 the semantic scope inventory. These are logical identities, not byte offsets,
 and are deterministic for the same source, not stable across source edits.
-Declarations become visible only after their initializer is lowered. This
-preserves outer-variable binding in a shadowing initializer. Global function
+Variable declarations become visible only after their initializer is lowered. This
+preserves outer-variable binding in a shadowing initializer. Named function
 identities/signatures are predeclared for forward calls; variable bindings are not.
-Function scopes and activation records are described below; captures are not supported.
+Hoisting applies to every statement sequence, including nested bodies and switch
+cases, without inventing additional semantic scopes. Function scopes, activation
+records and retained captures are described below.
 
 Temporaries start at `t0`. Allocation chooses the smallest available numeric
 slot; release occurs only once the final consuming instruction is emitted.
@@ -103,7 +108,7 @@ not physical register usage, stack size, or a claim of global optimality.
 
 ### Signatures, binding and validation
 
-Only top-level global functions with explicitly typed `integer`, `float` or
+Named functions with explicitly typed `integer`, `float` or
 `boolean` parameters are supported. Their result is a scalar type or the
 analyzer's `null` result when omitted. For example:
 
@@ -115,11 +120,11 @@ function increment(value: integer): integer {
 let answer = increment(2);
 ```
 
-Calls bind to an actual predeclared global function symbol through the active
-lexical environment, never by a name-only registry lookup. Aliases, first-class
-function values, indirect calls and shadowed function names are not callable.
-The callee expression must be an identifier. Nested declarations/closures,
-bodyless external AST functions and untyped/unsupported signatures are explicitly
+Calls bind through the active lexical environment, never by a name-only registry
+lookup. Inferred `let`/`const` function aliases and mutable alias assignments retain
+function values; an alias shadowing a function name is callable. Non-function
+shadowing remains invalid. The existing grammar uses identifier callees; no lambda
+or function-type annotation syntax is added. Bodyless external AST functions and untyped/unsupported signatures are explicitly
 rejected. A function uses the existing semantic function scope spanning its whole
 declaration; its parameters and direct body declarations share that scope. Real
 nested blocks and for scopes retain their own semantic IDs. Parameters are mutable
@@ -155,7 +160,8 @@ without calls receive no extra snapshot instructions.
 Function bodies retain declaration-time global visibility and switch-blocked
 names, not the final variable inventory. Global reads and writes are allowed
 when initialized; the absence of a semantic `Captured` flag on globals does not
-imply closure support. Each procedure records direct global references, then
+provide use-to-binding edges. Lowering resolves actual lexical uses by identity.
+Each procedure records direct global references, then
 inherits its callees' dependencies transitively by repeatedly unioning dependency
 sets until none grows. This finite monotone fixed point also covers cyclic call
 graphs, including dependencies reached through outgoing edges of a cycle.
@@ -195,7 +201,8 @@ callee frame, even when caller and callee use the same `t0` name. The caller's
 live cells remain reserved across calls. On return, read the result before
 discarding the callee, restore the caller/continuation, and write the caller's
 destination. Each invocation has fresh parameter/local/temporary storage;
-only the global store is shared. Calls pass scalars by value.
+the legacy direct-call path shares only the global store. Calls pass scalars by value;
+closure programs additionally retain shared lexical cells as described below.
 
 ### Cell layout and text rendering
 
@@ -231,6 +238,71 @@ field ordering, temporary numbering and layout absence) are unchanged.
 `result = 8.0`. The CLI emits its TAC, not execution output. Bounded test-only
 frame execution checks independent invocation storage, continuation/control
 restoration, global effects, defined slots, ownership and label/step/depth limits.
+
+## Closures and retained lexical cells
+
+`closures.cps` installs a counter into a global inferred function alias. After
+`install(10)` returns, calling the saved function computes `first = 11` and
+`second = 12`. Copying that alias preserves the same counter. Calling `install`
+again creates a different counter; sibling closures from one installation share
+one cell. The CLI generates code only; executable proof uses the bounded test oracle.
+
+### Explicit IR contract
+
+| Operation/metadata | Contract |
+| --- | --- |
+| `Program.environments` | Optional layouts sorted by semantic `scopeId`, with `parentId` and identity-sorted typed `bindings`. A layout is not a live allocation. |
+| `enterEnvironment`, `environment` | Allocate fresh undefined cells every time this instruction executes. Link the actual currently active lexical parent instance. Function parameters enter initialized from the existing argument frame cells; global cells use the shared global store. |
+| `makeClosure`, `callee`, `environment`, `target` | Construct a `function` value pairing the procedure identity with the exact retained defining environment instance. Does not read captures or initialize them. |
+| `callIndirect`, `left`, `arguments`, `signature`, `target` | Read the selected function value and argument values, check its complete scalar/null signature and initialization requirements, then invoke using its retained lexical parent, not the caller's name lookup. |
+| `Procedure.lexicalScope` | Defining environment layout required by the procedure. Its own function scope is entered on each invocation. |
+| `Procedure.captures` | Sorted transitive non-global binding requirements, including reads and writes. Requirements owned by a caller are checked at its call site rather than propagated outside that activation. |
+
+Text includes environment layout declarations and explicit environment-entry,
+closure-construction and indirect-call instructions. Optional JSON fields are
+omitted for programs using only previously supported direct functions. Existing
+direct-call text/JSON, frame offsets and temporary numbering remain unchanged.
+
+In a closure program, environment cells are authoritative storage for lexical
+symbols; parameter/local frame slots remain the ownership inventory, with arguments
+staged in parameter slots before entry. Temporaries/results/control cells retain
+the existing allocator and frame behavior. This is an abstract storage contract,
+not a target ABI or a garbage collector. Retention must outlive a defining return;
+reentering a block, including a loop body, allocates a new environment instance.
+Grandparent captures follow retained parent links. No block-exit opcode is needed:
+operands and closure construction name static layout identities, and new entries
+replace only the active instance, never the instances already retained by closures.
+
+### Initialization and signature safety
+
+Function declarations are hoisted; variable initialization is not. Creating an
+alias of a hoisted closure before its captured variable initializes is permitted;
+calling it requires initialized cells. Known direct/nested call edges use the
+existing fixed-point global requirements plus lexical capture requirements.
+An unsafe statically known nested call rejects atomically with
+`call requires initialized captured binding s<scope>.<name>`.
+Uncalled and unreachable nested bodies are still validated in full.
+
+Aliases can be reassigned dynamically. Analyze currently compares function kinds,
+not full function signatures, on assignment; this unit deliberately does not change
+that semantic API. Every indirect call therefore carries the statically expected
+`signature`; a backend must reject mismatched actual parameter kinds, arity or
+result kind **before invoking**. The test oracle reports
+`indirect call signature mismatch`. It must also check the actual procedure's
+transitive `globals` and `captures` against its retained environment before invoking,
+including write-only requirements. Undefined cells fault rather than inventing a
+default. Thus a dynamically selected early global/capture call can compile but
+fault at execution; it is not a new static definite-initialization guarantee.
+An indirect call reached through another direct or recursive call keeps the same
+guard. Static diagnostics still discard the entire TAC, including invalid alias
+initializers and unsupported code elsewhere in the function graph.
+
+The callee is selected and frozen before arguments evaluate. Arguments and earlier
+scalar operands remain frozen across effectful calls using the existing temporary
+pool. Copying a function copies its procedure/environment pair, not captured
+scalar snapshots. Arithmetic and comparisons remain restricted to existing scalar
+types. Function returns remain scalar/null, with omitted results still `null`;
+there are no function-return annotations, inferred closure returns or new lambdas.
 
 ## Conditions and control flow
 
@@ -339,7 +411,7 @@ dispatch, implicit exit, switch break and continue through a switch to a for pos
 The implemented source slice supports initialized integer/float/boolean variables
 and constants, identifier assignment, lexical blocks, grouping, unary minus,
 and `+`, `-`, `*`, `/`, comparisons, boolean logic, `if/else`, the loops/switch/transfers above,
-and the direct-function/call/return subset described above.
+and the lexical-function/call/return subset described above.
 Unsupported statements, operators, expressions, types,
 and missing initializers must be reported explicitly with source locations.
 No partial TAC may escape after lexical, syntax, semantic, or lowering errors.
@@ -347,7 +419,7 @@ Original source bytes are preserved; Compile retains the matching Analyze diagno
 Numeric expression statements are supported; their final temporary is released
 without a store. Except for the for-post case above, assignment expressions
 (including property assignments), ternaries, strings, general null values, lists, objects/classes,
-print, indirect/nested functions and foreach are not lowered. Transfers without an enclosing
+print and foreach are not lowered. Transfers without an enclosing
 eligible construct are rejected. Unsupported input is not silently skipped.
 Unsupported declarations report `only integer, float and boolean declarations are supported`.
 Legacy unsupported-expression/statement and missing-initializer diagnostics retain
@@ -392,17 +464,17 @@ exposes the complete report.
 ## Remaining Entrega 2 work
 
 - Foreach lowering and stronger definite-initialization analysis for switch bindings.
-- Indirect/first-class calls, nested functions and closures. Capture
-  analysis must retain binding edges; a `Captured` flag alone is insufficient.
 - Object allocation, constructors, fields, methods, `this`, lists and indexing.
 - Target-machine byte sizes/offsets and calling ABI, main/global storage layout,
-  non-global lexical access links and closure environments. Abstract function
-  parameter/local/temporary/result/control cells are implemented, not this target layout.
+  garbage collection and target-specific lexical links. Abstract retained lexical
+  environments and function parameter/local/temporary/result/control cells are
+  implemented, not this target layout.
 - Source-to-TAC output in the IDE and successful/failed end-to-end examples.
 
 Future memory access needs distinct opcodes and explicit operands, as direct calls
 already have; operations must not be smuggled into numeric symbol strings.
-Closure environments need their own binding-edge design and executable proof.
+Object and collection references can extend the explicit value/storage contract;
+they are not encoded as scalar operand strings in this unit.
 The inherited frontend panic for some malformed for headers is unchanged; this
 slice adds no blanket recovery and does not claim all malformed input is covered.
 
@@ -441,3 +513,9 @@ than a product runtime overflow policy. Recursive regressions exercise factorial
 multiple live recursive results, mutual boolean calls, null-result procedures,
 cyclic global dependencies and initialization rejection. `recursion.cps` would
 compute `product = 120` and `sequence = 21`; the CLI emits TAC, not those values.
+Closure tests additionally execute escaped counters, distinct invocations, shared
+sibling cells, recursive owners, grandparent captures, block/loop reentry, hoisting,
+shadow initializers and callee-selection order. Built CLI JSON is decoded and
+executed through the same bounded retained-environment oracle. Invalid layouts,
+undefined/out-of-bounds environment cells, signature mismatches and initialization
+faults are checked without adding a product interpreter.

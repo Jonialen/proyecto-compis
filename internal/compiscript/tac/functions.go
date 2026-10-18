@@ -10,25 +10,31 @@ import (
 )
 
 type functionInfo struct {
-	label   string
-	typeOf  model.Type
-	edges   []*functionInfo
-	globals map[string]Operand
+	label         string
+	typeOf        model.Type
+	edges         []*functionInfo
+	globals       map[string]Operand
+	captures      map[string]Operand
+	definingScope int
+	scopeID       int
 }
 
 type mainCall struct {
 	callee    *functionInfo
 	span      ast.Span
 	available map[string]bool
+	caller    *functionInfo
 }
 
 type functionRegistry struct {
-	ordered []*functionInfo
-	calls   []mainCall
+	ordered       []*functionInfo
+	calls         []mainCall
+	closures      bool
+	needsClosures bool
+	environments  map[int]EnvironmentLayout
 }
 
 func (l *lowerer) predeclare(global *environment, statements ast.Statements) bool {
-	l.registry = &functionRegistry{}
 	for _, statement := range statements {
 		n, ok := statement.(ast.FunctionDeclStmt)
 		if !ok {
@@ -48,7 +54,7 @@ func (l *lowerer) predeclare(global *environment, statements ast.Statements) boo
 			}
 		}
 		if found == nil || found.Type.Kind != model.TypeFunction || found.Type.Result == nil {
-			return l.unsupported(n.Span, "missing matching global function signature")
+			return l.unsupported(n.Span, "missing matching function signature")
 		}
 		if n.Body == nil {
 			return l.unsupported(n.Span, "bodyless functions are unsupported")
@@ -61,7 +67,7 @@ func (l *lowerer) predeclare(global *environment, statements ast.Statements) boo
 				return l.unsupported(n.Span, "unsupported function signature")
 			}
 		}
-		f := &functionInfo{label: symbolOperand(global.id, *found).Value, typeOf: found.Type, globals: map[string]Operand{}}
+		f := &functionInfo{label: symbolOperand(global.id, *found).Value, typeOf: found.Type, globals: map[string]Operand{}, captures: map[string]Operand{}, definingScope: global.id}
 		l.registry.ordered = append(l.registry.ordered, f)
 		global.active[n.Name] = binding{function: f}
 	}
@@ -82,6 +88,10 @@ func (l *lowerer) functionBody(global *environment, n ast.FunctionDeclStmt) bool
 		return false
 	}
 	p := Procedure{Label: f.label, ScopeID: env.id, Span: n.Span, ResultKind: f.typeOf.Result.Kind, Parameters: []Operand{}}
+	f.scopeID = env.id
+	if l.registry.closures {
+		p.LexicalScope = f.definingScope
+	}
 	for i, parameter := range n.Parameters {
 		found := false
 		for _, scope := range l.scopes {
@@ -91,7 +101,7 @@ func (l *lowerer) functionBody(global *environment, n ast.FunctionDeclStmt) bool
 			for _, symbol := range scope.Symbols {
 				if symbol.Name == parameter.Name && symbol.Kind == model.SymbolParameter && symbol.Type.Kind == f.typeOf.Params[i].Kind {
 					operand := symbolOperand(env.id, symbol)
-					env.active[symbol.Name] = binding{operand: operand, mutable: symbol.Mutable}
+					env.active[symbol.Name] = binding{operand: operand, mutable: symbol.Mutable, typeOf: symbol.Type}
 					p.Parameters = append(p.Parameters, operand)
 					found = true
 					break
@@ -115,6 +125,9 @@ func (l *lowerer) functionBody(global *environment, n ast.FunctionDeclStmt) bool
 		return false
 	}
 	l.program.Procedures = append(l.program.Procedures, p)
+	// Nested bodies are emitted by their child lowerer, not into their caller's
+	// instruction tape. Registry order is therefore NOT procedure slice order.
+	l.program.Procedures = append(l.program.Procedures, child.program.Procedures...)
 	return true
 }
 
@@ -159,6 +172,8 @@ func nullLiteral(expression ast.Expression) bool {
 func (l *lowerer) reference(operand Operand) {
 	if l.current != nil && operand.Kind == Symbol && strings.HasPrefix(operand.Value, fmt.Sprintf("s%d.", l.globalID)) {
 		l.current.globals[operand.Value] = operand
+	} else if l.current != nil && operand.Kind == Symbol && !l.owns(l.current, operand) {
+		l.current.captures[operand.Value] = operand
 	}
 }
 
@@ -176,18 +191,39 @@ func (l *lowerer) resolveCalls() bool {
 						changed = true
 					}
 				}
+				for name, operand := range callee.captures {
+					if !l.owns(f, operand) {
+						if _, exists := f.captures[name]; !exists {
+							f.captures[name] = operand
+							changed = true
+						}
+					}
+				}
 			}
 		}
 	}
 	for _, call := range l.registry.calls {
-		for _, operand := range sortedGlobals(call.callee.globals) {
-			if !call.available[operand.Value] {
-				return l.unsupported(call.span, "call requires initialized global binding "+operand.Value)
+		if call.caller == nil {
+			for _, operand := range sortedGlobals(call.callee.globals) {
+				if !call.available[operand.Value] {
+					return l.unsupported(call.span, "call requires initialized global binding "+operand.Value)
+				}
+			}
+		}
+		for _, operand := range sortedGlobals(call.callee.captures) {
+			if (call.caller == nil || l.owns(call.caller, operand)) && !call.available[operand.Value] {
+				return l.unsupported(call.span, "call requires initialized captured binding "+operand.Value)
 			}
 		}
 	}
 	for i := range l.program.Procedures {
-		l.program.Procedures[i].Globals = sortedGlobals(l.registry.ordered[i].globals)
+		for _, f := range l.registry.ordered {
+			if f.label == l.program.Procedures[i].Label {
+				l.program.Procedures[i].Globals = sortedGlobals(f.globals)
+				l.program.Procedures[i].Captures = sortedGlobals(f.captures)
+				break
+			}
+		}
 	}
 	return true
 }

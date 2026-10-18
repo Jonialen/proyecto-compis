@@ -32,6 +32,8 @@ type Procedure struct {
 	Instructions    []Instruction  `json:"instructions"`
 	PeakTemporaries int            `json:"peakTemporaries"`
 	Globals         []Operand      `json:"globals,omitempty"`
+	LexicalScope    int            `json:"lexicalScope,omitempty"`
+	Captures        []Operand      `json:"captures,omitempty"`
 }
 
 func symbolOperand(scope int, symbol model.Symbol) Operand {
@@ -65,7 +67,7 @@ func (l *lowerer) layout(p *Procedure) bool {
 		for _, scope := range l.scopes {
 			if owned[scope.ParentID] && !owned[scope.ID] {
 				if scope.Kind == model.ScopeFunction {
-					return l.unsupported(scope.Span, "nested functions and closures are unsupported")
+					continue
 				}
 				owned[scope.ID] = true
 				changed = true
@@ -77,10 +79,10 @@ func (l *lowerer) layout(p *Procedure) bool {
 			continue
 		}
 		for _, symbol := range scope.Symbols {
-			if symbol.Kind == model.SymbolParameter {
+			if symbol.Kind == model.SymbolParameter || symbol.Kind == model.SymbolFunction {
 				continue
 			}
-			if !scalar(symbol.Type.Kind) || (symbol.Kind != model.SymbolVariable && symbol.Kind != model.SymbolConstant) {
+			if !storedValue(symbol.Type.Kind) || (symbol.Kind != model.SymbolVariable && symbol.Kind != model.SymbolConstant) {
 				return l.unsupported(symbol.Span, "unsupported function-owned binding")
 			}
 			locals = append(locals, local{symbolOperand(scope.ID, symbol), symbol.Span})

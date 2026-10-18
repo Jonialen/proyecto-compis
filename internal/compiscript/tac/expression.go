@@ -23,7 +23,10 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 			return Operand{Kind: Literal, Value: n.Lexeme, Type: kind}, true
 		}
 	case ast.IdentifierExpr:
-		if value, ok := env.lookup(n.Name); ok && value.function == nil {
+		if value, ok := env.lookup(n.Name); ok {
+			if value.function != nil {
+				return l.closure(value.function, n.Span), true
+			}
 			l.reference(value.operand)
 			return value.operand, true
 		}

@@ -16,16 +16,38 @@ func statementCall(expression ast.Expression) (ast.CallExpr, bool) {
 func (l *lowerer) call(env *environment, n ast.CallExpr, statement bool) (Operand, bool) {
 	identifier, direct := n.Callee.(ast.IdentifierExpr)
 	bound, found := env.lookup(identifier.Name)
-	if !direct || !found || bound.function == nil {
+	if !direct || !found || (bound.function == nil && bound.typeOf.Kind != model.TypeFunction) {
 		return Operand{}, l.unsupported(n.Span, "only direct global function calls are supported")
 	}
 	f := bound.function
-	kind := f.typeOf.Result.Kind
+	signature := bound.typeOf
+	if f != nil {
+		signature = f.typeOf
+	}
+	if signature.Result == nil {
+		return Operand{}, l.unsupported(n.Span, "missing function value signature")
+	}
+	kind := signature.Result.Kind
+	if !scalar(kind) && kind != model.TypeNull {
+		return Operand{}, l.unsupported(n.Span, "unsupported function signature")
+	}
 	if kind == model.TypeNull && !statement {
 		return Operand{}, l.unsupported(n.Span, "null-result calls are statement-only")
 	}
-	if len(n.Arguments) != len(f.typeOf.Params) {
+	if len(n.Arguments) != len(signature.Params) {
 		return Operand{}, l.unsupported(n.Span, "call argument count mismatch")
+	}
+	// Select and freeze the function value BEFORE any argument can reassign an
+	// alias or reenter its defining block. Direct global calls keep their old IR.
+	indirect := f == nil || f.definingScope != l.globalID
+	var selected Operand
+	if indirect {
+		var ok bool
+		selected, ok = l.expression(env, n.Callee)
+		if !ok {
+			return Operand{}, false
+		}
+		selected = l.freeze(selected, n.Callee.SourceSpan())
 	}
 	arguments := make([]Operand, 0, len(n.Arguments))
 	for i, expression := range n.Arguments {
@@ -33,10 +55,10 @@ func (l *lowerer) call(env *environment, n ast.CallExpr, statement bool) (Operan
 		if !ok {
 			return Operand{}, false
 		}
-		if f.typeOf.Params[i].Kind == model.TypeFloat {
+		if signature.Params[i].Kind == model.TypeFloat {
 			value = l.widen(value, expression.SourceSpan())
 		}
-		if value.Type != f.typeOf.Params[i].Kind {
+		if !scalar(signature.Params[i].Kind) || value.Type != signature.Params[i].Kind {
 			return Operand{}, l.unsupported(expression.SourceSpan(), "call argument type mismatch")
 		}
 		for _, later := range n.Arguments[i+1:] {
@@ -47,26 +69,22 @@ func (l *lowerer) call(env *environment, n ast.CallExpr, statement bool) (Operan
 		}
 		arguments = append(arguments, value)
 	}
-	if l.current != nil {
-		l.current.edges = append(l.current.edges, f)
-	} else {
-		root := env
-		for root.parent != nil {
-			root = root.parent
+	if f != nil {
+		if l.current != nil {
+			l.current.edges = append(l.current.edges, f)
 		}
-		available := map[string]bool{}
-		for name, binding := range root.active {
-			if binding.function == nil && !root.blocked[name] {
-				available[binding.operand.Value] = true
-			}
-		}
-		l.registry.calls = append(l.registry.calls, mainCall{callee: f, span: n.Span, available: available})
+		l.registry.calls = append(l.registry.calls, mainCall{callee: f, span: n.Span, available: availableBindings(env), caller: l.current})
 	}
 	var target Operand
 	if scalar(kind) {
 		target = l.pool.acquire(kind)
 	}
-	l.program.Instructions = append(l.program.Instructions, Instruction{Op: Call, Target: target, Callee: f.label, Arguments: arguments, Span: n.Span})
+	if indirect {
+		l.program.Instructions = append(l.program.Instructions, Instruction{Op: CallIndirect, Target: target, Left: selected, Arguments: arguments, Signature: &signature, Span: n.Span})
+		l.pool.release(selected)
+	} else {
+		l.program.Instructions = append(l.program.Instructions, Instruction{Op: Call, Target: target, Callee: f.label, Arguments: arguments, Span: n.Span})
+	}
 	for _, argument := range arguments {
 		l.pool.release(argument)
 	}
