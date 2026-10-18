@@ -416,12 +416,24 @@ body.uwu-mode .tab.active {
 .result-panel::-webkit-scrollbar { width: 5px; }
 .result-panel::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
 
-.source-view, .tree-node, .environment, .symbol, .diagnostic-item {
+.source-view, .layout-entry, .tree-node, .environment, .symbol, .diagnostic-item {
   font-family: var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .source-view { color: var(--text-primary); }
+.layout-entry { padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+#status-text.loading::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
 .tree-node, .environment { margin: 6px 0 6px 14px; }
 .tree-node > summary, .environment > summary { color: var(--accent-2); cursor: pointer; }
 .symbol, .diagnostic-item {

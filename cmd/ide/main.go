@@ -32,6 +32,7 @@ func newMux() *http.ServeMux {
 	mux.Handle("/", http.FileServer(http.Dir("web")))
 	mux.HandleFunc("/api/process", cors(handleProcess))
 	mux.HandleFunc("/api/compiscript/analyze", cors(handleCompiscriptAnalyze))
+	mux.HandleFunc("/api/compiscript/compile", cors(handleCompiscriptCompile))
 	mux.HandleFunc("/api/health", cors(handleHealth))
 	return mux
 }
@@ -55,6 +56,25 @@ func (r *compiscriptRequest) UnmarshalJSON(data []byte) error {
 const maxCompiscriptRequestBytes = 1 << 20
 
 func handleCompiscriptAnalyze(w http.ResponseWriter, r *http.Request) {
+	handleCompiscriptRequest(w, r, func(source []byte) any { return compiscript.Analyze(source) })
+}
+
+func handleCompiscriptCompile(w http.ResponseWriter, r *http.Request) {
+	handleCompiscriptRequest(w, r, func(source []byte) any {
+		report := compiscript.Compile(source)
+		text := ""
+		if report.TAC != nil {
+			text = report.TAC.String()
+		}
+		return struct {
+			compiscript.CompilationReport
+			TACText string `json:"tacText"`
+		}{report, text}
+	})
+}
+
+// Both facades use the same strict transport boundary; each runs only once.
+func handleCompiscriptRequest(w http.ResponseWriter, r *http.Request, report func([]byte) any) {
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -99,7 +119,7 @@ func handleCompiscriptAnalyze(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "source is required")
 		return
 	}
-	if err := json.NewEncoder(w).Encode(compiscript.Analyze([]byte(*req.Source))); err != nil {
+	if err := json.NewEncoder(w).Encode(report([]byte(*req.Source))); err != nil {
 		fmt.Fprintf(os.Stderr, "ide: write Compiscript response: %v\n", err)
 	}
 }

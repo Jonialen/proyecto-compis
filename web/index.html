@@ -25,7 +25,7 @@
     </div>
 
     <div class="hdr-actions">
-      <button id="btn-run" class="btn btn-primary" title="Run analysis (Ctrl+Enter)">
+      <button id="btn-run" class="btn btn-primary" title="Compile Compiscript or run YAPar analysis (Ctrl+Enter)">
         <span class="btn-icon">▶</span> Run
       </button>
       <button id="btn-save" class="btn btn-secondary" title="Download current file">
@@ -48,6 +48,14 @@
         <button class="sb-btn" id="load-yalp">📂 Load .yalp</button>
         <button class="sb-btn" id="load-input">📂 Load Input</button>
         <button class="sb-btn" id="load-cps">📂 Load .cps</button>
+      </section>
+
+      <section class="sb-section">
+        <div class="sb-label">COMPISCRIPT</div>
+        <button class="sb-btn" id="btn-compile">Compile .cps</button>
+        <button class="sb-btn" id="btn-analyze-cps">Analyze .cps (AST)</button>
+        <button class="sb-btn" id="btn-sample-cps">Load sample</button>
+        <button class="sb-btn" id="btn-clear-cps">Clear .cps</button>
       </section>
 
       <section class="sb-section">
@@ -109,6 +117,8 @@
         <button class="tab" data-result="ast">AST</button>
         <button class="tab" data-result="diagnostics">Diagnostics</button>
         <button class="tab" data-result="environments">Environments</button>
+        <button class="tab" data-result="tac">TAC</button>
+        <button class="tab" data-result="symbols">Extended symbols</button>
       </div>
       <div id="results-content">
         <div class="result-panel active" id="rp-summary">
@@ -136,6 +146,8 @@
         <div class="result-panel" id="rp-ast"></div>
         <div class="result-panel" id="rp-diagnostics"></div>
         <div class="result-panel" id="rp-environments"></div>
+        <div class="result-panel" id="rp-tac"></div>
+        <div class="result-panel" id="rp-symbols"></div>
       </div>
     </div>
 
@@ -143,7 +155,7 @@
 
   <!-- ─── STATUS BAR ──────────────────────────────────────────────── -->
   <footer id="status-bar">
-    <span id="status-text">Ready</span>
+    <span id="status-text" role="status" aria-live="polite">Ready</span>
     <span id="status-right"></span>
   </footer>
 
@@ -225,6 +237,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/viz.js/2.1.2/viz.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/viz.js/2.1.2/full.render.js"></script>
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

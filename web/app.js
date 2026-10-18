@@ -11,6 +11,9 @@ const state = {
   lastResponse: null,
   uwuMode: false,
   loading: false,
+  requestRevision: 0,
+  sourceRevisions: { yal: 0, yalp: 0, input: 0, cps: 0 },
+  fileRevisions: { yal: 0, yalp: 0, input: 0, cps: 0 },
   vizInstance: null,
 };
 
@@ -21,6 +24,7 @@ const NORM_RUN_TEXT   = '▶ Run';
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initEditors();
+  bindSourceChanges();
   bindEditorTabs();
   bindResultsTabs();
   bindSidebar();
@@ -76,6 +80,7 @@ function bindEditorTabs() {
 }
 
 function switchEditorTab(tab) {
+  if ((tab === 'cps') !== (state.activeEditor === 'cps')) invalidateRequest();
   state.activeEditor = tab;
   document.querySelectorAll('#editor-tabs .tab').forEach(b =>
     b.classList.toggle('active', b.dataset.editor === tab));
@@ -130,20 +135,33 @@ function bindSidebar() {
   });
   document.getElementById('load-cps').addEventListener('click', () => {
     pendingTarget = 'cps';
-    fileInput.accept = '.cps,.txt,text/plain';
+    fileInput.accept = '.cps,text/plain';
     fileInput.click();
   });
 
   fileInput.addEventListener('change', () => {
     const file = fileInput.files[0];
     if (!file || !pendingTarget) return;
+    const target = pendingTarget;
+    pendingTarget = null;
+    fileInput.value = '';
+    if (target === 'cps' && (!/\.cps$/i.test(file.name) || (file.type && !['text/plain', 'application/octet-stream'].includes(file.type)))) {
+      setStatus('Please select a plain-text .cps file.', 'error');
+      return;
+    }
+    const revision = state.sourceRevisions[target];
+    const fileRevision = ++state.fileRevisions[target];
     const reader = new FileReader();
     reader.onload = e => {
-      state.editors[pendingTarget].setValue(e.target.result);
-      state.fileNames[pendingTarget] = file.name;
-      markFileLoaded(pendingTarget, file.name);
-      switchEditorTab(pendingTarget);
+      if (revision !== state.sourceRevisions[target] || fileRevision !== state.fileRevisions[target]) return;
+      state.editors[target].setValue(e.target.result);
+      state.fileNames[target] = file.name;
+      markFileLoaded(target, file.name);
+      switchEditorTab(target);
       setStatus(`Loaded: ${file.name}`, 'ok');
+    };
+    reader.onerror = () => {
+      if (revision === state.sourceRevisions[target] && fileRevision === state.fileRevisions[target]) setStatus(`Could not read: ${file.name}`, 'error');
     };
     reader.readAsText(file);
     fileInput.value = '';
@@ -157,7 +175,7 @@ function markFileLoaded(target, name) {
   if (!el) return;
   el.classList.add('loaded');
   const short = name.length > 22 ? name.slice(0, 20) + '…' : name;
-  el.innerHTML = `<span class="fs-dot"></span> .${target === 'input' ? 'txt' : target} — ${escHtml(short)}`;
+  el.replaceChildren(element('span', '', 'fs-dot'), element('span', ` .${target === 'input' ? 'txt' : target} — ${short}`));
 }
 
 function saveCurrentFile() {
@@ -179,10 +197,14 @@ function downloadText(text, filename) {
 // ── Run button ────────────────────────────────────────────────────────────────
 function bindRunButton() {
   document.getElementById('btn-run').addEventListener('click', triggerRun);
+  document.getElementById('btn-compile').addEventListener('click', () => runCompiscript('compile'));
+  document.getElementById('btn-analyze-cps').addEventListener('click', () => runCompiscript());
+  document.getElementById('btn-clear-cps').addEventListener('click', () => replaceCompiscriptSource(''));
+  document.getElementById('btn-sample-cps').addEventListener('click', () => replaceCompiscriptSource(COMPISCRIPT_SAMPLE));
 }
 
 function triggerRun() {
-  if (state.activeEditor === 'cps') runCompiscript();
+  if (state.activeEditor === 'cps') return runCompiscript('compile');
   else openPaymentModal();
 }
 
@@ -347,6 +369,7 @@ function setFieldValidity(inputId, errId, isValid, msg) {
 }
 
 function processPayment() {
+  const revision = state.requestRevision;
   const payBtn = document.getElementById('pm-pay-btn');
   payBtn.disabled = true;
 
@@ -381,7 +404,7 @@ function processPayment() {
   // After the show, close modal and actually run the analysis
   setTimeout(() => {
     closePaymentModal();
-    runAnalysis();
+    if (revision === state.requestRevision && state.activeEditor !== 'cps') runAnalysis();
   }, 3200);
 }
 
@@ -404,7 +427,8 @@ async function runAnalysis() {
   }
 
   setLoading(true);
-  setStatus('<span class="spinner"></span> Analysing…', 'loading');
+  const revision = ++state.requestRevision;
+  setStatus('Analysing…', 'loading');
 
   const body = {
     yalex_content: state.editors.yal.getValue(),
@@ -421,6 +445,8 @@ async function runAnalysis() {
     });
     const data = await res.json();
 
+    if (revision !== state.requestRevision) return;
+
     if (!res.ok) {
       throw new Error(data.error || `HTTP ${res.status}`);
     }
@@ -433,11 +459,12 @@ async function runAnalysis() {
       Object.values(data.methods || {}).some(result => result.error || result.accepted === false);
     setStatus(hasErrors ? '⚠ Analysis completed with errors' : '✓ Analysis complete', hasErrors ? 'error' : 'ok');
   } catch (err) {
+    if (revision !== state.requestRevision) return;
     setStatus('Error: ' + err.message, 'error');
     flashPanel('rp-summary', renderErrorBox(err.message));
     switchResultsTab('summary');
   } finally {
-    setLoading(false);
+    if (revision === state.requestRevision) setLoading(false);
   }
 }
 
@@ -649,6 +676,7 @@ async function renderAutomatonFromState() {
 
   try {
     const svg = await state.vizInstance.renderSVGElement(dot);
+    if (data !== state.lastResponse) return;
 
     // Make the SVG responsive
     svg.setAttribute('width',  '100%');
@@ -663,38 +691,79 @@ async function renderAutomatonFromState() {
     el.innerHTML = '<div class="result-section-title">LR(0) Automaton</div>';
     el.appendChild(wrap);
   } catch (err) {
+    if (data !== state.lastResponse) return;
     el.innerHTML = renderErrorBox('Automaton render error: ' + err.message);
   }
 }
 
-// ── Compiscript analysis ──────────────────────────────────────────────────────
-async function runCompiscript() {
+// ── Compiscript compilation / analysis ────────────────────────────────────────
+const COMPISCRIPT_SAMPLE = `function add(n: integer): integer { return n + 1; }
+let values = [1, 2, 3];
+let total: integer = 0;
+foreach (value in values) { total = total + add(value); }
+`;
+const COMPISCRIPT_PANELS = ['source', 'ast', 'diagnostics', 'environments', 'tac', 'symbols'];
+
+function invalidateRequest() {
+  state.requestRevision++;
+  setLoading(false);
+}
+
+function bindSourceChanges() {
+  Object.entries(state.editors).forEach(([target, editor]) => editor.on('change', () => {
+    state.sourceRevisions[target]++;
+    invalidateRequest();
+    if (target === 'cps') clearCompiscriptResults('Source changed; compile or analyze again.', false);
+    else {
+      state.lastResponse = null;
+      ['summary', 'tokens', 'll1', 'slr', 'lalr', 'automaton'].forEach(name => {
+        document.getElementById(`rp-${name}`).replaceChildren(element('div', 'Source changed; run analysis again.', 'empty-state'));
+      });
+    }
+    setStatus('Source changed; results invalidated.');
+  }));
+}
+
+function replaceCompiscriptSource(source) {
+  state.editors.cps.setValue(source);
+  state.fileNames.cps = null;
+  markFileLoaded('cps', 'unsaved');
+  switchEditorTab('cps');
+}
+
+async function runCompiscript(mode = 'analyze') {
   if (state.loading) return;
+  switchEditorTab('cps');
   const source = state.editors.cps.getValue();
+  const revision = ++state.requestRevision;
+  clearCompiscriptResults('Processing…', false);
   setLoading(true);
-  setStatus('Analysing Compiscript…', 'loading');
+  setStatus(mode === 'compile' ? 'Compiling Compiscript…' : 'Analysing Compiscript…', 'loading');
   try {
-    const res = await fetch('/api/compiscript/analyze', {
+    const res = await fetch(mode === 'compile' ? '/api/compiscript/compile' : '/api/compiscript/analyze', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source }),
     });
     const data = await res.json();
+    if (revision !== state.requestRevision) return;
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     renderCompiscript(source, data);
-    setStatus(data.diagnostics.length ? 'Analysis complete with diagnostics' : '✓ Analysis complete', data.diagnostics.length ? 'error' : 'ok');
+    const action = mode === 'compile' ? 'Compilation' : 'Analysis';
+    setStatus(data.diagnostics.length ? `${action} complete with diagnostics` : `✓ ${action} complete`, data.diagnostics.length ? 'error' : 'ok');
   } catch (err) {
+    if (revision !== state.requestRevision) return;
     clearCompiscriptResults(err.message);
     setStatus('Error: ' + err.message, 'error');
   } finally {
-    setLoading(false);
+    if (revision === state.requestRevision) setLoading(false);
   }
 }
 
-function clearCompiscriptResults(message) {
-  ['source', 'ast', 'diagnostics', 'environments'].forEach(name => {
-    document.getElementById(`rp-${name}`).replaceChildren(element('div', `Analysis failed: ${message}`, 'grammar-error-box'));
+function clearCompiscriptResults(message, select = true) {
+  COMPISCRIPT_PANELS.forEach(name => {
+    document.getElementById(`rp-${name}`).replaceChildren(element('div', message, 'empty-state'));
   });
-  switchResultsTab('source');
+  if (select) switchResultsTab('diagnostics');
 }
 
 function element(tag, text, className) {
@@ -716,7 +785,7 @@ function renderCompiscript(source, report) {
     (node.children || []).forEach(child => branch.appendChild(astNode(child)));
     return branch;
   };
-  astPanel.replaceChildren(astNode(report.ast));
+  astPanel.replaceChildren(report.ast ? astNode(report.ast) : element('div', 'AST is available through Analyze only.', 'empty-state'));
 
   const diagnosticsPanel = document.getElementById('rp-diagnostics');
   const diagnostics = (report.diagnostics || []).map(diagnostic => {
@@ -740,7 +809,31 @@ function renderCompiscript(source, report) {
   };
   const roots = scopes.filter(scope => !byID.has(scope.parentId)).map(scopeNode);
   environmentPanel.replaceChildren(...(roots.length ? roots : [element('div', 'No environments.', 'empty-state')]));
-  switchResultsTab('source');
+  document.getElementById('rp-tac').replaceChildren(element('pre', report.tacText || 'No TAC. Compile a valid supported program.', 'source-view'));
+  renderCodegen(report.codegen);
+  switchResultsTab(report.diagnostics?.length ? 'diagnostics' : (report.tac ? 'tac' : 'source'));
+}
+
+function renderCodegen(codegen) {
+  const panel = document.getElementById('rp-symbols');
+  if (!codegen) {
+    panel.replaceChildren(element('div', 'No code-generation layouts. Compile a valid supported program.', 'empty-state'));
+    return;
+  }
+  panel.replaceChildren(element('p', `Storage unit: ${codegen.unit}. Static offsets and sizes, not physical addresses or bytes.`));
+  const section = (title, entries) => {
+    panel.appendChild(element('h3', title));
+    entries.forEach(entry => panel.appendChild(element('pre', entry, 'layout-entry')));
+  };
+  section('Extended symbols', (codegen.symbols || []).map(entry => {
+    const symbol = entry.symbol;
+    const locations = (entry.locations || []).map(loc => `${loc.space}: offset ${loc.offset}, size ${loc.size}, role ${loc.role}`).join('\n');
+    return `${entry.id} / scope ${entry.scopeId}\n${symbol.kind} ${symbol.name}: ${JSON.stringify(symbol.type)}\nMutable: ${symbol.mutable}; captured: ${symbol.captured}\nSource: ${JSON.stringify(symbol.span)}\n${locations || 'No cell location.'}\nLabels: ${(entry.labels || []).join(', ') || 'none'}`;
+  }));
+  // Structured JSON preserves all slot type/operand and source metadata without
+  // inventing a client-side layout or TAC formatter.
+  section('Storage spaces and slots', (codegen.spaces || []).map(space => JSON.stringify(space, null, 2)));
+  section('Labels', (codegen.labels || []).map(label => `${label.name} (${label.kind}) owner ${label.owner} @ ${label.span?.start?.line}:${label.span?.start?.column}\n${JSON.stringify(label.span)}`));
 }
 
 // ── UWU mode ──────────────────────────────────────────────────────────────────
@@ -836,11 +929,13 @@ function addSparkle(container, isStatic) {
 function setLoading(on) {
   state.loading = on;
   document.getElementById('btn-run').disabled = on;
+  document.getElementById('btn-compile').disabled = on;
+  document.getElementById('btn-analyze-cps').disabled = on;
 }
 
-function setStatus(html, type = '') {
+function setStatus(text, type = '') {
   const el = document.getElementById('status-text');
-  el.innerHTML = html;
+  el.textContent = text;
   el.className = type;
 }
 
