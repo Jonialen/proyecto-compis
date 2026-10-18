@@ -15,23 +15,25 @@ Toolkit en Go para construir y ejecutar analizadores léxicos con **YALex** y an
 | YAPar LR(0) / LR(1) | Existen como opciones comparables, pero **no** como backends ejecutables. |
 | Parser standalone | Disponible para el camino basado en tablas LR/SLR; no debe asumirse universal para todos los métodos. |
 | IDE/interfaz gráfica | Disponible como app web servida desde `cmd/ide`. |
-| Compiscript | Frontend ANTLR, análisis semántico, generación TAC, símbolos extendidos e IDE con un núcleo compartido. Cobertura y brechas en el informe de Entrega 2. |
+| Compiscript | Frontend ANTLR, análisis semántico, generación TAC para los tipos de construcción válidos del AST, símbolos extendidos e IDE con un núcleo compartido. Contratos y evidencia en el informe de Entrega 2. |
 
 La referencia técnica principal está en [`docs/semestre1/documentacion_tecnica.md`](docs/semestre1/documentacion_tecnica.md).
 
 ## Compiscript: Entrega 2
 
-La [guía de ejecución e índice](docs/semestre2/entrega2/README.md) reúne el [informe y matriz del PDF](docs/semestre2/entrega2/report.md), la [arquitectura](docs/semestre2/entrega2/architecture.md), la [referencia TAC](docs/semestre2/entrega2/tac-design.md), la [batería de aceptación](docs/semestre2/entrega2/acceptance.md) y el [manual del IDE](docs/semestre2/entrega2/ide.md). No se afirma cumplimiento total: existen construcciones aceptadas por Analyze que todavía no se traducen a TAC.
+La [guía de ejecución e índice](docs/semestre2/entrega2/README.md) reúne el [informe y matriz del PDF](docs/semestre2/entrega2/report.md), la [arquitectura](docs/semestre2/entrega2/architecture.md), la [referencia TAC](docs/semestre2/entrega2/tac-design.md), la [batería de aceptación](docs/semestre2/entrega2/acceptance.md) y el [manual del IDE](docs/semestre2/entrega2/ide.md). T9/T10 resolvieron las brechas iniciales de print, resto, ternarias, asignaciones con valor, almacenamiento indefinido/null, valores sin anotación y try/catch. Se documentan las guardas estáticas y los fallos dinámicos; no se promete corrección exhaustiva, una calificación ni certificación visual del navegador.
 
 Desde la raíz del repositorio, generar TAC de un ejemplo y consultar el reporte JSON con símbolos y entornos:
 
 ```bash
 go run ./cmd/compiscript-tac testdata/compiscript/tac/numeric.cps
 go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/acceptance.cps
+go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/values-effects.cps
+go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/dynamic-exceptions.cps
 go run ./cmd/compiscript testdata/compiscript/tac/acceptance.cps
 ```
 
-El tercer comando conserva el análisis sin generación. La CLI **genera código, no lo ejecuta**. Para el IDE, iniciar el servidor y abrir `http://localhost:8080`; Compiscript permite cargar o escribir `.cps`, compilar y consultar TAC, errores ubicados y símbolos extendidos. Analyze y YAPar siguen disponibles:
+El último comando conserva el análisis sin generación. La CLI **genera código, no lo ejecuta**: print y try/catch se traducen a IR, no se ejecutan en la interfaz. Para el IDE, iniciar el servidor y abrir `http://localhost:8080`; Compiscript permite cargar o escribir `.cps`, compilar y consultar TAC, errores ubicados y símbolos extendidos. Analyze y YAPar siguen disponibles:
 
 ```bash
 go run ./cmd/ide
@@ -41,6 +43,7 @@ Prueba focalizada de aceptación y pruebas de conexiones de la interfaz:
 
 ```bash
 go test ./internal/compiscript/frontend ./internal/compiscript ./cmd/ide -run 'Test(MalformedForMissingBody|MissingLoopBodies|AcceptanceAtomicRecovery|AcceptanceMixedExecution|AcceptanceRecoveryCLI|AcceptanceValidLoops|MixedAcceptanceAPI)$' -count=1
+go test ./internal/compiscript ./cmd/ide -run '^Test(ValuesEffects|DynamicExceptions|IndependentT9|IndependentT10|MixedAcceptanceAPI)' -count=1
 node --test web/*.test.cjs
 ```
 

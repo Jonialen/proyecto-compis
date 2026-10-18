@@ -4,8 +4,9 @@ The final battery combines retained closures, object references, typed nested li
 iteration, switch transfer and recursion through the existing compiler. It also
 checks malformed input through Parse, Analyze, Compile, built CLIs and the HTTP
 mux. This is executable compiler evidence, not a physical runtime or visual IDE
-certification. The [technical report and PDF matrix](report.md) distinguish this
-battery from complete assignment compliance and list concrete remaining gaps.
+certification. T9/T10 extend the battery to values/effects, guarded unknown values
+and handlers. The [technical report and PDF matrix](report.md) record resolution
+of the initial construction gap, proof provenance and pending human checks.
 
 ## Quick path
 
@@ -46,6 +47,7 @@ go test ./internal/compiscript/frontend ./internal/compiscript ./cmd/ide -run 'T
 go test ./internal/compiscript/frontend ./internal/compiscript ./cmd/ide -count=1
 go test ./internal/compiscript -run '^TestValuesEffects' -count=1
 go test ./internal/compiscript -run '^TestDynamicExceptions' -count=1
+go test ./internal/compiscript ./cmd/ide -run '^Test(ValuesEffects|DynamicExceptions|IndependentT9|IndependentT10|MixedAcceptanceAPI)' -count=1
 go vet ./internal/compiscript/frontend ./internal/compiscript ./cmd/ide
 node --test web/*.test.cjs
 go test ./... -count=1
@@ -93,8 +95,12 @@ wiring. No real-browser appearance or performance result is claimed here.
 
 ### Dynamic and exception example
 
-Compile `testdata/compiscript/tac/dynamic-exceptions.cps` with the same TAC CLI
-in text or JSON mode. `TestDynamicExceptionsCompile` and
+```sh
+go run ./cmd/compiscript-tac testdata/compiscript/tac/dynamic-exceptions.cps
+go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/dynamic-exceptions.cps
+```
+
+`TestDynamicExceptionsCompile` and
 `TestDynamicExceptionsCLI` execute its emitted IR with the shared bounded oracle:
 `result=3`, `effects=11`, and output `3\ndivision by zero\n11\n`.
 Prefix effects survive the catch; the unreachable write to 100 does not execute.
@@ -103,6 +109,16 @@ strict invalid operations, reference identity and synchronous handler cleanup.
 `TestDynamicExceptionsFatalOracleFailures` separately proves malformed metadata
 and instruction/depth budgets bypass source handlers. See the
 [guard/handler contract](tac-design.md#guarded-values-and-synchronous-exceptions-t10).
+
+The retained `independent_t10_verifier_test.go` and
+`independent_t10_b1_recheck_test.go` also test unknown field contracts, inherited
+layouts and annotated nominal fields. Unannotated fields do not narrow to their
+initializer's tag, including null; absent values stay undefined. Return values
+and types are checked before handler cleanup, and a catch body cannot catch its
+own fault with the already-consumed handler. These are current core/built-CLI
+tests, not comparisons requiring external baseline binaries or Git history.
+
+### Recovered loop bodies
 
 ANTLR can recover an incomplete loop header before creating its required block.
 The mapper previously indexed an empty block slice. The surgical KISS fix returns
@@ -114,7 +130,9 @@ valid preservation and malformed-boundary proof.
 
 Metadata offsets and sizes use abstract cells, not bytes or a target ABI. Runtime
 guards are IR contracts exercised by the test oracle, not a product interpreter.
-Unsupported static features must fail with diagnostics, including in dead code.
+Actual syntax/semantic errors and static scope/initialization guard failures
+discard TAC, including in dead code. Dynamic-invalid operands may instead generate
+guarded IR and fault in the oracle; the IDE/CLI do not execute that IR.
 
 ## Static values/effects battery (T9)
 
@@ -130,5 +148,18 @@ go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/values-effect
 
 This emits TAC, not runtime output. The bounded oracle's expected example output
 is `3`, `1`, `null`, each followed by a newline; `x=2`, `y=3`, `count=1`.
-Unknown values/untyped signatures and try/catch still require T10. No full-PDF
-completion or refreshed final matrix is claimed by this static behavior unit.
+Unknown values/untyped signatures and try/catch are implemented by T10, not
+remaining unsupported constructions. The original T9 field-null narrowing policy
+was superseded by T10's unknown-field contract. The [final matrix](report.md)
+separates construction coverage from runtime guards and presentation checks.
+
+## Verification provenance
+
+At `633aad1`, T9/T10 implementation records report isolated full Go suites
+(18 tested packages, four without tests), build/forced vet, 39 Node tests and
+scoped exact compatibility checks. T10's final nominal-field **test-only** addition
+followed full-suite proof; the parent reran four affected packages afterward,
+with production unchanged. The documentation refresh reruns only focused retained
+T9/T10/API tests, Node and external CLI examples; it does not manufacture a newer
+full-suite/build/vet/ANTLR result. See [the report](report.md#observed-verification-and-provenance)
+for separate historical counts; overlapping sets are not added together.

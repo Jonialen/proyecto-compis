@@ -1,12 +1,12 @@
 # Entrega 2 technical report
 
-The implementation translates numeric/boolean control flow, recursive and retained lexical functions, objects/strings and lists into typed, source-located TAC. It exposes extended symbols and activation layouts through a shared CLI/IDE core. This report maps the four-page assignment to concrete evidence; it does **not** claim full assignment compliance or a grading percentage.
+The implementation translates all valid AST construction kinds into typed, source-located TAC through one CLI/IDE core, with static extended-symbol layouts. T9/T10 resolved the initial accepted-source gaps, including print, remainder, lazy ternaries, assignment values, undefined/null storage, untyped values and try/catch. This report maps the four-page assignment to implemented contracts and executable evidence, not exhaustive program correctness, a future grade or browser certification.
 
 ## Basis and outcome
 
 Normative source: [Proyecto 2 PDF](Proyecto_2__Compiladores.pdf), pages 1–4, read in full. The source is a human-provided, untracked read-only file; this documentation does not add, export or modify it. Its SHA-256 at verification was `0ba21279ad758dd8ef69344adae9d31193d5ca4d064ce525257da6974c707bdc`. A fresh Git checkout may need the original supplied separately. The matrix below retains short Spanish quotations; page numbers refer to PDF pages, not repository line numbers.
 
-The key result is one compiler with explicit ownership and atomic rejection. [Architecture](architecture.md) explains the decisions; [TAC design](tac-design.md) specifies the implemented IR, examples and assumptions. [Run instructions](README.md) and [acceptance](acceptance.md) provide the executable entry points. T9/T10 address the initial construction gaps; the final independent acceptance and report refresh remain separate from implementation claims.
+The key result is one compiler with explicit ownership, guarded runtime operations and atomic rejection of actual compilation diagnostics. [Architecture](architecture.md) explains the decisions; [TAC design](tac-design.md) specifies the implemented IR, examples and assumptions. [Run instructions](README.md) and [acceptance](acceptance.md) provide the executable entry points. This final refresh follows published T9 `9ce55ce` and T10 `633aad1`, including independent verification and the T10 field-contract correction. No new concrete normative implementation gap is established by this refresh; the remaining human/evaluation checks are listed below.
 
 ## PDF requirement and evidence matrix
 
@@ -14,8 +14,8 @@ Compiler files below are under `internal/compiscript`; lowering filenames are in
 
 | Page / short verbatim requirement | Implementation and evidence | Outcome |
 |---|---|---|
-| 1: “traducen cada construcción de Compiscript” | T9 values/effects and T10 guarded values/handlers; `TestDynamicExceptionsCompile` / `TestDynamicExceptionsCLI`; [AST kind inventory](tac-design.md#guarded-values-and-synchronous-exceptions-t10) | Construction dispatch completed; final independent/report audit pending, not whole-assignment certification |
-| 1: “asignación, operaciones binarias y unarias, copia” | `tac/ir.go`, `expression.go`; `TestCompileNumeric`, `TestCompileInstructionMetadata`; numeric translation in [reference](tac-design.md#representation) | Implemented numeric core |
+| 1: “traducen cada construcción de Compiscript” | T9/T10 core/built-CLI suites and retained `independent_t9_verifier_test.go`, `independent_t10_verifier_test.go`, `independent_t10_b1_recheck_test.go`; [AST kind inventory](tac-design.md#guarded-values-and-synchronous-exceptions-t10) | All 18 valid statement / 14 expression kinds dispatched; initial gap resolved, explicit static/runtime guards retained |
+| 1: “asignación, operaciones binarias y unarias, copia” | `tac/ir.go`, `expression.go`, `values_effects_test.go`, `dynamic_exceptions_test.go`; numeric translation in [reference](tac-design.md#representation) | Implemented typed/guarded operations, remainder and value-producing assignments |
 | 1: “saltos condicionales e incondicionales, etiquetas” | `tac/flow.go`, `loops.go`, `switch.go`; `conditions_test.go`, `loops_test.go`, `switch_test.go`; checked-in examples | Implemented |
 | 1: “llamadas a procedimientos, acceso indexado” | `tac/calls.go`, `collections.go`; `functions_test.go`, `collections_test.go` | Implemented |
 | 1: “consistente y estar documentada” | [Instruction reference](tac-design.md), typed text/JSON, formatting tests `tac/ir_test.go`, `procedures_test.go` | Documented implemented syntax |
@@ -28,8 +28,8 @@ Compiler files below are under `internal/compiscript`; lowering filenames are in
 | 2: “funciones recursivas” | Fixed-point dependencies and fresh frames; `recursion_test.go`, `recursion_dependencies_test.go`, `recursion.cps` | Implemented self/mutual recursion; termination not promised |
 | 2: “funciones anidadas y closures” | `tac/closures.go`; `TestClosureExecution`, `closure_compositions_test.go`, `closures.cps` | Implemented retained shared cells and escaped aliases |
 | 2: “creación de objetos e invocación del constructor” | `tac/objects.go`; `TestObjectExecution`, `TestObjectThreeLevelPolicyA`, `objects.cps` | Implemented explicit initialization policy A |
-| 2: “acceso a atributos” / “incluyendo el uso de this” | Field loads/stores and bound methods; `objects_test.go`, `independent_r3_test.go` | Implemented nominal origins, receivers and inheritance |
-| 2: “creación de listas” / “mediante índices” | `tac/collections.go`; `TestCollectionExecution`, `independent_t3_test.go`, `collections.cps` | Implemented empty/nested/ragged lists, reads/stores; foreach additionally supported |
+| 2: “acceso a atributos” / “incluyendo el uso de this” | Field loads/stores and bound methods; `objects_test.go`, `independent_r3_test.go`, T10 field-contract regressions | Nominal/inherited receivers and checked dynamic access; unannotated fields remain unknown, annotated fields stay constrained |
+| 2: “creación de listas” / “mediante índices” | `tac/collections.go`; `TestCollectionExecution`, retained T3/T9/T10 tests, `collections.cps` | Empty/nested/ragged/null lists, reads/stores and checked unknown views; foreach additionally supported |
 | 2: “Algoritmo de asignación de temporales” | `tac/temps.go`; `tac/temps_test.go`, `TestCompileRepeatedExpressions` | Smallest free slot, independent pools per tape |
 | 2: “Reciclaje de temporales una vez que su valor ha sido consumido” | Final-consumer release; live-range/reuse tests in `tac/temps_test.go`; [lifetime contract](tac-design.md#binding-and-lifetimes) | Implemented, no optimality claim |
 | 2: “direcciones de memoria o desplazamientos, tamaños, etiquetas” | `tac/symbols.go`; `TestCompilationSymbols`, `tac/symbols_test.go`, `symbols_cli_test.go` | Deterministic abstract-cell offsets/sizes and actual labels, not physical addresses |
@@ -42,45 +42,47 @@ Compiler files below are under `internal/compiscript`; lowering filenames are in
 | 3 step 6 and deliverable: “batería de pruebas” / “casos exitosos y fallidos” | [Runnable battery](acceptance.md#reproducible-tests), public CLI/API tests and bounded oracle execution | Passed focused checks; evaluation-day availability still human responsibility |
 | 3: “repositorio de GitHub, con commits individuales” | Root repository link and audited commit history below | Local author records established; real contribution attestation and remote/evaluation access pending |
 | 3: “Documentación de la arquitectura” / “cómo ejecutar el compilador” | [Architecture](architecture.md), [run guide](README.md) and root index | Versioned Markdown supplied |
-| 3: “lenguaje intermedio diseñado, con ejemplos de traducción y los supuestos” | [TAC reference](tac-design.md): exact numeric example, frames, closures, objects/lists and runtime guards | Supplied; unsupported source explicitly disclosed |
+| 3: “lenguaje intermedio diseñado, con ejemplos de traducción y los supuestos” | [TAC reference](tac-design.md): numeric translation, frames, closures, objects/lists, values/effects, guarded values and handlers | Supplied with explicit initialization, formatting, fault and unwinding assumptions |
 | 3: “IDE funcional que permita escribir y compilar” | Shared core HTTP endpoint plus TAC/errors/symbol panels; Go httptest and 39 Node cases | Functional boundary tested; real visual evaluation pending |
 | 4: “funcionar correctamente el día de la presentación” / “documentado y organizado” | Documentation index and reproducible tests; manual preparation checklist below | Cannot certify future presentation conditions |
 | 4: “Diseño de CI” 25 / “Generación de TAC” 65 / “Tabla de Símbolos” 10 | Reference/design, executable generation battery, extended-symbol/layout report respectively | Grading weights totaling 100 points, **not completion percentages** |
 
 ## Observed verification and provenance
 
-The parent-provided T1–T7/T4 records distinguish separate units and independent checks. They report final isolated T4 full Go tests (18 tested packages, four without tests), build and forced vet passing, plus 39 Node cases. Full proof preceded the final retained test-only seed addition; the parent reran affected core/IDE packages afterward. This documentation-only check did not rerun full generation/build/vet or claim a new full-suite result.
+The parent-provided implementation records distinguish each unit's proof from later test-only additions. T9 and final T10 each report isolated full Go suites (18 tested packages, four without tests), build, forced vet and 39 Node cases passing. T10's final nominal-field **test-only** addition followed its full-suite proof; the parent reran all four affected packages afterward, with production unchanged. This documentation-only refresh did not rerun full generation/build/vet and does not claim a fresh full-suite result after `633aad1`.
 
 Historical evidence includes exact compatibility comparisons: T4 writer 45, independent verifier 60 plus nine panic-to-atomic changes; T6 39 comparisons stripping only the authorized additive `codegen` field and 36 repeated JSON checks; T7 writer 37 HTTP, seven DOM and 31 CLI comparisons, with independent API/UI checks. These are overlapping scoped sets, **not an additive grand total**. Original T7 RED evidence is a retained transcript (API 404; Node 14 failures/four passes), not a separately saved raw log artifact. Historical native approval applies to T1 only; later clone-local review was disabled/unmanaged, not approved.
 
-Fresh documentation verification used offline Go with external HOME/TMPDIR/GOCACHE and existing module cache:
+| Published unit | Parent-recorded implementation and independent evidence |
+|---|---|
+| T9 `9ce55ce` | 31 shared core/CLI scenarios and 82 exact baseline comparisons; independent 20 execution/output cases, 30 old-fixture comparisons, 20 Analyze comparisons, ten atomic rejections and four CLI-policy checks. Durable verifier retained and four packages rerun by parent |
+| T10 `633aad1` | 69 shared core/CLI scenarios plus fatal checks; final 170 exact comparisons (33 old-fixture text/JSON/Analyze, 110 new Analyze, 27 rejected reports) and 51 source overlays. Independent broader check: 29 passing compositions and 83 exact comparisons before B1; five unknown-field failures corrected once, then all five plus eight direct regressions passed in a limited recheck |
 
-- Built TAC and Analyze binaries outside the repository; help, all ten checked-in TAC examples in text/JSON, rejected text/JSON, invalid-format status and legacy Analyze statuses were checked. All 20 successful example invocations exited 0 with empty stderr. No source changes or product execution occurred.
-- [Focused mixed battery](acceptance.md#reproducible-tests), first command: all three packages passed. It checks CLI-emitted JSON execution: `first=30`, `second=43`, `independent=7`, `continued=57`, `shared=37`, `total=10`, `result=147`. The independent seed-2 regression's recorded result is 75, not another interpretation of the same source.
-- `go test ./internal/compiscript -run '^TestCompileRejectsUnsupportedWithoutPartialTAC$' -count=1`: passed all eight source cases confirming the gap below.
+The T10 B1 correction supersedes T9's private null-field narrowing: no annotation means unknown field storage even when initialized to null/numeric values, while missing initializers remain undefined. Explicit annotated nominal fields retain their guards before effects. Both independent T10 files are durable current-core/current-built-CLI tests, not tests requiring external baseline controls. The overlapping scenario/comparison counts above must not be summed into a coverage total.
+
+The initial T8 audit at `f416fa2` correctly observed eight Analyze-valid sources rejected during lowering, including `let x=1; print(1);` (`TAC_UNSUPPORTED` at 1:10). That is historical RED evidence for the requirement gap, **not current behavior**. Its original documentation checks covered ten fixtures/20 CLI invocations; the final refresh below covers twelve/24.
+
+Fresh final-refresh verification used offline Go with external HOME/TMPDIR/GOCACHE and an existing module cache:
+
+- Built TAC and Analyze binaries outside the repository; help, all twelve checked-in TAC examples in text/JSON, rejected text/JSON, invalid-format status and legacy Analyze statuses were checked. All 24 successful example invocations exited 0 with empty stderr; source hashes were unchanged. No product execution service was introduced or invoked.
+- `go test ./internal/compiscript ./cmd/ide -run '^Test(ValuesEffects|DynamicExceptions|IndependentT9|IndependentT10|MixedAcceptanceAPI)' -count=1`: both packages passed, including retained independent regressions, values/output/fault effects, handler fatal boundaries and HTTP parity.
+- The mixed oracle expectations remain `first=30`, `second=43`, `independent=7`, `continued=57`, `shared=37`, `total=10`, `result=147`. The independently recorded seed-2 result is 75, not another interpretation of the same source. New fixture expectations are `3\n1\nnull\n` (`x=2`, `y=3`, `count=1`) and `3\ndivision by zero\n11\n` (`result=3`, `effects=11`). These are bounded-oracle results, not CLI output.
 - `node --test web/*.test.cjs`: 39 passed, zero failed/skipped. These are VM/DOM tests, not a real browser session.
-- Markdown readback, local link/anchor/command-path checks, source PDF hash preservation and `git diff --check` form the documentation acceptance gate.
+- Markdown readback, local link/anchor/command-path checks, production/input/PDF hash preservation and `git diff --check` form the documentation acceptance gate. No server/curl/browser session, full suite, full build, vet or ANTLR generation was run for this refresh.
 
 ## Contribution audit
 
-Read-only audit commands: `git log d70abf1..355804c --format='%h %ad %an %s' --date=short` and `git log --format='%h %ad %an %s' --date=short -- internal/compiscript cmd/compiscript-tac cmd/ide web docs/semestre2/entrega2`.
+Read-only audit commands: `git log d70abf1..633aad1 --format='%h %ad %an %s' --date=short` and `git log --format='%h %ad %an %s' --date=short -- internal/compiscript cmd/compiscript-tac cmd/ide web docs/semestre2/entrega2`.
 
-The seven implementation commits in the first range all record author name `jonialen` and date **2026-10-18**: `d592b9e` closures; `3a41adb` objects; `208d709` nominal field correction; `c242e03` lists/foreach; `40d6cf9` codegen report; `2d2fb4e` IDE compilation; `355804c` atomic malformed-loop rejection. Earlier TAC foundations are recorded on October 17–18 under the same author name. The path history also records earlier IDE work under `DijanU` (`e8c9324`, `cc26b6f`, `3cf44ec` on May 24, and `9ed0d12` on September 6). Those earlier commits are not evidence of a second person's contribution to the seven Entrega 2 units.
+All ten commits in the first range record author name `jonialen` and date **2026-10-18**: `d592b9e` closures; `3a41adb` objects; `208d709` nominal field correction; `c242e03` lists/foreach; `40d6cf9` codegen report; `2d2fb4e` IDE compilation; `355804c` atomic malformed-loop rejection; `f416fa2` initial report; `9ce55ce` values/effects; `633aad1` guarded dynamic values/handlers. This is nine implementation commits plus the initial documentation commit, not ten newly attested individual contributions. Earlier TAC foundations are recorded on October 17–18 under the same author name. The path history also records earlier IDE work under `DijanU` (`e8c9324`, `cc26b6f`, `3cf44ec` on May 24, and `9ed0d12` on September 6). Those earlier commits are not evidence of a second person's contribution to the recent Entrega 2 units.
 
 A Git author record is not an attestation of the human who performed each task. No teammate percentage, shared authorship, identity equivalence or individual contribution is inferred. Team members must verify their real contribution statements and the assignment's individual-commit requirement before submission. History was not rewritten and no authorship claim was manufactured.
 
 ## Remaining requirement gaps and presentation checks
 
-**Historical normative gap — accepted source without TAC lowering.** Page 1 says “traducen cada construcción de Compiscript”. The initial T8 audit found print, remainder, ternary, assignment-value, undefined/null storage and untyped-signature gaps. T9 adds the static values/effects subset with `TestValuesEffectsCompile` / `TestValuesEffectsCLI` and the [format/guard contract](tac-design.md#static-values-and-effects-t9). Updated negative fixtures use actual invalid source or explicit initialization/scope guards while retaining atomic and dead-code validation.
+**Historical gap resolved; no additional concrete normative implementation gap established.** Page 1 says “traducen cada construcción de Compiscript”. The initial T8 gap was real and led to S11/T9/T10, not to weakening this requirement. T9 supplies print, remainder, lazy ternary/assignment values, undefined/null storage and null-valued calls; T10 supplies guarded unknown values/untyped formals and synchronous try/catch. Public core and built-CLI tests now cover the former rejection examples. Independent verification, the five-case field-contract correction/recheck and the source inventory support dispatch for every valid AST construction kind. `BadStmt`/`BadExpr` remain recovery errors, not missing valid constructs; unary plus/imports are not grammar constructs.
 
-T10 implements `function f(a){return;}`, `let value;` and
-`try{let x=1;}catch(e){print(e);}` with explicit guarded values and synchronous
-handlers. These and print are no longer valid rejection fixtures. Negative tests
-retain actual syntax/semantic failures, scope-boundary checks and initialization
-guards. Historical T8 verification above describes its baseline audit, not current
-rejection of supported constructs. Final architecture/contribution refresh,
-independent verification and whole-assignment disposition remain parent-owned;
-this unit does not claim the whole PDF complete.
+Syntax/semantic errors still return nil TAC/no codegen. Conservative static global/capture/switch initialization guards and explicit runtime type/null/undefined/bounds/call faults remain documented contracts. Analyze-valid dynamic-invalid programs can generate guarded TAC and fault in the oracle without becoming new static diagnostics. A coverage inventory is not proof of every program, termination, a full grade or future environmental availability. No further product change is planned without a new concrete requirement or reproduced failure.
 
 **Human/evaluation checks still pending:** verify real individual contributions, GitHub visibility and availability of the untracked PDF; run the battery in the evaluation environment; open the real browser and check `.cps` load/edit/save, Compile/Analyze, located errors, TAC/symbol views, resets and unchanged YAPar behavior. Confirm CDN availability, layout/accessibility and presentation-day operation. Automated DOM proof does not discharge these steps.
 

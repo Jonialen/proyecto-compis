@@ -2,17 +2,17 @@
 
 This describes scalar/control-flow, lexical-function, object/collection,
 guarded unknown-value and try/catch TAC for Entrega 2. The [report](report.md)
-tracks the PDF audit and outstanding final acceptance. Functions use explicit calls/returns and deterministic
+records the final PDF matrix, resolved historical gaps and pending human checks. Functions use explicit calls/returns and deterministic
 abstract-cell activation records, including direct/mutual recursion, retained closures
 and inferred function aliases. Objects include inherited fields, construction,
 virtual methods, retained receivers and strings. Lists include references, literals,
 indexed reads/writes and foreach. Compilation JSON includes extended symbols and
 storage layouts; the [IDE](ide.md) uses the same core and server-rendered TAC text.
 The separate `compiscript.Compile(source []byte)` library API generates typed,
-source-located TAC for numeric and boolean programs with `if/else`, `while`,
-`do-while`, `for`, `switch`, typed direct/indirect calls and returns. Existing analysis contracts remain unchanged except for the
+source-located TAC for all valid AST construction kinds, with typed and guarded
+operations, control flow, calls/returns and handlers. Existing analysis contracts remain unchanged except for the
 corrected optional-for-header mapping and missing-body recovery described below. The separate `compiscript-tac` command compiles this
-subset without changing the existing analysis command's interface or exit policy.
+language without changing the existing analysis command's interface or exit policy.
 
 ## Command quick path
 
@@ -36,6 +36,14 @@ go run ./cmd/compiscript-tac testdata/compiscript/tac/closures.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/closures.cps
 go run ./cmd/compiscript-tac testdata/compiscript/tac/collections.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/collections.cps
+go run ./cmd/compiscript-tac testdata/compiscript/tac/objects.cps
+go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/objects.cps
+go run ./cmd/compiscript-tac testdata/compiscript/tac/acceptance.cps
+go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/acceptance.cps
+go run ./cmd/compiscript-tac testdata/compiscript/tac/values-effects.cps
+go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/values-effects.cps
+go run ./cmd/compiscript-tac testdata/compiscript/tac/dynamic-exceptions.cps
+go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/dynamic-exceptions.cps
 go run ./cmd/compiscript-tac -h
 ```
 
@@ -53,7 +61,7 @@ procedure frame layouts are separate code-generation metadata described below.
 
 Successful `Compile` and CLI `-format json` responses add one optional top-level
 `codegen` object. Rejected compilation omits it entirely (`tac` remains null).
-Legacy Analyze scopes, TAC JSON and TAC text are unchanged. Consumers can ignore
+Legacy Analyze scopes and previously supported TAC JSON/text are unchanged. Consumers can ignore
 the addition; do not infer storage from the semantic scopes themselves.
 
 | Field | JSON type | Meaning |
@@ -122,7 +130,8 @@ and the originating AST source span. The optional `label` field names a control-
 destination; it is omitted from numeric JSON, preserving existing field order and
 output. Operands distinguish literals, symbols, and virtual temporaries and retain
 the semantic `integer`, `float` or `boolean` type.
-Text renders an operand as `value:type`; structured JSON retains its kind.
+The scalar representation extends to string/reference/null values and guarded
+`error`-kind values described below. Text renders an operand as `value:type`; structured JSON retains its kind.
 This representation is not SSA: an assignment can update a symbol or reuse a
 temporary. Spans locate source operations, not unique expression identities.
 
@@ -141,9 +150,9 @@ temporary. Spans locate source operations, not unique expression identities.
 | Label | `L0:` | Control-flow destination |
 | Jump | `goto L0` | Unconditional edge |
 | Branch true | `if t0:boolean goto L0` | Jump when the boolean left operand is true; otherwise fall through |
-| Call | `t0:integer = call s1.f(2:integer)` | Evaluate caller-frame argument values, invoke the named procedure with fresh storage, resume and write its scalar result |
-| Null-result call | `call s1.update()` | Invoke a procedure as a statement, without a result destination |
-| Return | `return t0:integer` or `return` | Transfer a scalar result, or no value, to the saved caller continuation |
+| Call | `t0:integer = call s1.f(2:integer)` | Evaluate caller-frame argument values, invoke the named procedure with fresh storage, resume and write its typed result |
+| Null-result call | `call s1.update()` | Invoke without a callee result cell; an expression use yields null after effects |
+| Return | `return t0:integer` or `return` | Transfer a checked result, or no value, to the saved caller continuation |
 
 Label/jump instructions use `label`; branch-true also uses `left`. Their unused
 legacy `target` operand is zero-valued; label/jump `left` is also zero-valued,
@@ -183,9 +192,9 @@ not physical register usage, stack size, or a claim of global optimality.
 
 ### Signatures, binding and validation
 
-Named functions with explicitly typed `integer`, `float` or
-`boolean` parameters are supported. Their result is a scalar type or the
-analyzer's `null` result when omitted. For example:
+Named functions support typed numeric/boolean/string/class/list contracts and
+guarded untyped formals. Results follow their declared semantic contract;
+the analyzer's result remains `null` when omitted. For example:
 
 ```text
 function increment(value: integer): integer {
@@ -292,8 +301,8 @@ this exact order:
 | 0 | `continuation` | Return address / suspended caller instruction position |
 | 1 | `controlLink` | Calling activation |
 | 2 | `globalAccessLink` | Shared global store only, not a closure environment |
-| next, scalar only | `result` | Scalar return value; absent for null results |
-| next | `parameter` | Ordered formal operands, with fixed scalar types |
+| next, non-null result only | `result` | Declared result value, including reference values; absent for null results |
+| next | `parameter` | Ordered formal operands with declared types or tagged unknown values |
 | next | `local` | All function-owned variables/constants, including block/for locals, sorted by declaration source offset with operand-identity tie-break |
 | last | `temporary` | `t0` through `t<peak-1>`, dynamically typed cells |
 
@@ -331,7 +340,7 @@ one cell. The CLI generates code only; executable proof uses the bounded test or
 | `Program.environments` | Optional layouts sorted by semantic `scopeId`, with `parentId` and identity-sorted typed `bindings`. A layout is not a live allocation. |
 | `enterEnvironment`, `environment` | Allocate fresh undefined cells every time this instruction executes. Link the actual currently active lexical parent instance. Function parameters enter initialized from the existing argument frame cells; global cells use the shared global store. |
 | `makeClosure`, `callee`, `environment`, `target` | Construct a `function` value pairing the procedure identity with the exact retained defining environment instance. Does not read captures or initialize them. |
-| `callIndirect`, `left`, `arguments`, `signature`, `target` | Read the selected function value and argument values, check its complete scalar/null signature and initialization requirements, then invoke using its retained lexical parent, not the caller's name lookup. |
+| `callIndirect`, `left`, `arguments`, `signature`, `target` | Read the selected callable and arguments, check its full expected signature (including nominal/list contracts) and initialization requirements, then invoke using its retained lexical parent. Guarded unknown calls use the actual callable contract as described in T10. |
 | `Procedure.lexicalScope` | Defining environment layout required by the procedure. Its own function scope is entered on each invocation. |
 | `Procedure.captures` | Sorted transitive non-global binding requirements, including reads and writes. Requirements owned by a caller are checked at its call site rather than propagated outside that activation. |
 
@@ -362,7 +371,7 @@ Uncalled and unreachable nested bodies are still validated in full.
 
 Aliases can be reassigned dynamically. Analyze currently compares function kinds,
 not full function signatures, on assignment; this unit deliberately does not change
-that semantic API. Every indirect call therefore carries the statically expected
+that semantic API. A typed indirect call therefore carries the statically expected
 `signature`; a backend must reject mismatched actual parameter kinds, arity or
 result kind **before invoking**. The test oracle reports
 `indirect call signature mismatch`. It must also check the actual procedure's
@@ -372,20 +381,21 @@ default. Thus a dynamically selected early global/capture call can compile but
 fault at execution; it is not a new static definite-initialization guarantee.
 An indirect call reached through another direct or recursive call keeps the same
 guard. Static diagnostics still discard the entire TAC, including invalid alias
-initializers and unsupported code elsewhere in the function graph.
+initializers and failed static scope/initialization guards elsewhere in the function graph.
 
 The callee is selected and frozen before arguments evaluate. Arguments and earlier
 scalar operands remain frozen across effectful calls using the existing temporary
 pool. Copying a function copies its procedure/environment pair, not captured
-scalar snapshots. Arithmetic and comparisons remain restricted to existing scalar
-types. Function returns remain scalar/null, with omitted results still `null`;
-there are no function-return annotations, inferred closure returns or new lambdas.
+scalar snapshots. Arithmetic/comparisons retain explicit type checks, with guarded
+unknown operations described below. Function results follow their declared type,
+including reference contracts, with omitted results still `null`; there are no
+function-type return annotations, inferred closure returns or new lambdas.
 
 ## Conditions and control flow
 
 Comparisons evaluate left to right and produce booleans; mixed numeric operands
-receive explicit integer-to-float conversions. Arithmetic still requires numeric
-operands, not booleans. Boolean literals, initialized declarations/constants,
+receive explicit integer-to-float conversions. Numeric arithmetic requires numeric
+operands, not booleans; string addition has its own contract. Boolean literals, initialized declarations/constants,
 identifier assignments, expression statements and unary `!` are supported.
 
 `a && b` branches to `b` only when `a` is true; `a || b` branches to `b` only
@@ -447,7 +457,7 @@ runtime. It exercises while-continue, do-while and for break/continue.
 
 ### Boolean switches
 
-The selector must be boolean; cases retain the analyzer's compatible-type and
+The selector must be boolean (checked at runtime for unknown values); cases retain the analyzer's compatible-type and
 statically unique-case rules. Numeric selectors remain semantic errors, as required
 by the team policy in `../entrega1/compliance.md`. The selector is evaluated once,
 even for an empty or default-only switch. Case expressions execute in source order
@@ -611,8 +621,8 @@ CLI-emitted JSON executes in tests to `shared = 9`, `sum = 12`, `first = 3`,
 
 ### Supported source
 
-The implemented source slice also supports print, `%`, lazy ternaries,
-value-producing assignments, typed uninitialized declarations and null values.
+The implemented source includes print, `%`, lazy ternaries,
+value-producing assignments, typed/untyped uninitialized declarations and null values.
 Unknown values use explicit guarded instructions rather than fabricated static types.
 Malformed ASTs, missing scope identities and actual diagnostics reject atomically.
 No partial TAC may escape after lexical, syntax, semantic, or lowering errors.
@@ -626,9 +636,11 @@ Absent initializers leave fields undefined; only explicit annotations constrain
 their actual tags. Initializers still execute once under constructor policy A,
 and semantic metadata is not rewritten. Unknown storage/untyped signatures and try/catch use the T10 contract
 below. Transfers without an enclosing eligible construct
-are rejected. Unsupported input is not silently skipped.
-Unsupported declarations report `only integer, float and boolean declarations are supported`.
-Legacy unsupported-expression/statement diagnostics retain their numeric wording.
+are rejected. Recovery nodes or violated lowering invariants are not silently skipped.
+Defensive declaration rejection retains the historical message
+`only integer, float and boolean declarations are supported`; it is not used to
+reject supported null, reference or unknown declarations merely for their kind.
+Other defensive diagnostics retain their historical numeric wording for compatibility.
 
 ### Static values and effects (T9)
 
@@ -731,10 +743,10 @@ dynamic faults and conservative initialization guards remain intentional.
 
 Inside this Go module, call `compiscript.Compile(source)` from
 `genanalex/internal/compiscript`. The result is a `CompilationReport` with JSON
-fields `tac`, `diagnostics`, and `scopes`. Parse and semantic analysis each run
+fields `tac`, `diagnostics`, `scopes` and optional successful `codegen`. Parse and semantic analysis each run
 once. Any frontend or semantic error preserves the same ordered diagnostics and
 scope snapshots as `Analyze`, sets `tac` to `null`, and skips lowering entirely.
-Lowering reports the first unsupported construct with code `TAC_UNSUPPORTED`,
+Lowering reports a failed static initialization/scope guard or invariant with code `TAC_UNSUPPORTED`,
 phase `codegen`, a descriptive message, and its source span; `tac` is also `null`,
 even when earlier statements were supported. An empty source succeeds with
 `instructions: []`, `peakTemporaries: 0`, and `diagnostics: []`.
@@ -763,13 +775,15 @@ exposes the complete report.
 
 ## Remaining boundaries
 
-- Stronger definite-initialization analysis for switch bindings.
+- Conservative initialization guards for switch/global/captured bindings remain
+  intentional; this delivery does not replace them with a stronger path analysis.
 - Target-machine byte sizes/offsets and calling ABI,
   garbage collection and target-specific lexical links. Abstract retained lexical
   environments and function parameter/local/temporary/result/control cells are
   implemented, not this target layout.
-- Final PDF/report disposition still requires the parent acceptance audit; see
-  the [report](report.md#remaining-requirement-gaps-and-presentation-checks).
+- The original construction gap is resolved by T9/T10; no new concrete normative
+  implementation gap is established by the final report. Human/evaluation checks
+  remain in the [report checklist](report.md#remaining-requirement-gaps-and-presentation-checks).
 - Source-to-TAC IDE output, static main/global layouts and mixed successful/failed
   examples are implemented; real-browser visual evaluation remains pending.
 
@@ -796,8 +810,8 @@ associativity, widening, division, lexical binding, exact typed/source-located
 instructions, rejection without partial output, deterministic JSON, input
 preservation, and compatibility with analysis diagnostics. CLI tests execute
 the built binary for exact TAC/report output, repeated runs, located rejection,
-exit codes, argument/input errors, and unchanged files. Complete Entrega 2
-coverage is not claimed by this subset. Conditional tests execute generated
+exit codes, argument/input errors, and unchanged files. The construction inventory
+and passing cases are not exhaustive correctness or measured line coverage. Conditional tests execute generated
 instructions with a finite step budget, validate labels/targets and defined
 temporaries, and check skipped/demanded division traps, truth tables, nested joins,
 branch scopes, source preservation and deterministic bounded temporary allocation.

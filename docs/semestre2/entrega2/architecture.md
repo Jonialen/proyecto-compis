@@ -13,7 +13,7 @@ One core compiles source bytes into deterministic TAC and static code-generation
   -> CompilationReport {tac, diagnostics, scopes, codegen?}
 ```
 
-The entry point is [Compile](../../../internal/compiscript/compile.go). Parse and semantic analysis each run once. Frontend/semantic diagnostics are stably ordered by span, phase, code and message, matching Analyze. Lowering errors reject the whole result: no partial TAC and no codegen report escape. Diagnostics carry phase/type code, message and source span; unsupported constructs use `TAC_UNSUPPORTED` in `codegen`, even in unreachable source.
+The entry point is [Compile](../../../internal/compiscript/compile.go). Parse and semantic analysis each run once. Frontend/semantic diagnostics are stably ordered by span, phase, code and message, matching Analyze. Lowering errors reject the whole result: no partial TAC and no codegen report escape. Diagnostics carry phase/type code, message and source span; malformed/recovered ASTs and conservative initialization/scope violations can report `TAC_UNSUPPORTED` in `codegen`, even in unreachable source. No valid AST construction kind is rejected merely for being print, untyped or try/catch.
 
 Source bytes, AST and semantic scope snapshots are inputs, not mutable codegen storage. Lowering derives private binding/layout metadata and the extended report joins semantic identities to emitted storage. [Mixed acceptance](acceptance.md) checks source hashes, AST/scope snapshots, deterministic repeated Compile results and public facade parity.
 
@@ -31,6 +31,10 @@ Source bytes, AST and semantic scope snapshots are inputs, not mutable codegen s
 ## IR and storage at a glance
 
 The [TAC reference](tac-design.md) is authoritative for instruction fields and examples. Numeric operations explicitly widen integers with `i2f`; comparisons/not and branches model short-circuit conditions. Labels and jumps implement loops, boolean switch and nearest break/continue. Calls/returns use fresh frames; indirect calls use selected retained closures and signature guards. Object instructions allocate references, access fields and bind methods; list instructions allocate, read internal length and perform indexed loads/stores. Strings, functions, objects and lists are typed reference values, not numeric encodings.
+
+T9 adds `print`, remainder, undefined-cell `declare`, lazy ternary joins, value-producing assignments and null-valued storage/calls. T10 adds checked unknown operations, dynamic member access/calls and synchronous handlers. This completes dispatch for the [18 statement and 14 expression kinds](tac-design.md#guarded-values-and-synchronous-exceptions-t10) in [ast/nodes.go](../../../internal/compiscript/ast/nodes.go); recovery `BadStmt`/`BadExpr` still reject.
+
+The semantic `TypeError` absent-information marker remains unchanged; private guarded TAC carries actual runtime tags without adding `TypeAny`. An **unannotated field always retains an unknown storage contract**, even with a null/numeric initializer; no initializer leaves it undefined. Explicit annotations still enforce widening, nominal identities, list shapes and full callable signatures before body effects. Missing function result annotations still mean null, not inferred return types. Catch bindings use exception-reference storage and can be captured.
 
 | Space / identity | Static meaning |
 |---|---|
@@ -57,7 +61,11 @@ The [TAC reference](tac-design.md) is authoritative for instruction fields and e
 | Strict HTTP decoding | Share Analyze's transport guards: valid JSON/UTF-8, exact unique `source`, no trailing data, 1 MiB bound and correct method/media type |
 | Server-side TAC text | `Program.String()` serves CLI and HTTP; browser only renders results, avoiding duplicate formatting |
 | Guard missing recovered loop block | Preserve existing located syntax recovery, not a blanket panic catch or invented empty body |
+| Tagged unknown values, not new semantics | Reuse semantic identities and existing frames; validate actual operands and typed boundaries instead of changing Analyze or inventing defaults |
+| Explicit handlers on the dynamic call stack | Preserve effects before a language fault, unwind to the nearest active handler and remove it before catch-body entry; lexical closures do not retain handlers |
+| Check return before cleanup | Evaluate and type-check the return value while its handler is active; escaping return/break/continue remove only crossed handlers |
+| Bounded print and fault categories | Deterministic text and explicit catchable language faults; malformed IR, resource budgets and host failures remain fatal, with no blanket recovery |
 
 ## Boundary of the result
 
-Dynamic signature/initialization, null, field and list-bounds guards are backend obligations exercised by the test oracle, not stronger static Analyze promises. No assembler, physical ABI, garbage collector or product executor is claimed. Some accepted source constructs still lack lowering; these are [explicit requirement gaps](report.md#remaining-requirement-gaps-and-presentation-checks), distinct from deferred target-machine work. Browser wiring proof is not visual certification.
+Dynamic signature/initialization, null, field and list-bounds guards are backend obligations exercised by the test oracle, not stronger static Analyze promises. A dynamic-invalid program accepted by Analyze can generate guarded TAC and fault when executed in tests. Syntax/semantic errors still produce nil TAC/no codegen; conservative static initialization guards remain explicit. No assembler, physical ABI, garbage collector or product executor is claimed. The [initial coverage gap is resolved](report.md#remaining-requirement-gaps-and-presentation-checks), with no new concrete normative gap established here. Construction coverage is not exhaustive correctness or browser visual certification.

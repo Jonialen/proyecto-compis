@@ -1,12 +1,12 @@
 # Entrega 2: run and review guide
 
-Compiscript produces typed, located three-address code and a static extended-symbol report through one compiler core. Start here from the repository root. It is a compiler, not a source or TAC execution service. Read the [report](report.md) before interpreting this delivery as complete assignment compliance.
+Compiscript produces typed, located three-address code and a static extended-symbol report through one compiler core. Lowering covers all valid AST construction kinds, including the values/effects and guarded unknown-value/try-catch additions. Start here from the repository root. It is a compiler, not a source or TAC execution service. The [report](report.md) separates implemented contracts from grading, authorship and manual presentation checks.
 
 ## Documentation map
 
 | Need | Reference |
 |---|---|
-| Academic outcome, PDF requirements, contributions, remaining gaps | [Technical report](report.md) |
+| Academic outcome, PDF requirements, contributions, resolved gaps and human checks | [Technical report](report.md) |
 | Pipeline, ownership and practical design decisions | [Architecture](architecture.md) |
 | Full instruction syntax, translation examples and backend assumptions | [TAC reference](tac-design.md) |
 | Successful/failed executable battery and evidence boundaries | [Acceptance](acceptance.md) |
@@ -26,10 +26,14 @@ Compiscript produces typed, located three-address code and a static extended-sym
 go run ./cmd/compiscript-tac -h
 go run ./cmd/compiscript-tac testdata/compiscript/tac/numeric.cps
 go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/acceptance.cps
+go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/values-effects.cps
+go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/dynamic-exceptions.cps
 go run ./cmd/compiscript testdata/compiscript/tac/acceptance.cps
 ```
 
 The numeric TAC ends in a store to `s1.x:float`; it represents `x = 3.5` but does not print that runtime value. Successful compilation JSON contains `tac`, empty `diagnostics`, semantic `scopes` and optional `codegen` with unit `abstract-cell`. The last command is the legacy Analyze interface: AST/diagnostics/scopes, no TAC or codegen additions.
+
+The two new fixtures generate print/guard/handler instructions. Only the bounded test oracle executes them: `values-effects.cps` produces `3\n1\nnull\n` with `x=2`, `y=3`, `count=1`; `dynamic-exceptions.cps` produces `3\ndivision by zero\n11\n` with `result=3`, `effects=11`. These are test expectations, not CLI stdout. Unknown values may compile successfully and then encounter an explicit runtime fault; compilation is not execution safety certification. See the [values/handler contracts](tac-design.md#static-values-and-effects-t9).
 
 ### Failed input and exact exit status
 
@@ -64,4 +68,4 @@ Use the [focused acceptance commands](acceptance.md#reproducible-tests). They ex
 
 ## Before presentation
 
-Confirm the [open normative gaps and human checks](report.md#remaining-requirement-gaps-and-presentation-checks), manually inspect the browser, and verify GitHub access and actual individual authorship. The PDF's 25/65/10 points are grading weights, not completion percentages.
+Review the [current disposition and human checks](report.md#remaining-requirement-gaps-and-presentation-checks), manually inspect the browser, and verify GitHub access and actual individual authorship. The original accepted-construction gap is resolved by T9/T10; no additional concrete normative implementation gap is established by this refresh. That is not a proof of every program or future presentation conditions. The PDF's 25/65/10 points are grading weights, not completion percentages.

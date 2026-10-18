@@ -2,6 +2,8 @@
 
 The IDE uses the same `compiscript.Compile` facade as the CLI. It displays generated TAC and static storage metadata; it does not execute programs or implement a second compiler.
 
+T9/T10 print, remainder, lazy joins, assignments, undefined/null storage, guarded untyped values and try/catch therefore use the same Compile action without a separate web runtime. A successful report can contain runtime guards: the IDE does not print program output or catch faults by executing TAC. Actual syntax/semantic or static initialization diagnostics still clear TAC/codegen atomically.
+
 ## Quick path
 
 1. From the repository root, run `go run ./cmd/ide` and open `http://localhost:8080`.
@@ -32,6 +34,8 @@ Transport failures clear previous TAC, symbols and other Compiscript panels. Sou
 ## Reading extended symbols
 
 The frozen optional `codegen` report contains `unit`, `symbols`, `spaces` and `labels`. The unit is **abstract-cell**, not bytes or physical addresses. Symbol entries retain semantic identities, scope IDs, type/source metadata, locations (`space`, `offset`, `size`, `role`) and labels. The panel shows complete storage-space slots and label spans as text, preserving the authoritative core report rather than inferring layouts in JavaScript. Globals, main temporaries, invocation frames, retained environments and instances have distinct ownership. Labels are not cells; empty location lists do not imply an invented allocation.
+
+An original semantic symbol's `error` type can mark absent annotation information; it is not itself a compilation diagnostic. Private unknown-value and exception storage contracts are described in the [TAC reference](tac-design.md#guarded-values-and-synchronous-exceptions-t10). In particular, an unannotated field remains unknown even when initialized to null, while explicitly annotated fields retain their type/nominal guards. The browser does not infer a new type from its initial value.
 
 ## Verification and limits
 
