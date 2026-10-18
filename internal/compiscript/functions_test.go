@@ -224,8 +224,6 @@ func TestFunctionGlobalInitializationAndVisibility(t *testing.T) {
 func TestFunctionCapabilityDiagnostics(t *testing.T) {
 	for _, tt := range []struct{ source, rejected, message string }{
 		{`function f(a){return;}`, `function f(a){return;}`, "unsupported function signature"},
-		{`function f(){f();}`, `function f(){f();}`, "recursive call cycles are unsupported"},
-		{`function a(){b();} function b(){a();}`, `function a(){b();}`, "recursive call cycles are unsupported"},
 		{`function f(){function nested(){return;}}`, `function nested(){return;}`, "nested functions and closures are unsupported"},
 		{`function f(){} let x=f()==null;`, `f()==null`, "null-result calls are statement-only"},
 		{`let x=f(); let g=1; function f():integer{return g;}`, `f();`, "call requires initialized global binding s1.g"},
@@ -295,8 +293,6 @@ func TestCompileFunctionRejectionsAreAtomic(t *testing.T) {
 		`function f(a){return;} f(1);`,
 		`function f(a:string){return;} f("x");`,
 		`function f(){function g(){return;} return;}`,
-		`function f(){f();}`,
-		`function f(){g();} function g(){f();}`,
 		`function f(){print(1);}`,
 		`function f(){return;} let x=f();`,
 		`function f(){return;} function g(){return f();}`,

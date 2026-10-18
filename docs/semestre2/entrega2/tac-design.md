@@ -2,7 +2,7 @@
 
 This is the scalar, control-flow and direct-global-function subset of Entrega 2,
 not the complete assignment. Functions use explicit calls/returns and deterministic
-abstract-cell activation records; recursion and closures remain deferred.
+abstract-cell activation records, including direct and mutual recursion; closures remain deferred.
 The separate `compiscript.Compile(source []byte)` library API generates typed,
 source-located TAC for numeric and boolean programs with `if/else`, `while`,
 `do-while`, `for`, `switch`, typed direct calls and returns. Existing analysis reports remain unchanged except for the
@@ -25,6 +25,8 @@ go run ./cmd/compiscript-tac testdata/compiscript/tac/switch.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/switch.cps
 go run ./cmd/compiscript-tac testdata/compiscript/tac/functions.cps
 go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/functions.cps
+go run ./cmd/compiscript-tac testdata/compiscript/tac/recursion.cps
+go run ./cmd/compiscript-tac -format json testdata/compiscript/tac/recursion.cps
 go run ./cmd/compiscript-tac -h
 ```
 
@@ -125,9 +127,10 @@ invocation-local values, not aliases to caller symbols.
 
 Every body is lowered once in source order, including uncalled and unreachable
 code, with an independent existing temporary pool and a fresh transfer stack.
-All direct call edges are collected without recursively lowering callees. After
-lowering, a deterministic graph walk rejects direct or mutual cycles, including
-cycles in uncalled bodies. This slice does not execute or support recursion.
+All direct call edges are collected without recursively lowering callees. Self
+and mutual recursion use the same invocation-local frames and explicit return
+continuations as other calls. Uncalled cycles are valid, but every body still
+undergoes static validation. Compilation does not guarantee runtime termination.
 
 Scalar returns use existing type compatibility and explicit `i2f` widening;
 there is no synthesized scalar default. Semantic missing-return diagnostics
@@ -153,7 +156,9 @@ Function bodies retain declaration-time global visibility and switch-blocked
 names, not the final variable inventory. Global reads and writes are allowed
 when initialized; the absence of a semantic `Captured` flag on globals does not
 imply closure support. Each procedure records direct global references, then
-inherits its callees' dependencies transitively through the acyclic graph.
+inherits its callees' dependencies transitively by repeatedly unioning dependency
+sets until none grows. This finite monotone fixed point also covers cyclic call
+graphs, including dependencies reached through outgoing edges of a cycle.
 Each main call records the initialized global bindings available at its own
 call site. After graph resolution, a missing binding rejects compilation with
 `call requires initialized global binding s<scope>.<name>` at that call.
@@ -342,7 +347,7 @@ Original source bytes are preserved; Compile retains the matching Analyze diagno
 Numeric expression statements are supported; their final temporary is released
 without a store. Except for the for-post case above, assignment expressions
 (including property assignments), ternaries, strings, general null values, lists, objects/classes,
-print, indirect/nested/recursive functions and foreach are not lowered. Transfers without an enclosing
+print, indirect/nested functions and foreach are not lowered. Transfers without an enclosing
 eligible construct are rejected. Unsupported input is not silently skipped.
 Unsupported declarations report `only integer, float and boolean declarations are supported`.
 Legacy unsupported-expression/statement and missing-initializer diagnostics retain
@@ -387,7 +392,7 @@ exposes the complete report.
 ## Remaining Entrega 2 work
 
 - Foreach lowering and stronger definite-initialization analysis for switch bindings.
-- Recursion, indirect/first-class calls, nested functions and closures. Capture
+- Indirect/first-class calls, nested functions and closures. Capture
   analysis must retain binding edges; a `Captured` flag alone is insufficient.
 - Object allocation, constructors, fields, methods, `this`, lists and indexing.
 - Target-machine byte sizes/offsets and calling ABI, main/global storage layout,
@@ -431,4 +436,8 @@ freezing, mutable by-value parameters, widening, null/scalar returns, nested con
 flow and transitive global effects. They pin deterministic layouts/JSON/text,
 dynamic temporary cells, immutable source/AST/scopes and atomic function/graph/
 initialization rejection, including uncalled bodies. The prior condition oracle
-is unchanged; the new frame oracle is test-only and does not claim recursion support.
+is unchanged; the frame oracle is test-only, with instruction/depth limits rather
+than a product runtime overflow policy. Recursive regressions exercise factorial,
+multiple live recursive results, mutual boolean calls, null-result procedures,
+cyclic global dependencies and initialization rejection. `recursion.cps` would
+compute `product = 120` and `sequence = 21`; the CLI emits TAC, not those values.

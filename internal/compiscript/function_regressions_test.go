@@ -65,8 +65,6 @@ func TestCompileFunctionAtomicRejectionRegressions(t *testing.T) {
 	for _, tt := range []struct {
 		name, source, message string
 	}{
-		{"self recursion", "function f():integer { return f(); }", "recursive call cycles are unsupported"},
-		{"mutual recursion", "function f():integer { return g(); } function g():integer { return f(); }", "recursive call cycles are unsupported"},
 		{"nested declaration", "function f() { function g() {} }", "nested functions"},
 		{"alias", "function f():integer { return 1; } let a=f; let x=a();", ""},
 		{"shadow", "function f():integer { return 1; } { let f=2; f(); }", ""},

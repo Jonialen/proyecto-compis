@@ -12,10 +12,8 @@ import (
 type functionInfo struct {
 	label   string
 	typeOf  model.Type
-	span    ast.Span
 	edges   []*functionInfo
 	globals map[string]Operand
-	state   int
 }
 
 type mainCall struct {
@@ -63,7 +61,7 @@ func (l *lowerer) predeclare(global *environment, statements ast.Statements) boo
 				return l.unsupported(n.Span, "unsupported function signature")
 			}
 		}
-		f := &functionInfo{label: symbolOperand(global.id, *found).Value, typeOf: found.Type, span: n.Span, globals: map[string]Operand{}}
+		f := &functionInfo{label: symbolOperand(global.id, *found).Value, typeOf: found.Type, globals: map[string]Operand{}}
 		l.registry.ordered = append(l.registry.ordered, f)
 		global.active[n.Name] = binding{function: f}
 	}
@@ -165,29 +163,20 @@ func (l *lowerer) reference(operand Operand) {
 }
 
 func (l *lowerer) resolveCalls() bool {
-	var visit func(*functionInfo) bool
-	visit = func(f *functionInfo) bool {
-		if f.state == 1 {
-			return l.unsupported(f.span, "recursive call cycles are unsupported")
-		}
-		if f.state == 2 {
-			return true
-		}
-		f.state = 1
-		for _, callee := range f.edges {
-			if !visit(callee) {
-				return false
+	// Every set starts with its direct references. Monotone union over the finite
+	// binding inventory terminates even for self/mutual cycles; ignoring a DFS
+	// backedge would leave some cycle members with incomplete requirements.
+	for changed := true; changed; {
+		changed = false
+		for _, f := range l.registry.ordered {
+			for _, callee := range f.edges {
+				for name, operand := range callee.globals {
+					if _, exists := f.globals[name]; !exists {
+						f.globals[name] = operand
+						changed = true
+					}
+				}
 			}
-			for name, operand := range callee.globals {
-				f.globals[name] = operand
-			}
-		}
-		f.state = 2
-		return true
-	}
-	for _, f := range l.registry.ordered {
-		if !visit(f) {
-			return false
 		}
 	}
 	for _, call := range l.registry.calls {

@@ -15,6 +15,21 @@ import (
 
 var cliPath string
 
+func TestCLIRecursiveFunctions(t *testing.T) {
+	source := `function fact(n:integer):integer { if(n<=1) return 1; else return n*fact(n-1); } let x=fact(5);`
+	path := fixture(t, source)
+	for _, format := range []string{"tac", "json"} {
+		code, out, errOut := execute(t, "-format="+format, path)
+		if code != 0 || errOut != "" || !strings.Contains(out, "call") {
+			t.Fatalf("format=%s exit=%d stdout=%q stderr=%q", format, code, out, errOut)
+		}
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != source {
+		t.Fatalf("source changed: %q %v", after, err)
+	}
+}
+
 func TestCLIDirectFunctions(t *testing.T) {
 	source := `let x=f(2); function f(a:integer):integer{return a+1;}`
 	path := fixture(t, source)
@@ -217,7 +232,6 @@ func TestCLISwitchSources(t *testing.T) {
 
 func TestCLIRejectsSkippedUnsupportedCode(t *testing.T) {
 	for _, tt := range []struct{ source, wantError string }{
-		{"function f(){f();}", "codegen TAC_UNSUPPORTED at 1:1: recursive call cycles are unsupported\n"},
 		{"function f(a){return;}", "codegen TAC_UNSUPPORTED at 1:1: unsupported function signature\n"},
 		{"function f(){print(1);}", "codegen TAC_UNSUPPORTED at 1:14: unsupported statement in numeric TAC\n"},
 		{"function f(){} let x=f()==null;", "codegen TAC_UNSUPPORTED at 1:22: null-result calls are statement-only\n"},
