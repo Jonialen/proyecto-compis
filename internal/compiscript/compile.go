@@ -15,9 +15,10 @@ type CompilationReport struct {
 	TAC         *tac.Program         `json:"tac"`
 	Diagnostics model.Diagnostics    `json:"diagnostics"`
 	Scopes      model.ScopeSnapshots `json:"scopes"`
+	Codegen     *tac.CodegenReport   `json:"codegen,omitempty"`
 }
 
-// Compile parses and analyzes once, then lowers the supported numeric subset.
+// Compile parses and analyzes once, then lowers the supported language subset.
 func Compile(source []byte) CompilationReport {
 	program, frontendDiagnostics := frontend.Parse(source)
 	scopes, semanticDiagnostics := semantic.Analyze(program)
@@ -43,6 +44,9 @@ func Compile(source []byte) CompilationReport {
 	report := CompilationReport{Diagnostics: diagnostics, Scopes: scopes}
 	if len(diagnostics) == 0 {
 		report.TAC, report.Diagnostics = tac.Generate(program, scopes)
+		if report.TAC != nil && len(report.Diagnostics) == 0 {
+			report.Codegen = tac.BuildCodegenReport(report.TAC, scopes)
+		}
 	}
 	return report
 }

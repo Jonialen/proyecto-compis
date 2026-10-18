@@ -5,8 +5,8 @@ not the complete assignment. Functions use explicit calls/returns and determinis
 abstract-cell activation records, including direct/mutual recursion, retained closures
 and inferred function aliases. Objects include inherited fields, construction,
 virtual methods, retained receivers and strings. Lists include references, literals,
-indexed reads/writes and foreach; IDE integration and extended compilation symbols
-remain separate work.
+indexed reads/writes and foreach. Compilation JSON includes extended symbols and
+storage layouts; IDE integration remains separate work.
 The separate `compiscript.Compile(source []byte)` library API generates typed,
 source-located TAC for numeric and boolean programs with `if/else`, `while`,
 `do-while`, `for`, `switch`, typed direct/indirect calls and returns. Existing analysis reports remain unchanged except for the
@@ -47,6 +47,72 @@ exit 1; help exits 0 and prints usage to stderr. Flags precede the source path.
 `go run` can wrap a program's nonzero exit; build the binary when an automation
 needs the command's exact status. Scope snapshots remain semantic metadata;
 procedure frame layouts are separate code-generation metadata described below.
+
+## Compilation symbol contract (T6)
+
+Successful `Compile` and CLI `-format json` responses add one optional top-level
+`codegen` object. Rejected compilation omits it entirely (`tac` remains null).
+Legacy Analyze scopes, TAC JSON and TAC text are unchanged. Consumers can ignore
+the addition; do not infer storage from the semantic scopes themselves.
+
+| Field | JSON type | Meaning |
+| --- | --- | --- |
+| `codegen.unit` | string | Always `"abstract-cell"`; every scalar or reference occupies one cell |
+| `codegen.symbols` | array | All source semantic symbols, sorted by stable `s<scopeId>.<name>` identity |
+| `symbols[].id`, `scopeId`, `symbol` | string, integer, object | Binding identity, original scope ID and unchanged semantic Symbol (name/kind/type/mutability/capture/span) |
+| `symbols[].locations` | array | Every actual staging/retained/instance location; empty for non-storage or unemitted symbols |
+| `locations[]` | object | `space` string, `offset` integer, `size` integer, `role` string |
+| `symbols[].labels` | string array | Actual procedure labels, or class layout ID plus initializer label; no fake cell for a label |
+| `codegen.spaces` | array | `id`/`kind` strings, optional integer `scopeId`, optional string `parent`, integer `cells`, and `slots` array |
+| `spaces[].slots` | array | Existing FrameSlot shape: integer `offset`/`size`, string `role`, optional Operand `operand`, optional boolean `dynamic` |
+| `codegen.labels` | array | `name`, `kind`, `owner` strings and source `span`; kinds: `procedure`, `control`, `classLayout`, `method` |
+
+For `let x=1+2;`, the symbol entry is (the actual `symbol` object also
+contains the original type, flags and source span):
+
+```json
+{
+  "id": "s1.x",
+  "scopeId": 1,
+  "symbol": {"name":"x","kind":"variable","type":{"kind":"integer","name":"integer","element":null,"params":[],"result":null},"mutable":true,"captured":false,"span":{"start":{"offset":0,"line":1,"column":1},"end":{"offset":10,"line":1,"column":11}}},
+  "locations": [{"space":"globals","offset":0,"size":1,"role":"binding"}],
+  "labels": []
+}
+```
+
+The corresponding `globals` space has one binding slot; `main` has one dynamic
+temporary slot for `t0`. All arrays are present even when empty. Offsets are
+zero-based **within the named space**, never physical addresses:
+
+- `globals`: emitted non-frame/non-environment symbols, sorted by identity.
+  This includes main block bindings, not just source global declarations.
+- `main`: temporary cells actually used by emitted main instructions, in emitter
+  temporary-number order. Reused cells have no permanent type (`dynamic: true`).
+- `frame:<procedure-label>`: copies the existing `Procedure.Frame` exactly,
+  including continuation (abstract return address), control/global access links,
+  optional result, receiver parameter, ordinary parameters, locals and temporaries.
+- `environment:s<scopeId>`: bindings in the existing EnvironmentLayout order;
+  `parent` records the existing lexical layout link, not an extra fabricated cell.
+- `instance:<class-id>`: existing field offsets, including inherited fields.
+  `parent` identifies the base layout; method labels map each class's effective
+  dispatch entries to emitted procedures, including inherited constructors.
+
+A parameter/local can have both a frame staging slot and retained environment
+binding. An inherited field appears in each relevant instance layout. The report
+lists all such locations; it does not invent one canonical physical address.
+Scope IDs identify layouts, not live invocations or heap instances. Strings,
+lists, objects and closures occupy reference cells; payload size and live address
+are unknown, and there is no claim of a physical ABI. The existing
+`Procedure.lexicalScope`/`captures` and environment parent layouts describe lexical
+access; the existing frame `globalAccessLink` slot is not renamed or repurposed.
+
+KISS choice: derive this inventory from emitted operands and the existing frame,
+environment and class layouts, then join by semantic binding ID. No second parse,
+analysis or binding model is introduced. Constants get storage only when emitted;
+procedure/control/layout labels and unemitted source symbols get no invented
+offset or size. Control labels include their owning `main`/frame space because
+their names may repeat across procedures. This is a static report, not a runtime
+interpreter or an implementation of IDE/report deliverables T7/T8.
 
 ## Representation
 
