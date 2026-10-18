@@ -17,6 +17,7 @@ var objectCases = []struct {
 	name, source string
 	want         map[string]any
 }{
+	{"unqualified object field method", `class Box{function read():integer{return 7;}}class Holder{let value:Box;function constructor(v:Box){this.value=v;}function read():integer{return value.read();}}let holder=new Holder(new Box());let x=holder.read();let y=holder.value.read();`, map[string]any{"x": float64(7), "y": float64(7)}},
 	{"shadowed inferred nominal alias minimal", `class A{}let a=new A();{class A{}let b=a;}`, map[string]any{}},
 	{"shadowed inferred nominal origins", `class A{let n:integer=1;function read():integer{return this.n;}}class Holder{let value:A;function constructor(value:A){this.value=value;}}let a=new A();let holder=new Holder(a);function get():A{return a;}let factory=get;let x=0;let y=0;let z=0;let distinct=false;{class A{let n:integer=20;function read():integer{return this.n;}}let local=new A();let b=a;const c=holder.value;let d=get();let e=factory();b.n=9;x=c.read();y=d.read();z=e.read();distinct=b!=local;}let original=a.n;`, map[string]any{"x": float64(9), "y": float64(9), "z": float64(9), "original": float64(9), "distinct": true}},
 	{"string storage calls and comparison", `function greet(name:string):string{return "Hi "+name;}let text=greet("Ada");let yes=text=="Hi Ada";let no=text!="Hi Ada";`, map[string]any{"text": "Hi Ada", "yes": true, "no": false}},

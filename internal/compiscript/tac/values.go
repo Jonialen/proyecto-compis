@@ -82,6 +82,9 @@ func (l *lowerer) expressionClass(env *environment, expression ast.Expression) s
 	switch n := expression.(type) {
 	case ast.IdentifierExpr:
 		b, _ := env.lookup(n.Name)
+		if b.field != nil {
+			return b.field.Class
+		}
 		return b.operand.Class
 	case ast.ThisExpr:
 		b, _ := env.lookup("$this")
