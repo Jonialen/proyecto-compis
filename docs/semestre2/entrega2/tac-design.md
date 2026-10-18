@@ -131,6 +131,9 @@ temporary. Spans locate source operations, not unique expression identities.
 | Copy | `s1.x:integer = 1:integer` | Assign a value to a symbol or temporary |
 | Add/subtract/multiply | `t0:integer = 2:integer * 3:integer` | Numeric operation |
 | Divide | `t0:float = 6.0:float / 2.0:float` | Floating-point division |
+| Remainder | `t0:float = 7.5:float % 2.0:float` | Truncating remainder; zero divisor faults |
+| Print | `print s1.x:integer` | Read `left` once and append one output line; no destination |
+| Declare | `declare s1.x:integer` | Activate/reserve a binding with an undefined cell; no default write |
 | Negate | `t0:integer = neg s1.x:integer` | Numeric unary minus |
 | Integer to float | `t0:float = i2f s1.x:integer` | Explicit numeric widening |
 | Comparison | `t0:boolean = 1:integer < 2:integer` | `==`, `!=`, `<`, `<=`, `>`, `>=`; boolean equality/inequality also supported |
@@ -213,21 +216,22 @@ Scalar returns use existing type compatibility and explicit `i2f` widening;
 there is no synthesized scalar default. Semantic missing-return diagnostics
 remain authoritative. Null-result procedures accept bare return, return-null
 (also grouped null), and fallthrough; fallthrough emits an explicit no-value
-return. Null-result calls are statement-only, including grouped call statements;
-they cannot be used as values, even as the operand of another null return. This
-is a code-generation restriction, not a new `void` type or semantic policy.
+return. Null-result expression calls execute exactly once, with no destination or
+result-frame cell, then yield the literal `null`. A null return expression is
+evaluated for its effects before the no-value return. Omitted result annotations
+still mean null, not inferred return types.
 
 ### Evaluation and global initialization
 
 Operands and arguments evaluate left to right, once. Before evaluating a later
-call subtree, an earlier symbol operand is copied into a reserved temporary.
+effectful subtree (including assignments), an earlier symbol operand is copied into a reserved temporary.
 This applies to arithmetic, comparisons, argument lists and a switch selector
 before effectful case tests. Literals and already-live temporaries need no copy.
 For `let g=1; ... let x=g+bump();`, where `bump` increments and returns `g`, `x`
 is 3, not 4. Similarly, `pair(g,bump())` receives 1 and 2, not 2 and 2. Widening
 occurs before later arguments are evaluated. Logical `&&`/`||` retain runtime
 short-circuit skipping while both operands are statically validated. Programs
-without calls receive no extra snapshot instructions.
+without calls or assignment effects receive no extra snapshot instructions.
 
 Function bodies retain declaration-time global visibility and switch-blocked
 names, not the final variable inventory. Global reads and writes are allowed
@@ -423,11 +427,10 @@ locals. Shadowing initializers read outer bindings before activating their names
 Header/body/post temporaries are consumed before backedges; runtime iterations
 reuse emitted temporary identities without increasing static allocation demand.
 
-Only a whole for post may be a simple identifier assignment expression, optionally
-grouped: `for (;; (i=i+1)) { if(i>=3) break; }`. It uses the existing assignment
-validation, widening and store path. Numeric/boolean post expressions may instead
-be evaluated and discarded. Nested assignments, property/index assignments and
-assignment expressions elsewhere remain unsupported.
+A whole for post can be a simple identifier assignment expression, optionally
+grouped: `for (;; (i=i+1)) { if(i>=3) break; }`. Its previous store path and IR remain
+unchanged. T9 additionally supports value-producing identifier/property/index
+assignments in expression positions accepted by the existing grammar.
 
 The frontend now identifies condition/post by their actual header delimiters,
 not expression count. Declaration/assignment initializers consume their own first
@@ -607,26 +610,56 @@ CLI-emitted JSON executes in tests to `shared = 9`, `sum = 12`, `first = 3`,
 
 ### Supported source
 
-The implemented source slice supports initialized integer/float/boolean variables
-and constants, identifier assignment, lexical blocks, grouping, unary minus,
-and `+`, `-`, `*`, `/`, comparisons, boolean logic, `if/else`, the loops/switch/transfers above,
-and the lexical-function/call/return, object/string and collection subsets described above.
-Unsupported statements, operators, expressions, types,
-and missing initializers must be reported explicitly with source locations.
+The implemented source slice also supports print, `%`, lazy ternaries,
+value-producing assignments, typed uninitialized declarations and null values.
+Unsupported statements, operators, expressions and genuinely unknown types
+must still be reported explicitly with source locations.
 No partial TAC may escape after lexical, syntax, semantic, or lowering errors.
 Original source bytes are preserved; Compile retains the matching Analyze diagnostics/scopes.
 Numeric expression statements are supported; their final temporary is released
-without a store. Except for the for-post case above, assignment expressions
-(other than supported property/index stores), ternaries, general null declarations
-and print are not lowered. Null is supported as a class/string/list storage
-value or equality operand, not a new general scalar type. Field declarations need
-semantic storage types; inferred error-type fields are still rejected rather than
-guessing a type not recorded by Analyze. Transfers without an enclosing
-eligible construct are rejected. Unsupported input is not silently skipped.
+without a store. Null can occupy binding, field and list-element cells as well as
+typed reference storage. A statically null inferred field has a private null layout
+type even when Analyze retains its unknown annotation. Outer alias-dependent
+fields resolve at class declaration activation, including inherited layout copies;
+the semantic report is not
+rewritten. Genuinely unknown storage/untyped signatures and try/catch remain T10
+work, not erased statements. Transfers without an enclosing eligible construct
+are rejected. Unsupported input is not silently skipped.
 Unsupported declarations report `only integer, float and boolean declarations are supported`.
-Legacy unsupported-expression/statement and missing-initializer diagnostics retain
-their numeric wording for compatibility; all supported scalar declarations require
-an initializer.
+Legacy unsupported-expression/statement diagnostics retain their numeric wording.
+
+### Static values and effects (T9)
+
+`let x=1; let y=x+(x=2);` computes `y=3`, `x=2`: earlier operands, arguments,
+callees, receivers and indices keep their source-position values across later
+effects. Assignments yield their stored type/value, including float widening.
+Ternaries reserve a join temporary before lowering either arm, evaluate the
+condition once and execute only the selected arm. Both arms are still validated.
+Expected nested-list shape and nominal/signature origins propagate through joins.
+`branchTrue` requires a boolean at runtime; there is no numeric truthiness.
+Incompatible/unknown static arm types remain deferred rather than fabricated.
+
+`declare` resets the binding to undefined each time its declaration executes.
+Frame/environment reentry never inherits a previous value. Reading an undefined
+cell faults in the bounded oracle. An activated undefined cell satisfies existing
+dependency/type guards, permitting initialization through a call; an actual read
+still faults. Bindings not yet activated remain unavailable. Declaration activation is distinct from a
+default write, and the real reserved cell is inventoried by `codegen`, even when
+the source never assigns it. Existing call-dependency checks remain intact.
+
+Remainder uses Go `math.Mod` semantics: `x-trunc(x/y)*y`, with the dividend's sign.
+Two integers produce integer remainder; float/mixed operands produce float after
+explicit widening. A zero divisor faults before a destination write. This is the
+practical KISS extension of existing numeric promotion, not Euclidean modulo.
+
+Print uses `left` and a source span, no destination and no synthetic call. The CLI
+generates TAC; it does not execute print. The test-only oracle shares one output
+collector across frames and appends a newline per print. Strings are raw; booleans
+are `true`/`false`; null is `null`; numbers use shortest round-trippable binary64
+text. References use `<object s1.A>` / `<function s1.f>`, never physical addresses.
+Lists use `[1, 2]`, with active-cycle detection, a 64-value budget and depth limit
+8 (`<cycle>` / `...`). This deterministic, bounded representation avoids a new
+runtime or serialization dependency; it is not a product interpreter.
 
 ### Library quick path
 
@@ -656,9 +689,8 @@ The peak is two temporaries: division consumes `t0` and `t1` before reusing
 `t0` as its destination. Each JSON instruction also retains its source span and
 operand kinds. No arithmetic is evaluated by the compiler.
 
-For `let x=1; print(x);`, the result contains no TAC and reports
-`unsupported statement in numeric TAC` at `print(x);`. For
-`let x:integer;`, it reports `numeric declarations require an initializer`.
+For `let x=1; print(x);`, the result includes `print s1.x:integer`. For
+`let x:integer;`, it emits `declare s1.x:integer` without a fabricated value.
 For `let x=missing;`, the existing semantic diagnostic is returned instead of
 attempting code generation. The default command renders the same TAC; JSON
 exposes the complete report.

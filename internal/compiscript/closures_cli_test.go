@@ -29,8 +29,8 @@ func TestClosureCLIAtomicRejection(t *testing.T) {
 	cli := buildClosureCLI(t)
 	for _, source := range []string{
 		`function outer():integer{let x=read(); let n=8; function read():integer{return n;} return x;} let x=outer();`,
-		`function outer(){function bad(){print(1);}}`,
-		`function f():integer{return 1;} let alias=f; function bad(){print(1);} let x=alias();`,
+		`function outer(){function bad(){try{}catch(e){}}}`,
+		`function f():integer{return 1;} let alias=f; function bad(){try{}catch(e){}} let x=alias();`,
 	} {
 		t.Run(source, func(t *testing.T) {
 			assertClosureCLIRejection(t, cli, source)

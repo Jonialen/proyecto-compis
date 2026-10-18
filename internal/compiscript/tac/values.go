@@ -43,9 +43,11 @@ func (l *lowerer) arguments(env *environment, expressions ast.Expressions, param
 func (l *lowerer) expressionType(env *environment, expression ast.Expression) model.Type {
 	switch n := expression.(type) {
 	case ast.AssignExpr:
-		if _, ok := n.Target.(ast.IndexExpr); ok {
-			return l.expressionType(env, n.Target)
-		}
+		return l.expressionType(env, n.Target)
+	case ast.PropertyAssignExpr:
+		return l.expressionType(env, ast.PropertyAccessExpr{Receiver: n.Receiver, Name: n.Name})
+	case ast.TernaryExpr:
+		return mergeListElementTypes(l.expressionType(env, n.Then), l.expressionType(env, n.Else))
 	case ast.ArrayExpr:
 		var element model.Type
 		for _, e := range n.Elements {
@@ -81,7 +83,7 @@ func (l *lowerer) expressionType(env *environment, expression ast.Expression) mo
 		}
 		return l.expressionType(env, n.Operand)
 	case ast.BinaryExpr:
-		if n.Operator != "+" && n.Operator != "-" && n.Operator != "*" && n.Operator != "/" {
+		if n.Operator != "+" && n.Operator != "-" && n.Operator != "*" && n.Operator != "/" && n.Operator != "%" {
 			return model.Type{Kind: model.TypeBoolean}
 		}
 		a, b := l.expressionType(env, n.Left), l.expressionType(env, n.Right)
@@ -130,9 +132,18 @@ func (l *lowerer) expressionType(env *environment, expression ast.Expression) mo
 func (l *lowerer) expressionClass(env *environment, expression ast.Expression) string {
 	switch n := expression.(type) {
 	case ast.AssignExpr:
-		if _, ok := n.Target.(ast.IndexExpr); ok {
-			return l.expressionClass(env, n.Value)
+		return l.expressionClass(env, n.Target)
+	case ast.PropertyAssignExpr:
+		return l.expressionClass(env, ast.PropertyAccessExpr{Receiver: n.Receiver, Name: n.Name})
+	case ast.TernaryExpr:
+		a, b := l.expressionClass(env, n.Then), l.expressionClass(env, n.Else)
+		if a == "" {
+			return b
 		}
+		if b == "" || l.assignable(Operand{Type: model.TypeClass, Class: a}, Operand{Type: model.TypeClass, Class: b}) {
+			return a
+		}
+		return b
 	case ast.IndexExpr:
 		return l.expressionClass(env, n.Collection)
 	case ast.ArrayExpr:
@@ -201,9 +212,9 @@ func (l *lowerer) expressionTypeClasses(env *environment, expression ast.Express
 	case ast.IndexExpr:
 		return l.expressionTypeClasses(env, n.Collection)
 	case ast.AssignExpr:
-		if _, ok := n.Target.(ast.IndexExpr); ok {
-			return l.expressionTypeClasses(env, n.Target)
-		}
+		return l.expressionTypeClasses(env, n.Target)
+	case ast.TernaryExpr:
+		return l.expressionTypeClasses(env, n.Then)
 	case ast.IdentifierExpr:
 		b, _ := env.lookup(n.Name)
 		if b.function != nil {
@@ -222,9 +233,6 @@ func (l *lowerer) expressionTypeClasses(env *environment, expression ast.Express
 }
 
 func (l *lowerer) recordStorageIdentity(scope int, operand Operand) {
-	if operand.Type != model.TypeClass && operand.Type != model.TypeList {
-		return
-	}
 	layout, ok := l.registry.environments[scope]
 	if !ok {
 		return
@@ -272,7 +280,7 @@ func (l *lowerer) typedOperand(env *environment, o Operand, t model.Type) Operan
 
 func (l *lowerer) assignable(target, value Operand) bool {
 	if value.Type == model.TypeNull {
-		return target.Type == model.TypeClass || target.Type == model.TypeString || target.Type == model.TypeList
+		return target.Type == model.TypeNull || target.Type == model.TypeClass || target.Type == model.TypeString || target.Type == model.TypeList
 	}
 	if target.Type != value.Type {
 		return false

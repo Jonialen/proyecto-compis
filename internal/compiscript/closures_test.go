@@ -70,11 +70,11 @@ func TestClosureAtomicRejections(t *testing.T) {
 	for _, tt := range []struct{ name, source, message string }{
 		{"early captured read", `function outer():integer{let x=read(); let n=8; function read():integer{return n;} return x;} let x=outer();`, "call requires initialized captured binding"},
 		{"early captured write", `function outer(){set(); let n=8; function set(){n=9;}} outer();`, "call requires initialized captured binding"},
-		{"uncalled nested unsupported body", `function outer(){function bad(){print(1);}}`, "unsupported statement"},
-		{"unreachable nested unsupported body", `function outer(){if(false){function bad(){print(1);}}}`, "unsupported statement"},
+		{"uncalled nested unsupported body", `function outer(){function bad(){try{}catch(e){}}}`, "unsupported statement"},
+		{"unreachable nested unsupported body", `function outer(){if(false){function bad(){try{}catch(e){}}}}`, "unsupported statement"},
 		{"nested signature", `function outer(){function bad(n){return;}}`, "unsupported function signature"},
-		{"alias initializer unsupported graph", `function f():integer{return 1;} let alias=f; function unused(){print(1);} let x=alias();`, "unsupported statement"},
-		{"alias null expression", `function f(){} let alias=f; let x=alias()==null;`, "null-result calls are statement-only"},
+		{"alias initializer unsupported graph", `function f():integer{return 1;} let alias=f; function unused(){try{}catch(e){}} let x=alias();`, "unsupported statement"},
+		{"alias unknown result expression", `function f(){} let alias=f; function g(x){}`, "unsupported function signature"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			input := []byte(tt.source)

@@ -35,9 +35,6 @@ func (l *lowerer) call(env *environment, n ast.CallExpr, statement bool) (Operan
 	if !callValue(kind) && kind != model.TypeNull {
 		return Operand{}, l.unsupported(n.Span, "unsupported function signature")
 	}
-	if kind == model.TypeNull && !statement {
-		return Operand{}, l.unsupported(n.Span, "null-result calls are statement-only")
-	}
 	if len(n.Arguments) != len(signature.Params) {
 		return Operand{}, l.unsupported(n.Span, "call argument count mismatch")
 	}
@@ -80,6 +77,9 @@ func (l *lowerer) call(env *environment, n ast.CallExpr, statement bool) (Operan
 	for _, argument := range arguments {
 		l.pool.release(argument)
 	}
+	if kind == model.TypeNull && !statement {
+		return Operand{Kind: Literal, Value: "null", Type: model.TypeNull}, true
+	}
 	return target, true
 }
 
@@ -109,13 +109,13 @@ func hasCall(expression ast.Expression) bool {
 	case ast.TernaryExpr:
 		return hasCall(n.Condition) || hasCall(n.Then) || hasCall(n.Else)
 	case ast.AssignExpr:
-		return hasCall(n.Target) || hasCall(n.Value)
+		return true
 	case ast.IndexExpr:
 		return hasCall(n.Collection) || hasCall(n.Index)
 	case ast.PropertyAccessExpr:
 		return hasCall(n.Receiver)
 	case ast.PropertyAssignExpr:
-		return hasCall(n.Receiver) || hasCall(n.Value)
+		return true
 	case ast.NewExpr:
 		return true // Field initializers and the constructor can call arbitrary code.
 	case ast.ArrayExpr:

@@ -91,10 +91,10 @@ func (l *lowerer) layout(p *Procedure) bool {
 			if symbol.Kind == model.SymbolParameter || symbol.Kind == model.SymbolFunction {
 				continue
 			}
-			if !storedValue(symbol.Type.Kind) || (symbol.Kind != model.SymbolVariable && symbol.Kind != model.SymbolConstant) {
+			o := l.storageIdentity(symbolOperand(scope.ID, symbol))
+			if !storedValue(o.Type) || (symbol.Kind != model.SymbolVariable && symbol.Kind != model.SymbolConstant) {
 				return l.unsupported(symbol.Span, "unsupported function-owned binding")
 			}
-			o := symbolOperand(scope.ID, symbol)
 			if symbol.Type.Kind == model.TypeList {
 				o = l.storageIdentity(l.listStorageType(scope.ID, o, symbol.Type))
 			}

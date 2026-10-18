@@ -59,6 +59,8 @@ func (l *lowerer) expressionExpected(env *environment, e ast.Expression, expecte
 		return l.expressionExpected(env, n.Expression, expected)
 	case ast.ArrayExpr:
 		return l.listLiteral(env, n, expected)
+	case ast.TernaryExpr:
+		return l.ternary(env, n, expected)
 	default:
 		return l.expression(env, e)
 	}

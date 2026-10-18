@@ -152,7 +152,7 @@ func (f *testFrame) readEnvironment(o tac.Operand) (bool, frameValue, error) {
 		return true, frameValue{}, fmt.Errorf("environment binding out of bounds: %s", o)
 	}
 	v, ok := env.cells[o.Value]
-	if !ok {
+	if !ok || undefinedFrameValue(v) {
 		return true, v, fmt.Errorf("undefined environment cell: %s", o)
 	}
 	if v.kind != o.Type {

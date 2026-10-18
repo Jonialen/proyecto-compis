@@ -2,6 +2,7 @@ package compiscript
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -35,6 +36,7 @@ type testFrame struct {
 	lexical      *testEnvironment
 	layouts      map[int]tac.EnvironmentLayout
 	classes      map[string]*tac.ClassLayout
+	output       *strings.Builder
 }
 
 func (f *testFrame) globalStore() (map[string]frameValue, error) {
@@ -152,7 +154,7 @@ func (f *testFrame) read(o tac.Operand) (frameValue, error) {
 		}
 		value, found = f.cells[offset].(frameValue)
 	}
-	if !found {
+	if !found || undefinedFrameValue(value) {
 		return value, fmt.Errorf("undefined slot: %s", o)
 	}
 	if value.kind != o.Type {
@@ -238,18 +240,31 @@ func newTestFrame(p *tac.Procedure, globals map[string]frameValue, continuation 
 }
 
 func runFunctionFrames(program *tac.Program) (map[string]any, error) {
+	values, _, err := runFunctionFramesOutput(program)
+	return values, err
+}
+
+func runFunctionFramesOutput(program *tac.Program) (map[string]any, string, error) {
+	var output strings.Builder
+	values, err := runFunctionFramesCollected(program, &output)
+	return values, output.String(), err
+}
+
+func runFunctionFramesCollected(program *tac.Program, output *strings.Builder) (map[string]any, error) {
 	globals := map[string]frameValue{}
 	values := map[string]any{}
 	defer func() {
 		for name, value := range globals {
-			values[name] = value.value
+			if !undefinedFrameValue(value) {
+				values[name] = value.value
+			}
 		}
 	}()
 	labels, err := frameLabels(program.Instructions)
 	if err != nil {
 		return values, err
 	}
-	f := &testFrame{tape: program.Instructions, labels: labels, main: map[string]frameValue{}, globals: globals, mainPeak: program.PeakTemporaries}
+	f := &testFrame{tape: program.Instructions, labels: labels, main: map[string]frameValue{}, globals: globals, mainPeak: program.PeakTemporaries, output: output}
 	if err := f.loadEnvironments(program.Environments); err != nil {
 		return values, err
 	}
@@ -273,13 +288,27 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 				return values, fmt.Errorf("procedure fell off tape")
 			}
 			for name, value := range globals {
-				values[name] = value.value
+				if !undefinedFrameValue(value) {
+					values[name] = value.value
+				}
 			}
 			return values, nil
 		}
 		i := f.tape[f.pc]
 		f.pc++
 		switch i.Op {
+		case tac.Print:
+			value, err := f.read(i.Left)
+			if err != nil {
+				return values, err
+			}
+			fmt.Fprintln(f.output, renderFrameValue(value))
+			continue
+		case tac.Declare:
+			if err := f.declareUndefined(i.Target); err != nil {
+				return values, err
+			}
+			continue
 		case tac.NewList, tac.ListLength, tac.LoadIndex, tac.StoreIndex:
 			if err := f.collectionInstruction(i); err != nil {
 				return values, err
@@ -369,6 +398,7 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 			}
 			callee.layouts, callee.lexical = f.layouts, lexical
 			callee.classes = f.classes
+			callee.output = f.output
 			callee.environments = map[int]*testEnvironment{}
 			if p.Receiver != nil {
 				if receiver == nil {
@@ -490,6 +520,11 @@ func runFunctionFrames(program *tac.Program) (map[string]any, error) {
 				return values, fmt.Errorf("division by zero")
 			}
 			result.value = left.value.(float64) / right.value.(float64)
+		case tac.Remainder:
+			if right.value.(float64) == 0 {
+				return values, fmt.Errorf("remainder by zero")
+			}
+			result.value = math.Mod(left.value.(float64), right.value.(float64))
 		default:
 			return values, fmt.Errorf("unknown opcode %s", i.Op)
 		}

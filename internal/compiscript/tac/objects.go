@@ -158,7 +158,24 @@ func (l *lowerer) prepareClass(c *classInfo) bool {
 				if symbol.Span != member.SourceSpan() || symbol.Kind != model.SymbolField {
 					continue
 				}
-				if !storedValue(symbol.Type.Kind) {
+				var initializer ast.Expression
+				switch n := member.(type) {
+				case ast.VarDeclStmt:
+					if n.Type == nil {
+						initializer = n.Initializer
+					}
+				case ast.ConstDeclStmt:
+					if n.Type == nil {
+						initializer = n.Value
+					}
+				}
+				if initializer != nil && l.expressionType(c.env, initializer).Kind == model.TypeNull {
+					symbol.Type = model.Type{Kind: model.TypeNull, Name: "null"}
+				}
+				// An unannotated field can depend on an active outer alias that
+				// does not exist during class predeclaration. Resolve only a known
+				// null type at the class's source binding point, never guess defaults.
+				if !storedValue(symbol.Type.Kind) && !(symbol.Type.Kind == model.TypeError && initializer != nil) {
 					return l.unsupported(symbol.Span, "unsupported field type")
 				}
 				o := l.typedOperand(c.env, Operand{Type: symbol.Type.Kind}, symbol.Type)
@@ -181,6 +198,9 @@ func (l *lowerer) classBody(env *environment, n ast.ClassDeclStmt) bool {
 		return l.unsupported(n.Span, "missing class identity")
 	}
 	c.env.parent = env.fork()
+	if !l.resolveNullFields(c) {
+		return false
+	}
 	result := model.Type{Kind: model.TypeNull, Name: "null"}
 	f := &functionInfo{label: c.layout.Initializer, typeOf: model.Type{Kind: model.TypeFunction, Result: &result}, globals: map[string]Operand{}, captures: map[string]Operand{}, definingScope: c.owner, scopeID: c.layout.ScopeID}
 	l.registry.ordered = append(l.registry.ordered, f)
@@ -224,6 +244,49 @@ func (l *lowerer) classBody(env *environment, n ast.ClassDeclStmt) bool {
 		if method, ok := member.(ast.FunctionDeclStmt); ok {
 			if !l.functionBody(c.env, method) {
 				return false
+			}
+		}
+	}
+	return true
+}
+
+func (l *lowerer) resolveNullFields(c *classInfo) bool {
+	for _, field := range c.layout.Fields {
+		if field.Type.Kind != model.TypeError {
+			continue
+		}
+		var initializer ast.Expression
+		if field.Owner == c.layout.ID {
+			for _, member := range c.declaration.Members {
+				if member.SourceSpan() != field.Span {
+					continue
+				}
+				switch n := member.(type) {
+				case ast.VarDeclStmt:
+					if n.Type == nil {
+						initializer = n.Initializer
+					}
+				case ast.ConstDeclStmt:
+					if n.Type == nil {
+						initializer = n.Value
+					}
+				}
+			}
+		}
+		if initializer == nil || l.expressionType(c.env, initializer).Kind != model.TypeNull {
+			return l.unsupported(field.Span, "unsupported field type")
+		}
+		// Layout copies for inherited fields retain offsets and owners while
+		// sharing this resolved declaration type. Semantic snapshots stay intact.
+		for _, owner := range l.registry.classes {
+			for i := range owner.layout.Fields {
+				if owner.layout.Fields[i].ID == field.ID {
+					owner.layout.Fields[i].Type = model.Type{Kind: model.TypeNull, Name: "null"}
+				}
+			}
+			if b, ok := owner.env.active[field.Name]; ok && b.field != nil && b.field.ID == field.ID {
+				b.typeOf = model.Type{Kind: model.TypeNull, Name: "null"}
+				owner.env.active[field.Name] = b
 			}
 		}
 	}

@@ -205,8 +205,8 @@ func TestFunctionGlobalInitializationAndVisibility(t *testing.T) {
 		`let g=0; switch(true){case true:let later=1;} function f():integer{return later;} let x=f();`,
 		`function f():integer{return 1;} {let f=2; f();}`,
 		`function f(a:integer):integer{switch(true){case true:let a=1; default:return a;} return a;}`,
-		`function f():boolean{return true;} let x=true||((5%2)>0);`,
-		`function f():integer{return g();} function g():integer{return 1;} function unused(){print(1);}`,
+		`function f():boolean{return true;} let x=true||((true?[]:[])==null);`,
+		`function f():integer{return g();} function g():integer{return 1;} function unused(){try{}catch(e){}}`,
 	} {
 		t.Run(source, func(t *testing.T) {
 			analysis := Analyze([]byte(source))
@@ -224,7 +224,7 @@ func TestFunctionGlobalInitializationAndVisibility(t *testing.T) {
 func TestFunctionCapabilityDiagnostics(t *testing.T) {
 	for _, tt := range []struct{ source, rejected, message string }{
 		{`function f(a){return;}`, `function f(a){return;}`, "unsupported function signature"},
-		{`function f(){} let x=f()==null;`, `f()==null`, "null-result calls are statement-only"},
+		{`function f(){} function g(x){}`, `function g(x){}`, "unsupported function signature"},
 		{`let x=f(); let g=1; function f():integer{return g;}`, `f();`, "call requires initialized global binding s1.g"},
 		{`function a():integer{return b();} let x=a(); let g=1; function b():integer{return g;}`, `a();`, "call requires initialized global binding s1.g"},
 		{`f(); let g=1; function f(){g=2;}`, `f();`, "call requires initialized global binding s1.g"},
@@ -240,9 +240,6 @@ func TestFunctionCapabilityDiagnostics(t *testing.T) {
 			// Call-expression spans exclude the statement semicolon or outer equality.
 			if tt.rejected == "f();" || tt.rejected == "a();" {
 				length--
-			}
-			if tt.rejected == "f()==null" {
-				length = len("f()")
 			}
 			want := model.Diagnostics{{Code: "TAC_UNSUPPORTED", Phase: model.Phase("codegen"), Message: tt.message, Span: compileSpan(start, start+length)}}
 			if r.TAC != nil || !reflect.DeepEqual(r.Diagnostics, want) || !reflect.DeepEqual(r.Scopes, analysis.Scopes) {
@@ -290,10 +287,10 @@ func TestFunctionOracleRejectsInvalidFrames(t *testing.T) {
 func TestCompileFunctionRejectionsAreAtomic(t *testing.T) {
 	for _, source := range []string{
 		`function f(a){return;} f(1);`,
-		`function f(a:string[]){print(a[0]);} f(["x"]);`,
-		`function f(){print(1);}`,
-		`function f(){return;} let x=f();`,
-		`function f(){return;} function g(){return f();}`,
+		`function f(a:string[]){try{print(a[0]);}catch(e){}} f(["x"]);`,
+		`function f(){try{}catch(e){}}`,
+		`function f(){return;} let x;`,
+		`function f(a){return;} function g(){return f(null);}`,
 		`let x=f(); let g=1; function f():integer{return g;}`,
 		`function f():integer{return g();} let x=f(); let a=1; function g():integer{return a;}`,
 	} {

@@ -54,7 +54,7 @@ func TestCompilationSymbolsCLI(t *testing.T) {
 		})
 	}
 	assertClosureCLI(t, cli, `let x=1+2;`, map[string]any{"x": float64(3)})
-	for _, source := range []string{`let x=;`, `let x=missing;`, `let x=1; print(x);`} {
+	for _, source := range []string{`let x=;`, `let x=missing;`, `let x=1; try{}catch(e){}`} {
 		assertClosureCLIRejection(t, cli, source)
 	}
 }

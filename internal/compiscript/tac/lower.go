@@ -125,6 +125,14 @@ func (l *lowerer) statements(env *environment, statements ast.Statements) bool {
 
 func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 	switch n := statement.(type) {
+	case ast.PrintStmt:
+		value, ok := l.expression(env, n.Value)
+		if !ok {
+			return false
+		}
+		l.program.Instructions = append(l.program.Instructions, Instruction{Op: Print, Left: value, Span: n.Span})
+		l.pool.release(value)
+		return true
 	case ast.ClassDeclStmt:
 		return l.classBody(env, n)
 	case ast.FunctionDeclStmt:
@@ -209,9 +217,6 @@ func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 }
 
 func (l *lowerer) declaration(env *environment, name string, initializer ast.Expression, span ast.Span, inferred bool) bool {
-	if initializer == nil {
-		return l.unsupported(span, "numeric declarations require an initializer")
-	}
 	for _, scope := range l.scopes {
 		if scope.ID != env.id {
 			continue
@@ -220,11 +225,22 @@ func (l *lowerer) declaration(env *environment, name string, initializer ast.Exp
 			if symbol.Name != name || symbol.Span != span {
 				continue
 			}
+			if inferred && initializer != nil && symbol.Type.Kind == model.TypeError && l.expressionType(env, initializer).Kind == model.TypeNull {
+				// Recover only a statically known private value; Analyze remains
+				// authoritative and unchanged for genuinely unknown values (T10).
+				symbol.Type = l.expressionType(env, initializer)
+			}
 			if !storedValue(symbol.Type.Kind) {
 				return l.unsupported(span, "only integer, float and boolean declarations are supported")
 			}
 			target := l.typedOperand(env, symbolOperand(env.id, symbol), symbol.Type)
-			if inferred && target.Type == model.TypeList {
+			if initializer == nil {
+				l.program.Instructions = append(l.program.Instructions, Instruction{Op: Declare, Target: target, Span: span})
+				env.active[name] = binding{operand: target, mutable: symbol.Mutable, typeOf: symbol.Type}
+				l.recordStorageIdentity(env.id, target)
+				return true
+			}
+			if inferred && (target.Type == model.TypeList || target.Type == model.TypeClass) {
 				target.Class = l.expressionClass(env, initializer)
 			}
 			// Do not activate the new name until its initializer has read outer bindings.
@@ -275,5 +291,5 @@ func scalar(kind model.TypeKind) bool { return numeric(kind) || kind == model.Ty
 
 // Storage capability is deliberately separate from scalar arithmetic capability.
 func storedValue(kind model.TypeKind) bool {
-	return scalar(kind) || kind == model.TypeFunction || kind == model.TypeString || kind == model.TypeClass || kind == model.TypeList
+	return scalar(kind) || kind == model.TypeNull || kind == model.TypeFunction || kind == model.TypeString || kind == model.TypeClass || kind == model.TypeList
 }

@@ -159,7 +159,14 @@ func (l *lowerer) returnStatement(env *environment, n ast.ReturnStmt) bool {
 	kind := l.current.typeOf.Result.Kind
 	if kind == model.TypeNull {
 		if n.Value != nil && !nullLiteral(n.Value) {
-			return l.unsupported(n.Span, "null-result procedures only return null or no value")
+			value, ok := l.expression(env, n.Value)
+			if !ok {
+				return false
+			}
+			if value.Type != model.TypeNull {
+				return l.unsupported(n.Span, "null-result procedures only return null or no value")
+			}
+			l.pool.release(value)
 		}
 		l.program.Instructions = append(l.program.Instructions, Instruction{Op: Return, Span: n.Span})
 		return true

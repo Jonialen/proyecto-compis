@@ -270,7 +270,7 @@ func TestCompilationSymbols(t *testing.T) {
 }
 
 func TestCompilationSymbolsAtomicity(t *testing.T) {
-	for _, source := range []string{`let x=;`, `let x=missing;`, `let x=1; print(x);`} {
+	for _, source := range []string{`let x=;`, `let x=missing;`, `let x=1; try{}catch(e){}`} {
 		r := Compile([]byte(source))
 		encoded, _ := json.Marshal(r)
 		var fields map[string]json.RawMessage

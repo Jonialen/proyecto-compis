@@ -13,6 +13,9 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 		if target, ok := n.Target.(ast.IndexExpr); ok {
 			return l.indexAssignment(env, target, n.Value, n.Span)
 		}
+		return l.identifierAssignment(env, n)
+	case ast.TernaryExpr:
+		return l.ternary(env, n, Operand{})
 	case ast.ArrayExpr:
 		return l.listLiteral(env, n, Operand{})
 	case ast.IndexExpr:
@@ -83,7 +86,7 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 		switch n.Operator {
 		case "&&", "||":
 			return l.logicalValue(env, n)
-		case "+", "-", "*", "/", "==", "!=", "<", "<=", ">", ">=":
+		case "+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=":
 			left, ok := l.expression(env, n.Left)
 			if !ok {
 				return Operand{}, false

@@ -44,6 +44,7 @@ for and foreach loops also have separate executable preservation cases.
 ```sh
 go test ./internal/compiscript/frontend ./internal/compiscript ./cmd/ide -run 'Test(MalformedForMissingBody|MissingLoopBodies|AcceptanceAtomicRecovery|AcceptanceMixedExecution|AcceptanceRecoveryCLI|AcceptanceValidLoops|MixedAcceptanceAPI)$' -count=1
 go test ./internal/compiscript/frontend ./internal/compiscript ./cmd/ide -count=1
+go test ./internal/compiscript -run '^TestValuesEffects' -count=1
 go vet ./internal/compiscript/frontend ./internal/compiscript ./cmd/ide
 node --test web/*.test.cjs
 go test ./... -count=1
@@ -70,7 +71,7 @@ They exercise these failures without modifying the submitted input:
 | `while(true)`, `do`, `foreach(x in [1])`, `for(let i=0; i<2; i=i+1)` | Missing bodies rejected with located diagnostics |
 | `const rows:integer[][]=[[1]];rows[0][0]=2;` | Semantic rejection; const-root checks remain authoritative |
 | `let rows:integer[][]=[[1]];rows[0]=true;` | Semantic rejection of incompatible nested shape |
-| `let a=[1];if(false){print(a[0]);}` | Codegen diagnostic even in an unexecuted branch; no silent omission |
+| `let a=[1];if(false){try{print(a[0]);}catch(e){}}` | Deferred handler codegen diagnostic even in an unexecuted branch; no silent omission |
 
 For each rejected compilation, `tac` is null and `codegen` is absent. Built TAC
 CLI text mode exits 1 with empty stdout and located diagnostics on stderr; JSON
@@ -100,3 +101,20 @@ valid preservation and malformed-boundary proof.
 Metadata offsets and sizes use abstract cells, not bytes or a target ABI. Runtime
 guards are IR contracts exercised by the test oracle, not a product interpreter.
 Unsupported static features must fail with diagnostics, including in dead code.
+
+## Static values/effects battery (T9)
+
+`values_effects_test.go` and `values_effects_cli_test.go` check core and built-CLI
+JSON execution, exact output, values/fault effects, deterministic reports, unchanged
+Analyze and source bytes. Cases include lazy nested joins, captures, nominal
+shadowing, mutable targets/arguments, float remainder, null-result effects and
+fresh undefined cells. The legacy `runFunctionFrames` oracle wrapper is preserved.
+
+```sh
+go run ./cmd/compiscript-tac -format=json testdata/compiscript/tac/values-effects.cps
+```
+
+This emits TAC, not runtime output. The bounded oracle's expected example output
+is `3`, `1`, `null`, each followed by a newline; `x=2`, `y=3`, `count=1`.
+Unknown values/untyped signatures and try/catch still require T10. No full-PDF
+completion or refreshed final matrix is claimed by this static behavior unit.

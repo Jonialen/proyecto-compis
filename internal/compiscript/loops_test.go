@@ -79,14 +79,14 @@ func TestLoopOptionalForClauses(t *testing.T) {
 
 func TestLoopStaticRejection(t *testing.T) {
 	for _, source := range []string{
-		"while(false){print(1);}", "do{print(1);}while(false);", "for(;false;){print(1);}",
-		"for(;false;5%2){}", "let x=0; for(;false;x=(x=1)){}",
-		"let x=0; for(;false;(x=1)+1){}", "let x=0; while(false){x=(x=1);}",
+		"while(false){try{}catch(e){}}", "do{try{}catch(e){}}while(false);", "for(;false;){try{}catch(e){}}",
+		"for(;false;true?[]:[]){}", "let x=0; for(;false;x=(true?[]:[])){}",
+		"let x=0; for(;false;(true?[]:[])){}", "let x=0; while(false){try{x=1;}catch(e){}}",
 		"const x=0; for(;false;x=1){}", "for(;false;missing=1){}",
 		"for(let i=0;false;i=i+1){} i=1;", "do{let x=true;}while(x);",
 		"break;", "continue;", "while(false){} break;", "for(;;){break;} continue;",
-		"foreach(x in [1,2]){print(x);}", "switch(true){case true:print(1);}",
-		"let x=[1]; for(;false;x[0]=2%1){}", "while(1){}", "let x=0; for(;false;x=true){}",
+		"foreach(x in [1,2]){try{}catch(e){}}", "switch(true){case true:try{}catch(e){}}",
+		"let x=[1]; for(;false;x[0]=(true?[]:[])){}", "while(1){}", "let x=0; for(;false;x=true){}",
 	} {
 		t.Run(source, func(t *testing.T) {
 			input := []byte(source)

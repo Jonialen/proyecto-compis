@@ -36,6 +36,9 @@ const (
 	Subtract         Opcode = "-"
 	Multiply         Opcode = "*"
 	Divide           Opcode = "/"
+	Remainder        Opcode = "%"
+	Print            Opcode = "print"
+	Declare          Opcode = "declare"
 	Negate           Opcode = "neg"
 	IntegerToFloat   Opcode = "i2f"
 	Equal            Opcode = "=="
@@ -85,6 +88,10 @@ type Instruction struct {
 
 func (i Instruction) String() string {
 	switch i.Op {
+	case Print:
+		return "print " + i.Left.String()
+	case Declare:
+		return "declare " + i.Target.String()
 	case NewList:
 		values := make([]string, len(i.Arguments))
 		for n, value := range i.Arguments {

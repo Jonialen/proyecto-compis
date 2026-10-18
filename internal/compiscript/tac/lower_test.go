@@ -13,7 +13,7 @@ import (
 )
 
 func TestGeneratePreservesInputs(t *testing.T) {
-	for _, source := range []string{"let x:float=1; {let x=x+2;} x=x/2;", "let x=1; print(x);", "let x;"} {
+	for _, source := range []string{"let x:float=1; {let x=x+2;} x=x/2;", "let x=1; try{}catch(e){}", "let x;"} {
 		t.Run(source, func(t *testing.T) {
 			program, parseDiagnostics := frontend.Parse([]byte(source))
 			scopes, diagnostics := semantic.Analyze(program)
@@ -37,7 +37,7 @@ func TestGeneratePreservesInputs(t *testing.T) {
 				t.Fatalf("unsupported program accepted: %+v %+v", first, firstDiagnostics)
 			}
 			if source == "let x;" {
-				if first != nil || len(firstDiagnostics) != 1 || firstDiagnostics[0].Message != "numeric declarations require an initializer" {
+				if first != nil || len(firstDiagnostics) != 1 || firstDiagnostics[0].Message != "only integer, float and boolean declarations are supported" {
 					t.Fatalf("missing initializer accepted: %+v %+v", first, firstDiagnostics)
 				}
 			}
@@ -60,7 +60,11 @@ func TestGenerateRejectsInferredErrorAndEffectfulExpressions(t *testing.T) {
 		program := ast.Program{Span: span, Statements: ast.Statements{ast.ExprStmt{Span: span, Expression: expression}}}
 		scopes := model.ScopeSnapshots{{ID: 1, Kind: model.ScopeGlobal, Span: span}}
 		result, diagnostics := tac.Generate(program, scopes)
-		want := model.Diagnostics{{Code: "TAC_UNSUPPORTED", Phase: model.Phase("codegen"), Message: "unsupported expression in numeric TAC", Span: span}}
+		message := "unsupported expression in numeric TAC"
+		if _, ok := expression.(ast.AssignExpr); ok {
+			message = "assignment requires an identifier or index"
+		}
+		want := model.Diagnostics{{Code: "TAC_UNSUPPORTED", Phase: model.Phase("codegen"), Message: message, Span: span}}
 		if result != nil || !reflect.DeepEqual(diagnostics, want) {
 			t.Fatalf("unsupported expression accepted: %+v %+v", result, diagnostics)
 		}
@@ -104,7 +108,7 @@ func TestGenerateConditionsPreservesASTAndScopes(t *testing.T) {
 }
 
 func TestGenerateRejectsOutOfLoopTransfers(t *testing.T) {
-	for _, source := range []string{"break;", "continue;", "while(false){} break;", "for(;;){break;} continue;", "switch(true){default:continue;}", "switch(true){case true:break;} break;", "switch(true){case true:print(1);}"} {
+	for _, source := range []string{"break;", "continue;", "while(false){} break;", "for(;;){break;} continue;", "switch(true){default:continue;}", "switch(true){case true:break;} break;", "switch(true){case true:try{}catch(e){}}"} {
 		t.Run(source, func(t *testing.T) {
 			program, diagnostics := frontend.Parse([]byte(source))
 			if len(diagnostics) != 0 {

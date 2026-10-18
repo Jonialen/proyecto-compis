@@ -98,7 +98,7 @@ func TestRecursiveOracleStillBoundsDepth(t *testing.T) {
 func TestRecursiveEarlyWriteIsAtomic(t *testing.T) {
 	for _, source := range []string{
 		`a(1); let z=0; function a(n:integer) { if(n>0) b(n-1); } function b(n:integer) { if(false) z=9; a(n); }`,
-		`function a(n:integer) { b(n); } function b(n:integer) { a(n); print(1); }`,
+		`function a(n:integer) { b(n); } function b(n:integer) { a(n); try{}catch(e){} }`,
 	} {
 		input := []byte(source)
 		before := append([]byte(nil), input...)

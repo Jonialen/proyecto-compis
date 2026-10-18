@@ -48,10 +48,10 @@ func TestIndependentConditionalContracts(t *testing.T) {
 func TestIndependentUnchosenSourceValidation(t *testing.T) {
 	for _, source := range []string{
 		"let result=false && missing;",
-		"let result=true || ((5%2)>0);",
-		"let result=false && ((true ? 1 : 2)>0);",
-		"if (true) {} else {print(1);}",
-		"if (false) {foreach(x in [1,2]) {print(x);}}",
+		"let result=true || ((true?[]:[])==null);",
+		"let result=false && ((false?[]:[])==null);",
+		"if (true) {} else {try{}catch(e){}}",
+		"if (false) {foreach(x in [1,2]) {try{}catch(e){}}}",
 		"if (false) {let x=missing;}",
 	} {
 		t.Run(source, func(t *testing.T) {
