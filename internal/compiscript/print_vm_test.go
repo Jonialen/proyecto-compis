@@ -42,6 +42,8 @@ func renderFrameValue(value frameValue) string {
 			return "<object " + x.layout.ID + ">"
 		case testClosure:
 			return "<function " + x.procedure.Label + ">"
+		case *testException:
+			return x.message
 		case *testList:
 			if seen[x] {
 				return "<cycle>"

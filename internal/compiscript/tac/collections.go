@@ -11,6 +11,9 @@ import (
 // declaration identity of its nominal leaf, including through nested lists.
 func listElement(list Operand) Operand {
 	kind, rest, _ := strings.Cut(list.Shape, "/")
+	if kind == "" {
+		kind = string(model.TypeError)
+	}
 	return Operand{Type: model.TypeKind(kind), Shape: rest, Class: list.Class}
 }
 
@@ -21,6 +24,9 @@ func (l *lowerer) elementAssignable(target, value Operand) bool {
 // Recover the homogeneous shape already accepted by semantics, including numeric
 // widening below arbitrary list nesting. Copy nodes rather than semantic types.
 func mergeListElementTypes(a, b model.Type) model.Type {
+	if a.Kind == model.TypeError || b.Kind == model.TypeError {
+		return model.Type{Kind: model.TypeError}
+	}
 	if a.Kind == "" || a.Kind == model.TypeNull || (a.Kind == model.TypeInteger && b.Kind == model.TypeFloat) {
 		return b
 	}
@@ -32,6 +38,9 @@ func mergeListElementTypes(a, b model.Type) model.Type {
 			e := mergeListElementTypes(*a.Element, *b.Element)
 			a.Element = &e
 		}
+	}
+	if a.Kind != "" && b.Kind != "" && a.Kind != b.Kind && b.Kind != model.TypeNull && !(numeric(a.Kind) && numeric(b.Kind)) {
+		return model.Type{Kind: model.TypeError}
 	}
 	return a
 }
@@ -72,15 +81,15 @@ func (l *lowerer) listLiteral(env *environment, n ast.ArrayExpr, expected Operan
 		expected = l.typedOperand(env, Operand{Type: model.TypeList}, t)
 		expected.Class = l.expressionClass(env, n)
 	}
-	if expected.Shape == "" {
-		return Operand{}, l.unsupported(n.Span, "list literal requires an element type")
-	}
 	element := listElement(expected)
 	values := make([]Operand, 0, len(n.Elements))
 	for _, e := range n.Elements {
 		value, ok := l.expressionExpected(env, e, element)
 		if !ok {
 			return Operand{}, false
+		}
+		if value.Type == model.TypeError && element.Type != model.TypeError {
+			value = l.checkedValue(element, value, e.SourceSpan())
 		}
 		if element.Type == model.TypeFloat {
 			value = l.widen(value, e.SourceSpan())
@@ -106,7 +115,7 @@ func (l *lowerer) indexTarget(env *environment, n ast.IndexExpr) (Operand, Opera
 	if !ok {
 		return Operand{}, Operand{}, false
 	}
-	if list.Type != model.TypeList || list.Shape == "" {
+	if list.Type != model.TypeList && list.Type != model.TypeError {
 		return Operand{}, Operand{}, l.unsupported(n.Span, "index requires a typed list")
 	}
 	list = l.freeze(list, n.Collection.SourceSpan())
@@ -114,7 +123,7 @@ func (l *lowerer) indexTarget(env *environment, n ast.IndexExpr) (Operand, Opera
 	if !ok {
 		return Operand{}, Operand{}, false
 	}
-	if index.Type != model.TypeInteger {
+	if index.Type != model.TypeInteger && index.Type != model.TypeError {
 		return Operand{}, Operand{}, l.unsupported(n.Span, "index requires an integer")
 	}
 	return list, index, true
@@ -153,6 +162,9 @@ func (l *lowerer) indexAssignment(env *environment, n ast.IndexExpr, e ast.Expre
 	if !ok {
 		return Operand{}, false
 	}
+	if value.Type == model.TypeError && element.Type != model.TypeError {
+		value = l.checkedValue(element, value, e.SourceSpan())
+	}
 	if element.Type == model.TypeFloat {
 		value = l.widen(value, e.SourceSpan())
 	}
@@ -170,7 +182,7 @@ func (l *lowerer) foreachStatement(env *environment, n ast.ForeachStmt) bool {
 	if !ok {
 		return false
 	}
-	if list.Type != model.TypeList || list.Shape == "" || n.Body == nil {
+	if (list.Type != model.TypeList && list.Type != model.TypeError) || n.Body == nil {
 		return l.unsupported(n.Span, "foreach requires a typed list and body")
 	}
 	list = l.freeze(list, n.Iterable.SourceSpan())

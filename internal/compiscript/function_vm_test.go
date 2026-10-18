@@ -37,6 +37,8 @@ type testFrame struct {
 	layouts      map[int]tac.EnvironmentLayout
 	classes      map[string]*tac.ClassLayout
 	output       *strings.Builder
+	handlers     []testHandler
+	pending      *testException
 }
 
 func (f *testFrame) globalStore() (map[string]frameValue, error) {
@@ -80,6 +82,9 @@ func (f *testFrame) mainTemporary(o tac.Operand) error {
 func frameLabels(tape []tac.Instruction) (map[string]int, error) {
 	labels := map[string]int{}
 	for pc, i := range tape {
+		if err := validateTestInstruction(i); err != nil {
+			return nil, err
+		}
 		if i.Op == tac.Label {
 			if _, exists := labels[i.Label]; exists || i.Label == "" {
 				return nil, fmt.Errorf("duplicate or empty label")
@@ -88,7 +93,7 @@ func frameLabels(tape []tac.Instruction) (map[string]int, error) {
 		}
 	}
 	for _, i := range tape {
-		if i.Op == tac.Jump || i.Op == tac.BranchTrue {
+		if i.Op == tac.Jump || i.Op == tac.BranchTrue || i.Op == tac.PushHandler {
 			if _, exists := labels[i.Label]; !exists {
 				return nil, fmt.Errorf("undefined label")
 			}
@@ -155,9 +160,9 @@ func (f *testFrame) read(o tac.Operand) (frameValue, error) {
 		value, found = f.cells[offset].(frameValue)
 	}
 	if !found || undefinedFrameValue(value) {
-		return value, fmt.Errorf("undefined slot: %s", o)
+		return value, languageFaultf("undefined slot: %s", o)
 	}
-	if value.kind != o.Type {
+	if value.kind != o.Type && o.Type != model.TypeError {
 		return value, fmt.Errorf("operand type mismatch: %s", o)
 	}
 	if err := f.checkObjectType(o, value); err != nil {
@@ -173,7 +178,7 @@ func (f *testFrame) write(o tac.Operand, value frameValue) error {
 	if err := f.checkObjectType(o, value); err != nil {
 		return err
 	}
-	if (o.Kind != tac.Symbol && o.Kind != tac.Temporary) || o.Type != value.kind {
+	if (o.Kind != tac.Symbol && o.Kind != tac.Temporary) || (o.Type != model.TypeError && o.Type != value.kind) {
 		return fmt.Errorf("invalid destination: %s", o)
 	}
 	if handled, e := f.writeEnvironment(o, value); handled {
@@ -203,6 +208,9 @@ func (f *testFrame) write(o tac.Operand, value frameValue) error {
 }
 
 func newTestFrame(p *tac.Procedure, globals map[string]frameValue, continuation frameContinuation) (*testFrame, error) {
+	if p.Frame.Cells != len(p.Frame.Slots) || p.Frame.Cells < 3 || p.Frame.Cells > 10000 {
+		return nil, fmt.Errorf("invalid frame size")
+	}
 	labels, err := frameLabels(p.Instructions)
 	if err != nil {
 		return nil, err
@@ -274,6 +282,9 @@ func runFunctionFramesCollected(program *tac.Program, output *strings.Builder) (
 		if _, exists := procedures[p.Label]; exists {
 			return values, fmt.Errorf("duplicate procedure")
 		}
+		if _, err := newTestFrame(p, globals, frameContinuation{caller: f}); err != nil {
+			return values, err
+		}
 		procedures[p.Label] = p
 	}
 	if err := f.loadClasses(program.Classes, procedures); err != nil {
@@ -296,240 +307,295 @@ func runFunctionFramesCollected(program *tac.Program, output *strings.Builder) (
 		}
 		i := f.tape[f.pc]
 		f.pc++
-		switch i.Op {
-		case tac.Print:
-			value, err := f.read(i.Left)
-			if err != nil {
-				return values, err
-			}
-			fmt.Fprintln(f.output, renderFrameValue(value))
-			continue
-		case tac.Declare:
-			if err := f.declareUndefined(i.Target); err != nil {
-				return values, err
-			}
-			continue
-		case tac.NewList, tac.ListLength, tac.LoadIndex, tac.StoreIndex:
-			if err := f.collectionInstruction(i); err != nil {
-				return values, err
-			}
-			continue
-		case tac.NewObject, tac.LoadField, tac.StoreField, tac.BindMethod:
-			if err := f.objectInstruction(i, procedures); err != nil {
-				return values, err
-			}
-			continue
-		case tac.EnterEnvironment:
-			if err := f.enterTestEnvironment(i.Environment); err != nil {
-				return values, err
-			}
-			continue
-		case tac.MakeClosure:
-			p, ok := procedures[i.Callee]
-			env := f.findEnvironment(i.Environment)
-			if !ok {
-				return values, fmt.Errorf("undefined closure procedure")
-			}
-			if env == nil || p.LexicalScope != i.Environment {
-				return values, fmt.Errorf("undefined closure environment")
-			}
-			if err := f.write(i.Target, frameValue{model.TypeFunction, testClosure{procedure: p, environment: env}}); err != nil {
-				return values, err
-			}
-			continue
-		case tac.Label:
-			continue
-		case tac.Jump:
-			f.pc = f.labels[i.Label]
-			continue
-		case tac.BranchTrue:
-			value, e := f.read(i.Left)
-			if e != nil {
-				return values, e
-			}
-			if value.kind != model.TypeBoolean {
-				return values, fmt.Errorf("nonboolean branch")
-			}
-			if value.value.(bool) {
-				f.pc = f.labels[i.Label]
-			}
-			continue
-		case tac.Call, tac.CallIndirect:
-			p, exists := procedures[i.Callee]
-			var lexical *testEnvironment
-			var receiver *testObject
-			if i.Op == tac.CallIndirect {
-				v, e := f.read(i.Left)
-				if e != nil {
-					return values, e
+		_, stepErr := func() (map[string]any, error) {
+			switch i.Op {
+			case tac.PushHandler:
+				f.handlers = append(f.handlers, testHandler{label: i.Label, environments: copyTestEnvironments(f.environments)})
+				return nil, nil
+			case tac.PopHandler:
+				if len(f.handlers) == 0 {
+					return values, fmt.Errorf("handler stack underflow")
 				}
-				closure, ok := v.value.(testClosure)
-				if v.kind != model.TypeFunction || !ok || closure.procedure == nil || closure.environment == nil {
-					return values, fmt.Errorf("invalid function value")
+				f.handlers = f.handlers[:len(f.handlers)-1]
+				return nil, nil
+			case tac.CatchException:
+				if f.pending == nil || i.Target.Type != model.TypeException {
+					return values, fmt.Errorf("missing pending exception")
 				}
-				p, lexical, exists = closure.procedure, closure.environment, true
-				receiver = closure.receiver
-				if err := checkClosureSignature(i, p); err != nil {
-					return values, err
-				}
-			} else if exists && p.LexicalScope != 0 {
-				lexical = f.findEnvironment(p.LexicalScope)
-			}
-			if !exists {
-				return values, fmt.Errorf("undefined procedure")
-			}
-			if len(i.Arguments) != len(p.Parameters) {
-				return values, fmt.Errorf("argument count mismatch")
-			}
-			if err := f.checkCallRequirements(p, lexical); err != nil {
+				err := f.write(i.Target, frameValue{model.TypeException, f.pending})
+				f.pending = nil
 				return values, err
-			}
-			// All arguments read from the caller BEFORE constructing the callee.
-			args := make([]frameValue, len(i.Arguments))
-			for j, arg := range i.Arguments {
-				args[j], err = f.read(arg)
+			case tac.CheckValue:
+				v, err := f.read(i.Left)
 				if err != nil {
 					return values, err
 				}
-			}
-			callee, e := newTestFrame(p, globals, frameContinuation{f, f.pc, i.Target})
-			if e != nil {
-				return values, e
-			}
-			callee.layouts, callee.lexical = f.layouts, lexical
-			callee.classes = f.classes
-			callee.output = f.output
-			callee.environments = map[int]*testEnvironment{}
-			if p.Receiver != nil {
-				if receiver == nil {
-					return values, fmt.Errorf("missing bound receiver")
+				v, err = f.checkedFrameValue(i.Target, v)
+				if err != nil {
+					return values, err
 				}
-				if e := callee.write(*p.Receiver, frameValue{model.TypeClass, receiver}); e != nil {
-					return values, e
+				return values, f.write(i.Target, v)
+			case tac.DynamicMember, tac.DynamicStore:
+				return values, f.dynamicMember(i, procedures)
+			case tac.Print:
+				value, err := f.read(i.Left)
+				if err != nil {
+					return values, err
 				}
-			} else if receiver != nil {
-				return values, fmt.Errorf("unexpected bound receiver")
-			}
-			for j, formal := range p.Parameters {
-				if e := callee.write(formal, args[j]); e != nil {
-					return values, e
+				fmt.Fprintln(f.output, renderFrameValue(value))
+				return nil, nil
+			case tac.Declare:
+				if err := f.declareUndefined(i.Target); err != nil {
+					return values, err
 				}
-			}
-			f = callee
-			continue
-		case tac.Return:
-			if f.procedure == nil {
-				return values, fmt.Errorf("return outside frame")
-			}
-			continuation, ok := f.cells[0].(frameContinuation)
-			if !ok || f.cells[1] != continuation.caller {
-				return values, fmt.Errorf("broken control/continuation")
-			}
-			if f.procedure.ResultKind == model.TypeNull {
-				if i.ReturnValue != nil || continuation.target.Kind != "" {
-					return values, fmt.Errorf("invalid null return")
+				return nil, nil
+			case tac.NewList, tac.ListLength, tac.LoadIndex, tac.StoreIndex:
+				if err := f.collectionInstruction(i); err != nil {
+					return values, err
 				}
-			} else {
-				if i.ReturnValue == nil {
-					return values, fmt.Errorf("missing scalar return")
+				return nil, nil
+			case tac.NewObject, tac.LoadField, tac.StoreField, tac.BindMethod:
+				if err := f.objectInstruction(i, procedures); err != nil {
+					return values, err
 				}
-				value, e := f.read(*i.ReturnValue)
+				return nil, nil
+			case tac.EnterEnvironment:
+				if err := f.enterTestEnvironment(i.Environment); err != nil {
+					return values, err
+				}
+				return nil, nil
+			case tac.MakeClosure:
+				p, ok := procedures[i.Callee]
+				env := f.findEnvironment(i.Environment)
+				if !ok {
+					return values, fmt.Errorf("undefined closure procedure")
+				}
+				if env == nil || p.LexicalScope != i.Environment {
+					return values, fmt.Errorf("undefined closure environment")
+				}
+				if err := f.write(i.Target, frameValue{model.TypeFunction, testClosure{procedure: p, environment: env}}); err != nil {
+					return values, err
+				}
+				return nil, nil
+			case tac.Label:
+				return nil, nil
+			case tac.Jump:
+				f.pc = f.labels[i.Label]
+				return nil, nil
+			case tac.BranchTrue:
+				value, e := f.read(i.Left)
 				if e != nil {
 					return values, e
 				}
-				if value.kind != f.procedure.ResultKind || f.procedure.Frame.Slots[3].Role != "result" {
-					return values, fmt.Errorf("invalid result cell")
+				if value.kind != model.TypeBoolean {
+					return values, languageFaultf("nonboolean branch")
 				}
-				if err := f.checkObjectType(tac.Operand{Type: f.procedure.ResultKind, Class: f.procedure.ResultClass, Shape: f.procedure.ResultShape}, value); err != nil {
+				if value.value.(bool) {
+					f.pc = f.labels[i.Label]
+				}
+				return nil, nil
+			case tac.Call, tac.CallIndirect:
+				p, exists := procedures[i.Callee]
+				var lexical *testEnvironment
+				var receiver *testObject
+				if i.Op == tac.CallIndirect {
+					v, e := f.read(i.Left)
+					if e != nil {
+						return values, e
+					}
+					closure, ok := v.value.(testClosure)
+					if v.kind != model.TypeFunction || !ok || closure.procedure == nil || closure.environment == nil {
+						return values, languageFaultf("invalid function value")
+					}
+					p, lexical, exists = closure.procedure, closure.environment, true
+					receiver = closure.receiver
+					if err := checkClosureSignature(i, p); !i.Guarded && err != nil {
+						return values, languageFaultf("%s", err)
+					}
+				} else if exists && p.LexicalScope != 0 {
+					lexical = f.findEnvironment(p.LexicalScope)
+				}
+				if !exists {
+					return values, fmt.Errorf("undefined procedure")
+				}
+				if len(i.Arguments) != len(p.Parameters) {
+					return values, languageFaultf("argument count mismatch")
+				}
+				if err := f.checkCallRequirements(p, lexical); err != nil {
 					return values, err
 				}
-				f.cells[3] = value
-				if e := continuation.caller.write(continuation.target, f.cells[3].(frameValue)); e != nil {
+				// All arguments read from the caller BEFORE constructing the callee.
+				args := make([]frameValue, len(i.Arguments))
+				for j, arg := range i.Arguments {
+					args[j], err = f.read(arg)
+					if err != nil {
+						return values, err
+					}
+				}
+				callee, e := newTestFrame(p, globals, frameContinuation{f, f.pc, i.Target})
+				if e != nil {
 					return values, e
 				}
+				callee.layouts, callee.lexical = f.layouts, lexical
+				callee.classes = f.classes
+				callee.output = f.output
+				callee.environments = map[int]*testEnvironment{}
+				if p.Receiver != nil {
+					if receiver == nil {
+						return values, fmt.Errorf("missing bound receiver")
+					}
+					if e := callee.write(*p.Receiver, frameValue{model.TypeClass, receiver}); e != nil {
+						return values, e
+					}
+				} else if receiver != nil {
+					return values, fmt.Errorf("unexpected bound receiver")
+				}
+				for j, formal := range p.Parameters {
+					if i.Guarded {
+						args[j], e = callee.checkedFrameValue(formal, args[j])
+						if e != nil {
+							return values, e
+						}
+					}
+					if e := callee.write(formal, args[j]); e != nil {
+						return values, e
+					}
+				}
+				f = callee
+				return nil, nil
+			case tac.Return:
+				if f.procedure == nil {
+					return values, fmt.Errorf("return outside frame")
+				}
+				continuation, ok := f.cells[0].(frameContinuation)
+				if !ok || f.cells[1] != continuation.caller {
+					return values, fmt.Errorf("broken control/continuation")
+				}
+				if f.procedure.ResultKind == model.TypeNull {
+					if i.ReturnValue != nil || (continuation.target.Kind != "" && continuation.target.Type != model.TypeError) {
+						return values, fmt.Errorf("invalid null return")
+					}
+					if continuation.target.Kind != "" {
+						if e := continuation.caller.write(continuation.target, frameValue{model.TypeNull, nil}); e != nil {
+							return values, e
+						}
+					}
+				} else {
+					if i.ReturnValue == nil {
+						return values, fmt.Errorf("missing scalar return")
+					}
+					value, e := f.read(*i.ReturnValue)
+					if e != nil {
+						return values, e
+					}
+					if value.kind != f.procedure.ResultKind || f.procedure.Frame.Slots[3].Role != "result" {
+						return values, fmt.Errorf("invalid result cell")
+					}
+					if err := f.checkObjectType(tac.Operand{Type: f.procedure.ResultKind, Class: f.procedure.ResultClass, Shape: f.procedure.ResultShape}, value); err != nil {
+						return values, err
+					}
+					f.cells[3] = value
+					if e := continuation.caller.write(continuation.target, f.cells[3].(frameValue)); e != nil {
+						return values, e
+					}
+				}
+				f = continuation.caller
+				f.pc = continuation.pc
+				return nil, nil
 			}
-			f = continuation.caller
-			f.pc = continuation.pc
-			continue
-		}
-		left, e := f.read(i.Left)
-		if e != nil {
-			return values, e
-		}
-		var right frameValue
-		if i.Right != nil {
-			right, e = f.read(*i.Right)
+			if i.Guarded {
+				return values, f.dynamicOperation(i)
+			}
+			left, e := f.read(i.Left)
 			if e != nil {
 				return values, e
 			}
-		}
-		// Both operands are now values; a destination can safely reuse either cell.
-		result := frameValue{kind: i.Target.Type}
-		switch i.Op {
-		case tac.Copy, tac.Negate:
-			if left.kind != result.kind && !(i.Op == tac.Copy && left.kind == model.TypeNull && (result.kind == model.TypeClass || result.kind == model.TypeString || result.kind == model.TypeList)) {
-				return values, fmt.Errorf("missing explicit conversion")
-			}
-		case tac.IntegerToFloat:
-			if left.kind != model.TypeInteger || result.kind != model.TypeFloat {
-				return values, fmt.Errorf("invalid widening")
-			}
-		case tac.LogicalNot:
-			if left.kind != model.TypeBoolean || result.kind != model.TypeBoolean {
-				return values, fmt.Errorf("invalid boolean negation")
-			}
-		default:
-			if i.Right == nil || (left.kind != right.kind && !((i.Op == tac.Equal || i.Op == tac.NotEqual) && (left.kind == model.TypeNull || right.kind == model.TypeNull))) {
-				return values, fmt.Errorf("invalid binary operand types")
-			}
-		}
-		switch i.Op {
-		case tac.Copy, tac.IntegerToFloat:
-			result.value = left.value
-		case tac.LogicalNot:
-			result.value = !left.value.(bool)
-		case tac.Negate:
-			result.value = -left.value.(float64)
-		case tac.Equal:
-			result.value = left.value == right.value
-		case tac.NotEqual:
-			result.value = left.value != right.value
-		case tac.Less:
-			result.value = left.value.(float64) < right.value.(float64)
-		case tac.LessEqual:
-			result.value = left.value.(float64) <= right.value.(float64)
-		case tac.Greater:
-			result.value = left.value.(float64) > right.value.(float64)
-		case tac.GreaterEqual:
-			result.value = left.value.(float64) >= right.value.(float64)
-		case tac.Add:
-			if left.kind == model.TypeString {
-				if left.value == nil || right.value == nil {
-					return values, fmt.Errorf("null string operand")
+			var right frameValue
+			if i.Right != nil {
+				right, e = f.read(*i.Right)
+				if e != nil {
+					return values, e
 				}
-				result.value = left.value.(string) + right.value.(string)
-			} else {
-				result.value = left.value.(float64) + right.value.(float64)
 			}
-		case tac.Subtract:
-			result.value = left.value.(float64) - right.value.(float64)
-		case tac.Multiply:
-			result.value = left.value.(float64) * right.value.(float64)
-		case tac.Divide:
-			if right.value.(float64) == 0 {
-				return values, fmt.Errorf("division by zero")
+			// Both operands are now values; a destination can safely reuse either cell.
+			result := frameValue{kind: i.Target.Type}
+			if i.Op == tac.Copy && result.kind == model.TypeError {
+				return values, f.write(i.Target, left)
 			}
-			result.value = left.value.(float64) / right.value.(float64)
-		case tac.Remainder:
-			if right.value.(float64) == 0 {
-				return values, fmt.Errorf("remainder by zero")
+			switch i.Op {
+			case tac.Copy, tac.Negate:
+				if left.kind != result.kind && !(i.Op == tac.Copy && left.kind == model.TypeNull && (result.kind == model.TypeClass || result.kind == model.TypeString || result.kind == model.TypeList)) {
+					return values, fmt.Errorf("missing explicit conversion")
+				}
+			case tac.IntegerToFloat:
+				if left.kind != model.TypeInteger || result.kind != model.TypeFloat {
+					return values, fmt.Errorf("invalid widening")
+				}
+			case tac.LogicalNot:
+				if left.kind != model.TypeBoolean || result.kind != model.TypeBoolean {
+					return values, fmt.Errorf("invalid boolean negation")
+				}
+			default:
+				if i.Right == nil || (left.kind != right.kind && !((i.Op == tac.Equal || i.Op == tac.NotEqual) && (left.kind == model.TypeNull || right.kind == model.TypeNull))) {
+					return values, fmt.Errorf("invalid binary operand types")
+				}
 			}
-			result.value = math.Mod(left.value.(float64), right.value.(float64))
-		default:
-			return values, fmt.Errorf("unknown opcode %s", i.Op)
-		}
-		if e := f.write(i.Target, result); e != nil {
-			return values, e
+			switch i.Op {
+			case tac.Copy, tac.IntegerToFloat:
+				result.value = left.value
+			case tac.LogicalNot:
+				result.value = !left.value.(bool)
+			case tac.Negate:
+				result.value = -left.value.(float64)
+			case tac.Equal:
+				result.value = left.value == right.value
+			case tac.NotEqual:
+				result.value = left.value != right.value
+			case tac.Less:
+				result.value = left.value.(float64) < right.value.(float64)
+			case tac.LessEqual:
+				result.value = left.value.(float64) <= right.value.(float64)
+			case tac.Greater:
+				result.value = left.value.(float64) > right.value.(float64)
+			case tac.GreaterEqual:
+				result.value = left.value.(float64) >= right.value.(float64)
+			case tac.Add:
+				if left.kind == model.TypeString {
+					if left.value == nil || right.value == nil {
+						return values, languageFaultf("null string operand")
+					}
+					result.value = left.value.(string) + right.value.(string)
+				} else {
+					result.value = left.value.(float64) + right.value.(float64)
+				}
+			case tac.Subtract:
+				result.value = left.value.(float64) - right.value.(float64)
+			case tac.Multiply:
+				result.value = left.value.(float64) * right.value.(float64)
+			case tac.Divide:
+				if right.value.(float64) == 0 {
+					return values, languageFaultf("division by zero")
+				}
+				result.value = left.value.(float64) / right.value.(float64)
+			case tac.Remainder:
+				if right.value.(float64) == 0 {
+					return values, languageFaultf("remainder by zero")
+				}
+				result.value = math.Mod(left.value.(float64), right.value.(float64))
+			default:
+				return values, fmt.Errorf("unknown opcode %s", i.Op)
+			}
+			if e := f.write(i.Target, result); e != nil {
+				return values, e
+			}
+			return nil, nil
+		}()
+		if stepErr != nil {
+			var handled bool
+			f, handled = deliverTestFault(f, stepErr)
+			if !handled {
+				return values, stepErr
+			}
 		}
 	}
 }

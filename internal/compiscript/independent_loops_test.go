@@ -65,13 +65,13 @@ func TestIndependentLoopContracts(t *testing.T) {
 func TestIndependentLoopAtomicErrors(t *testing.T) {
 	for _, source := range []string{
 		"break;", "continue;",
-		"let x=0;while(false){try{}catch(e){}}",
+		"let x=0;while(false){try{missing;}catch(e){}}",
 		"let x=0;for(;false;x=(true?[]:[])){}",
 		"let x=0;for(;false;(true?[]:[])){}",
-		"let x=0;while(false){try{x=1;}catch(e){}}",
+		"let x=0;while(false){try{x=missing;}catch(e){}}",
 		"for(let i=0;false;i=i+1){}let x=i;",
 		"do{let x=1;}while(x>0);",
-		"while(false){foreach(x in [1]){try{}catch(e){}}}",
+		"while(false){foreach(x in [1]){try{missing;}catch(e){}}}",
 		"while(false){switch(1){case 1:break;}}",
 	} {
 		t.Run(source, func(t *testing.T) {

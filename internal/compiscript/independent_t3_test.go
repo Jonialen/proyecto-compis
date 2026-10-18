@@ -89,7 +89,7 @@ func TestIndependentT3Rejections(t *testing.T) {
 		`let a=[1];let x=a[0.5];`,
 		`let a:integer[]=[];foreach(v in a){}let x=v;`,
 		`let a=[1];if(false){let x=a.length;}`,
-		`let a=[1];if(false){try{print(a[0]);}catch(e){}}`,
+		`let a=[1];if(false){try{print(a[missing]);}catch(e){}}`,
 		`class A{}let a=[[new A()]];{class A{}let b:A[][]=a;}`,
 	} {
 		t.Run(source, func(t *testing.T) {

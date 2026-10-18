@@ -7,6 +7,7 @@ import (
 
 type loopTargets struct {
 	exit, next string
+	handlers   int
 }
 
 func (l *lowerer) loopTransfer(span ast.Span, continuing bool) bool {
@@ -21,6 +22,7 @@ func (l *lowerer) loopTransfer(span ast.Span, continuing bool) bool {
 				continue
 			}
 		}
+		l.removeHandlers(l.loops[i].handlers, span)
 		l.control(Jump, target, span)
 		return true
 	}
@@ -33,7 +35,7 @@ func (l *lowerer) loopBody(env *environment, body *ast.BlockStmt, exit, next str
 
 // Loops and switches share one LIFO; switches have no continue destination.
 func (l *lowerer) transferBody(exit, next string, body func() bool) bool {
-	l.loops = append(l.loops, loopTargets{exit: exit, next: next})
+	l.loops = append(l.loops, loopTargets{exit: exit, next: next, handlers: l.handlers})
 	defer func() { l.loops = l.loops[:len(l.loops)-1] }()
 	return body()
 }

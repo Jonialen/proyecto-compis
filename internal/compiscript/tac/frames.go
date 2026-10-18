@@ -92,7 +92,7 @@ func (l *lowerer) layout(p *Procedure) bool {
 				continue
 			}
 			o := l.storageIdentity(symbolOperand(scope.ID, symbol))
-			if !storedValue(o.Type) || (symbol.Kind != model.SymbolVariable && symbol.Kind != model.SymbolConstant) {
+			if !storedValue(o.Type) || (symbol.Kind != model.SymbolVariable && symbol.Kind != model.SymbolConstant && symbol.Kind != model.SymbolCatch) {
 				return l.unsupported(symbol.Span, "unsupported function-owned binding")
 			}
 			if symbol.Type.Kind == model.TypeList {

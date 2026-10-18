@@ -65,12 +65,12 @@ func TestCompileFunctionAtomicRejectionRegressions(t *testing.T) {
 	for _, tt := range []struct {
 		name, source, message string
 	}{
-		{"shadow", "function f():integer { return 1; } { let f=2; f(); }", ""},
-		{"untyped parameter", "function f(x):integer { return 1; }", "unsupported function signature"},
-		{"list parameter unsupported body", "function f(x:string[]):integer { try{}catch(e){} return 1; }", "unsupported statement"},
-		{"unused unsupported body", "function f() { try{}catch(e){} }", "unsupported statement"},
-		{"unknown declaration", "function f() {} let x;", "only integer, float and boolean declarations are supported"},
-		{"unknown call return", "function f(x) {} function g() { return f(null); }", "unsupported function signature"},
+		{"invalid shadow", "function f():integer { return 1; } { const f=2; f=3; }", ""},
+		{"untyped parameter invalid body", "function f(x):integer { return missing; }", "unresolved name missing"},
+		{"list parameter invalid body", "function f(x:string[]):integer { try{missing;}catch(e){} return 1; }", "unresolved name missing"},
+		{"unused invalid body", "function f() { try{missing;}catch(e){} }", "unresolved name missing"},
+		{"invalid declaration", "function f() {} let x=missing;", "unresolved name missing"},
+		{"invalid call return", "function f(x) {} function g() { return f(missing); }", "unresolved name missing"},
 		{"early read", "let x=f(); let g=2; function f():integer { return g; }", "call requires initialized global binding s1.g"},
 		{"early transitive read", "function a():integer { return b(); } let x=a(); let g=2; function b():integer { return g; }", "call requires initialized global binding s1.g"},
 		{"early write", "f(); let g=2; function f() { g=3; }", "call requires initialized global binding s1.g"},
@@ -78,9 +78,9 @@ func TestCompileFunctionAtomicRejectionRegressions(t *testing.T) {
 		{"argument type", "function f(a:integer):integer { return a; } let x=f(true);", ""},
 		{"missing return", "function f():integer { let x=2; }", ""},
 		{"duplicate parameter", "function f(a:integer,a:integer):integer { return a; }", ""},
-		{"unused unknown declaration", "function f() {} function g() { let x; }", "only integer, float and boolean declarations are supported"},
-		{"unknown operand", "function f(x) {} let x=f(null)==null;", "unsupported function signature"},
-		{"parameter shadows callee", "function f():integer { return 1; } function g(f:integer):integer { return f(); }", ""},
+		{"unused invalid declaration", "function f() {} function g() { let x=missing; }", "unresolved name missing"},
+		{"invalid operand", "function f(x) {} let x=f(missing)==null;", "unresolved name missing"},
+		{"parameter shadows callee with invalid assignment", "function f():integer { return 1; } function g(f:integer):integer { f=true;return f; }", ""},
 		{"conservative dependency", "let x=f(); let g=2; function f():integer { if(false) { return g; } return 1; }", "call requires initialized global binding s1.g"},
 		{"syntax error", "function f( {", ""},
 	} {

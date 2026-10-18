@@ -153,9 +153,9 @@ func (f *testFrame) readEnvironment(o tac.Operand) (bool, frameValue, error) {
 	}
 	v, ok := env.cells[o.Value]
 	if !ok || undefinedFrameValue(v) {
-		return true, v, fmt.Errorf("undefined environment cell: %s", o)
+		return true, v, languageFaultf("undefined environment cell: %s", o)
 	}
-	if v.kind != o.Type {
+	if v.kind != o.Type && o.Type != model.TypeError {
 		return true, v, fmt.Errorf("environment type mismatch")
 	}
 	if err := f.checkObjectType(o, v); err != nil {
@@ -238,8 +238,8 @@ func (f *testFrame) checkCallRequirements(p *tac.Procedure, lexical *testEnviron
 	}
 	for _, o := range p.Globals {
 		v, ok := f.globals[o.Value]
-		if !ok || v.kind != o.Type {
-			return fmt.Errorf("call requires initialized global binding %s", o.Value)
+		if !ok || (v.kind != o.Type && o.Type != model.TypeError) {
+			return languageFaultf("call requires initialized global binding %s", o.Value)
 		}
 	}
 	for _, o := range p.Captures {
@@ -254,8 +254,8 @@ func (f *testFrame) checkCallRequirements(p *tac.Procedure, lexical *testEnviron
 			return fmt.Errorf("undefined capture environment")
 		}
 		v, ok := env.cells[o.Value]
-		if !ok || v.kind != o.Type {
-			return fmt.Errorf("call requires initialized captured binding %s", o.Value)
+		if !ok || (v.kind != o.Type && o.Type != model.TypeError) {
+			return languageFaultf("call requires initialized captured binding %s", o.Value)
 		}
 	}
 	return nil

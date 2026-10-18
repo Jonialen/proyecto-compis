@@ -21,6 +21,9 @@ func (l *lowerer) arguments(env *environment, expressions ast.Expressions, param
 		if !ok {
 			return nil, false
 		}
+		if value.Type == model.TypeError && expected.Type != model.TypeError {
+			value = l.checkedValue(expected, value, expression.SourceSpan())
+		}
 		if params[i].Kind == model.TypeFloat {
 			value = l.widen(value, expression.SourceSpan())
 		}
@@ -47,7 +50,15 @@ func (l *lowerer) expressionType(env *environment, expression ast.Expression) mo
 	case ast.PropertyAssignExpr:
 		return l.expressionType(env, ast.PropertyAccessExpr{Receiver: n.Receiver, Name: n.Name})
 	case ast.TernaryExpr:
-		return mergeListElementTypes(l.expressionType(env, n.Then), l.expressionType(env, n.Else))
+		a, b := l.expressionType(env, n.Then), l.expressionType(env, n.Else)
+		if a.Kind == model.TypeClass && b.Kind == model.TypeClass {
+			left := Operand{Type: model.TypeClass, Class: l.expressionClass(env, n.Then)}
+			right := Operand{Type: model.TypeClass, Class: l.expressionClass(env, n.Else)}
+			if !l.assignable(left, right) && !l.assignable(right, left) {
+				return model.Type{Kind: model.TypeError}
+			}
+		}
+		return mergeListElementTypes(a, b)
 	case ast.ArrayExpr:
 		var element model.Type
 		for _, e := range n.Elements {
@@ -87,6 +98,9 @@ func (l *lowerer) expressionType(env *environment, expression ast.Expression) mo
 			return model.Type{Kind: model.TypeBoolean}
 		}
 		a, b := l.expressionType(env, n.Left), l.expressionType(env, n.Right)
+		if a.Kind == model.TypeError || b.Kind == model.TypeError {
+			return model.Type{Kind: model.TypeError}
+		}
 		if n.Operator == "/" || b.Kind == model.TypeFloat {
 			return model.Type{Kind: model.TypeFloat}
 		}
@@ -124,7 +138,7 @@ func (l *lowerer) expressionType(env *environment, expression ast.Expression) mo
 			return *t.Result
 		}
 	}
-	return model.Type{}
+	return model.Type{Kind: model.TypeError}
 }
 
 // Nominal origins travel with private bindings and function signatures. These
@@ -258,7 +272,7 @@ func (l *lowerer) storageIdentity(operand Operand) Operand {
 // Reference storage is separate from numeric arithmetic. Nominal identities are
 // semantic scope-qualified class declarations, never merely the kind "class".
 func callValue(kind model.TypeKind) bool {
-	return scalar(kind) || kind == model.TypeString || kind == model.TypeClass || kind == model.TypeList
+	return scalar(kind) || kind == model.TypeError || kind == model.TypeException || kind == model.TypeString || kind == model.TypeClass || kind == model.TypeList
 }
 
 func (l *lowerer) typedOperand(env *environment, o Operand, t model.Type) Operand {
@@ -279,6 +293,9 @@ func (l *lowerer) typedOperand(env *environment, o Operand, t model.Type) Operan
 }
 
 func (l *lowerer) assignable(target, value Operand) bool {
+	if target.Type == model.TypeError || value.Type == model.TypeError {
+		return true
+	}
 	if value.Type == model.TypeNull {
 		return target.Type == model.TypeNull || target.Type == model.TypeClass || target.Type == model.TypeString || target.Type == model.TypeList
 	}
@@ -286,6 +303,9 @@ func (l *lowerer) assignable(target, value Operand) bool {
 		return false
 	}
 	if target.Type == model.TypeList {
+		if target.Shape == "" || value.Shape == "" {
+			return true // Generic containers are checked at runtime typed boundaries.
+		}
 		return target.Shape != "" && value.Shape != "" && l.elementAssignable(listElement(target), listElement(value))
 	}
 	if target.Type != model.TypeClass {

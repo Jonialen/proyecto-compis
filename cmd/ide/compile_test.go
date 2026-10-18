@@ -22,7 +22,7 @@ func TestCompileFacadeParity(t *testing.T) {
 		{"lexical", "@", "lexical"},
 		{"syntax", "let x: integer = ;", "syntax"},
 		{"semantic", "let x: integer = true;", "semantic"},
-		{"codegen", "try{}catch(e){}", "codegen"},
+		{"codegen", "function a():integer{return b();}let x=a();let g=1;function b():integer{return g;}", "codegen"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			body, _ := json.Marshal(map[string]string{"source": tt.source})

@@ -64,6 +64,12 @@ const (
 	ListLength       Opcode = "listLength"
 	LoadIndex        Opcode = "loadIndex"
 	StoreIndex       Opcode = "storeIndex"
+	CheckValue       Opcode = "checkValue"
+	DynamicMember    Opcode = "dynamicMember"
+	DynamicStore     Opcode = "dynamicStore"
+	PushHandler      Opcode = "pushHandler"
+	PopHandler       Opcode = "popHandler"
+	CatchException   Opcode = "catchException"
 )
 
 type Instruction struct {
@@ -84,10 +90,23 @@ type Instruction struct {
 	Receiver    *Operand    `json:"receiver,omitempty"`
 	TypeClasses []string    `json:"typeClasses,omitempty"`
 	Index       *Operand    `json:"index,omitempty"`
+	Guarded     bool        `json:"guarded,omitempty"`
 }
 
 func (i Instruction) String() string {
 	switch i.Op {
+	case PushHandler:
+		return "pushHandler " + i.Label
+	case PopHandler:
+		return "popHandler"
+	case CatchException:
+		return "catchException " + i.Target.String()
+	case CheckValue:
+		return fmt.Sprintf("%s = checkValue %s", i.Target, i.Left)
+	case DynamicMember:
+		return fmt.Sprintf("%s = dynamicMember %s.%s", i.Target, i.Left, i.Member)
+	case DynamicStore:
+		return fmt.Sprintf("dynamicStore %s.%s = %s", i.Left, i.Member, i.Right)
 	case Print:
 		return "print " + i.Left.String()
 	case Declare:

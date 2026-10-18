@@ -85,7 +85,7 @@ var collectionRejections = []string{
 	`let a=[1];let x=a[-1];`, `let a=[1];let x=a[true];`, `let a=[];`,
 	`let a=[1,"x"];`, `foreach(v in 1){}`, `foreach(v in [1]){}let x=v;`,
 	`let a=[1];let x=a.length;`, `let a=[1];if(false){let x=[];}`,
-	`let a=[1];function bad(){try{print(a[0]);}catch(e){}}`,
+	`let a=[1];function bad(){try{print(a[missing]);}catch(e){}}`,
 }
 
 func TestCollectionAtomicRejection(t *testing.T) {

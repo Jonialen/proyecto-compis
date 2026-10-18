@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"genanalex/internal/compiscript/model"
 	"genanalex/internal/compiscript/tac"
+	"strings"
 )
 
 type testObject struct {
@@ -30,8 +31,17 @@ func (f *testFrame) classIs(actual, expected string) bool {
 func (f *testFrame) checkObjectType(o tac.Operand, v frameValue) error {
 	if o.Type == model.TypeList && v.value != nil {
 		list, ok := v.value.(*testList)
-		if !ok || list == nil || !f.listTypeFits(o, list.typeOf) {
-			return fmt.Errorf("list type mismatch")
+		if !ok || list == nil {
+			return languageFaultf("list type mismatch")
+		}
+		if o.Shape == "" || strings.Contains(o.Shape, string(model.TypeError)) {
+			return nil
+		}
+		if list.typeOf.Shape == "" || strings.Contains(list.typeOf.Shape, string(model.TypeError)) {
+			return f.genericListFits(o, list)
+		}
+		if !f.listTypeFits(o, list.typeOf) {
+			return languageFaultf("list type mismatch")
 		}
 		return nil
 	}
@@ -40,7 +50,7 @@ func (f *testFrame) checkObjectType(o tac.Operand, v frameValue) error {
 	}
 	object, ok := v.value.(*testObject)
 	if !ok || object == nil || object.layout == nil || !f.classIs(object.layout.ID, o.Class) {
-		return fmt.Errorf("nominal object type mismatch")
+		return languageFaultf("nominal object type mismatch")
 	}
 	return nil
 }
@@ -122,11 +132,11 @@ func (f *testFrame) objectInstruction(i tac.Instruction, procedures map[string]*
 		return err
 	}
 	if v.value == nil {
-		return fmt.Errorf("null receiver")
+		return languageFaultf("null receiver")
 	}
 	object, ok := v.value.(*testObject)
 	if !ok || v.kind != model.TypeClass || !f.classIs(object.layout.ID, i.Class) {
-		return fmt.Errorf("invalid object receiver")
+		return languageFaultf("invalid object receiver")
 	}
 	if i.Op == tac.BindMethod {
 		label := i.Callee
@@ -164,7 +174,7 @@ func (f *testFrame) objectInstruction(i tac.Instruction, procedures map[string]*
 	if i.Op == tac.LoadField {
 		value, ok := object.fields[*i.Offset]
 		if !ok {
-			return fmt.Errorf("undefined field %s", field.ID)
+			return languageFaultf("undefined field %s", field.ID)
 		}
 		return f.write(i.Target, value)
 	}
@@ -177,17 +187,17 @@ func (f *testFrame) objectInstruction(i tac.Instruction, procedures map[string]*
 	}
 	if !field.Mutable {
 		if f.procedure == nil || f.procedure.Label != f.classes[field.Owner].Initializer {
-			return fmt.Errorf("immutable field")
+			return languageFaultf("immutable field")
 		}
 		if _, set := object.fields[*i.Offset]; set {
-			return fmt.Errorf("immutable field already initialized")
+			return languageFaultf("immutable field already initialized")
 		}
 	}
 	if value.kind == model.TypeNull && (field.Type.Kind == model.TypeClass || field.Type.Kind == model.TypeString || field.Type.Kind == model.TypeList) {
 		value.kind = field.Type.Kind
 	}
-	if value.kind != field.Type.Kind {
-		return fmt.Errorf("field type mismatch")
+	if value.kind != field.Type.Kind && field.Type.Kind != model.TypeError {
+		return languageFaultf("field type mismatch")
 	}
 	if err := f.checkObjectType(tac.Operand{Type: field.Type.Kind, Class: field.Class, Shape: field.Shape}, value); err != nil {
 		return err

@@ -65,8 +65,8 @@ func (l *lowerer) predeclare(global *environment, statements ast.Statements) boo
 		if len(found.Type.Params) != len(n.Parameters) || (!callValue(found.Type.Result.Kind) && found.Type.Result.Kind != model.TypeNull) {
 			return l.unsupported(n.Span, "unsupported function signature")
 		}
-		for i, parameter := range found.Type.Params {
-			if n.Parameters[i].Type == nil || !callValue(parameter.Kind) {
+		for _, parameter := range found.Type.Params {
+			if !callValue(parameter.Kind) {
 				return l.unsupported(n.Span, "unsupported function signature")
 			}
 		}
@@ -163,11 +163,14 @@ func (l *lowerer) returnStatement(env *environment, n ast.ReturnStmt) bool {
 			if !ok {
 				return false
 			}
-			if value.Type != model.TypeNull {
+			if value.Type == model.TypeError {
+				value = l.checkedValue(Operand{Type: model.TypeNull}, value, n.Span)
+			} else if value.Type != model.TypeNull {
 				return l.unsupported(n.Span, "null-result procedures only return null or no value")
 			}
 			l.pool.release(value)
 		}
+		l.removeHandlers(0, n.Span)
 		l.program.Instructions = append(l.program.Instructions, Instruction{Op: Return, Span: n.Span})
 		return true
 	}
@@ -181,6 +184,9 @@ func (l *lowerer) returnStatement(env *environment, n ast.ReturnStmt) bool {
 	value, ok := l.expressionExpected(env, n.Value, expected)
 	if !ok {
 		return false
+	}
+	if value.Type == model.TypeError || l.handlers != 0 {
+		value = l.checkedValue(expected, value, n.Value.SourceSpan())
 	}
 	if kind == model.TypeFloat {
 		value = l.widen(value, n.Value.SourceSpan())
@@ -196,6 +202,7 @@ func (l *lowerer) returnStatement(env *environment, n ast.ReturnStmt) bool {
 		l.program.Instructions = append(l.program.Instructions, Instruction{Op: Copy, Target: target, Left: value, Span: n.Span})
 		value = target
 	}
+	l.removeHandlers(0, n.Span)
 	l.program.Instructions = append(l.program.Instructions, Instruction{Op: Return, ReturnValue: &value, Span: n.Span})
 	l.pool.release(value)
 	return true

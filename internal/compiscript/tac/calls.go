@@ -16,7 +16,7 @@ func statementCall(expression ast.Expression) (ast.CallExpr, bool) {
 func (l *lowerer) call(env *environment, n ast.CallExpr, statement bool) (Operand, bool) {
 	identifier, direct := n.Callee.(ast.IdentifierExpr)
 	bound, found := env.lookup(identifier.Name)
-	if direct && (!found || (bound.function == nil && bound.typeOf.Kind != model.TypeFunction)) {
+	if direct && !found {
 		return Operand{}, l.unsupported(n.Span, "only direct global function calls are supported")
 	}
 	f := bound.function
@@ -29,7 +29,7 @@ func (l *lowerer) call(env *environment, n ast.CallExpr, statement bool) (Operan
 	}
 	typeClasses := l.expressionTypeClasses(env, n.Callee)
 	if signature.Result == nil {
-		return Operand{}, l.unsupported(n.Span, "missing function value signature")
+		return l.dynamicCall(env, n)
 	}
 	kind := signature.Result.Kind
 	if !callValue(kind) && kind != model.TypeNull {

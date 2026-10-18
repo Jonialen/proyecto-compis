@@ -24,7 +24,7 @@ var acceptanceRejected = []struct{ name, source, phase string }{
 	{"missing for body", "for(let i=0; i<2; i=i+1)", "syntax"},
 	{"const root", "const rows:integer[][]=[[1]];rows[0][0]=2;", "semantic"},
 	{"nested shape", "let rows:integer[][]=[[1]];rows[0]=true;", "semantic"},
-	{"unsupported dead code", "let a=[1];if(false){try{print(a[0]);}catch(e){}}", "codegen"},
+	{"invalid dead code", "let a=[1];if(false){try{print(a[missing]);}catch(e){}}", "semantic"},
 }
 
 func TestAcceptanceAtomicRecovery(t *testing.T) {

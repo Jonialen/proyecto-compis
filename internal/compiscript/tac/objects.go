@@ -158,24 +158,11 @@ func (l *lowerer) prepareClass(c *classInfo) bool {
 				if symbol.Span != member.SourceSpan() || symbol.Kind != model.SymbolField {
 					continue
 				}
-				var initializer ast.Expression
-				switch n := member.(type) {
-				case ast.VarDeclStmt:
-					if n.Type == nil {
-						initializer = n.Initializer
-					}
-				case ast.ConstDeclStmt:
-					if n.Type == nil {
-						initializer = n.Value
-					}
-				}
-				if initializer != nil && l.expressionType(c.env, initializer).Kind == model.TypeNull {
-					symbol.Type = model.Type{Kind: model.TypeNull, Name: "null"}
-				}
-				// An unannotated field can depend on an active outer alias that
-				// does not exist during class predeclaration. Resolve only a known
-				// null type at the class's source binding point, never guess defaults.
-				if !storedValue(symbol.Type.Kind) && !(symbol.Type.Kind == model.TypeError && initializer != nil) {
+				// Semantic TypeError on an unannotated field is unknown storage,
+				// not an inferred constraint from its initializer. Keep this exact
+				// declaration contract in every inherited layout copy. In particular
+				// null initializes a value without making the field null-only.
+				if !storedValue(symbol.Type.Kind) {
 					return l.unsupported(symbol.Span, "unsupported field type")
 				}
 				o := l.typedOperand(c.env, Operand{Type: symbol.Type.Kind}, symbol.Type)
@@ -198,9 +185,6 @@ func (l *lowerer) classBody(env *environment, n ast.ClassDeclStmt) bool {
 		return l.unsupported(n.Span, "missing class identity")
 	}
 	c.env.parent = env.fork()
-	if !l.resolveNullFields(c) {
-		return false
-	}
 	result := model.Type{Kind: model.TypeNull, Name: "null"}
 	f := &functionInfo{label: c.layout.Initializer, typeOf: model.Type{Kind: model.TypeFunction, Result: &result}, globals: map[string]Operand{}, captures: map[string]Operand{}, definingScope: c.owner, scopeID: c.layout.ScopeID}
 	l.registry.ordered = append(l.registry.ordered, f)
@@ -250,49 +234,6 @@ func (l *lowerer) classBody(env *environment, n ast.ClassDeclStmt) bool {
 	return true
 }
 
-func (l *lowerer) resolveNullFields(c *classInfo) bool {
-	for _, field := range c.layout.Fields {
-		if field.Type.Kind != model.TypeError {
-			continue
-		}
-		var initializer ast.Expression
-		if field.Owner == c.layout.ID {
-			for _, member := range c.declaration.Members {
-				if member.SourceSpan() != field.Span {
-					continue
-				}
-				switch n := member.(type) {
-				case ast.VarDeclStmt:
-					if n.Type == nil {
-						initializer = n.Initializer
-					}
-				case ast.ConstDeclStmt:
-					if n.Type == nil {
-						initializer = n.Value
-					}
-				}
-			}
-		}
-		if initializer == nil || l.expressionType(c.env, initializer).Kind != model.TypeNull {
-			return l.unsupported(field.Span, "unsupported field type")
-		}
-		// Layout copies for inherited fields retain offsets and owners while
-		// sharing this resolved declaration type. Semantic snapshots stay intact.
-		for _, owner := range l.registry.classes {
-			for i := range owner.layout.Fields {
-				if owner.layout.Fields[i].ID == field.ID {
-					owner.layout.Fields[i].Type = model.Type{Kind: model.TypeNull, Name: "null"}
-				}
-			}
-			if b, ok := owner.env.active[field.Name]; ok && b.field != nil && b.field.ID == field.ID {
-				b.typeOf = model.Type{Kind: model.TypeNull, Name: "null"}
-				owner.env.active[field.Name] = b
-			}
-		}
-	}
-	return true
-}
-
 func (l *lowerer) thisValue(env *environment, span ast.Span) (Operand, bool) {
 	b, ok := env.lookup("$this")
 	if !ok {
@@ -325,6 +266,9 @@ func (l *lowerer) property(env *environment, receiver ast.Expression, name strin
 		return Operand{}, false
 	}
 	field, method := l.member(o, name)
+	if o.Type == model.TypeError {
+		return l.dynamicProperty(o, name, span), true
+	}
 	if field != nil {
 		target := l.pool.acquire(field.Type.Kind)
 		target.Class = field.Class
@@ -351,6 +295,18 @@ func (l *lowerer) propertyStore(env *environment, receiver ast.Expression, name 
 		return Operand{}, false
 	}
 	field, _ := l.member(o, name)
+	if o.Type == model.TypeError {
+		o = l.freeze(o, receiver.SourceSpan())
+		v, ok := l.expression(env, value)
+		if !ok {
+			return Operand{}, false
+		}
+		target := l.pool.acquire(model.TypeError)
+		l.program.Instructions = append(l.program.Instructions, Instruction{Op: DynamicStore, Target: target, Left: o, Right: &v, Member: name, Span: span})
+		l.pool.release(o)
+		l.pool.release(v)
+		return target, true
+	}
 	if field == nil {
 		return Operand{}, l.unsupported(span, "assignment requires a field")
 	}
@@ -365,6 +321,9 @@ func (l *lowerer) fieldStore(env *environment, receiver Operand, field FieldLayo
 	v, ok := l.expressionExpected(env, value, expected)
 	if !ok {
 		return Operand{}, false
+	}
+	if v.Type == model.TypeError && expected.Type != model.TypeError {
+		v = l.checkedValue(expected, v, value.SourceSpan())
 	}
 	if field.Type.Kind == model.TypeFloat {
 		v = l.widen(v, value.SourceSpan())

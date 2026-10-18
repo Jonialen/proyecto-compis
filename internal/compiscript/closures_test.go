@@ -70,20 +70,20 @@ func TestClosureAtomicRejections(t *testing.T) {
 	for _, tt := range []struct{ name, source, message string }{
 		{"early captured read", `function outer():integer{let x=read(); let n=8; function read():integer{return n;} return x;} let x=outer();`, "call requires initialized captured binding"},
 		{"early captured write", `function outer(){set(); let n=8; function set(){n=9;}} outer();`, "call requires initialized captured binding"},
-		{"uncalled nested unsupported body", `function outer(){function bad(){try{}catch(e){}}}`, "unsupported statement"},
-		{"unreachable nested unsupported body", `function outer(){if(false){function bad(){try{}catch(e){}}}}`, "unsupported statement"},
-		{"nested signature", `function outer(){function bad(n){return;}}`, "unsupported function signature"},
-		{"alias initializer unsupported graph", `function f():integer{return 1;} let alias=f; function unused(){try{}catch(e){}} let x=alias();`, "unsupported statement"},
-		{"alias unknown result expression", `function f(){} let alias=f; function g(x){}`, "unsupported function signature"},
+		{"uncalled nested invalid body", `function outer(){function bad(){try{missing;}catch(e){}}}`, "unresolved name missing"},
+		{"unreachable nested invalid body", `function outer(){if(false){function bad(){try{missing;}catch(e){}}}}`, "unresolved name missing"},
+		{"nested invalid signature", `function outer(){function bad(n,n){return;}}`, "duplicate"},
+		{"alias initializer invalid graph", `function f():integer{return 1;} let alias=f; function unused(){try{missing;}catch(e){}} let x=alias();`, "unresolved name missing"},
+		{"alias invalid result expression", `function f(){} let alias=f; function g(x){missing;}`, "unresolved name missing"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			input := []byte(tt.source)
 			before := append([]byte(nil), input...)
 			a := Analyze(input)
-			if len(a.Diagnostics) != 0 {
-				t.Fatalf("fixture analysis: %+v", a.Diagnostics)
-			}
 			r := Compile(input)
+			if len(a.Diagnostics) != 0 && !reflect.DeepEqual(a.Diagnostics, r.Diagnostics) {
+				t.Fatalf("semantic diagnostics changed: %v vs %v", a.Diagnostics, r.Diagnostics)
+			}
 			if r.TAC != nil || len(r.Diagnostics) != 1 || !strings.Contains(r.Diagnostics[0].Message, tt.message) || !bytes.Equal(input, before) || !reflect.DeepEqual(a.Scopes, r.Scopes) {
 				t.Fatalf("non-atomic rejection: %+v", r)
 			}

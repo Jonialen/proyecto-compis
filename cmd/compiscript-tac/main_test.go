@@ -128,7 +128,7 @@ func TestCLICompilesNumericSources(t *testing.T) {
 }
 
 func TestCLICompilationErrorsHaveNoPartialTAC(t *testing.T) {
-	for _, source := range []string{"let x=1; try{}catch(e){}", "let x=missing;", "function f()", "let x;", "switch(true){default:let a=1;} let b=a;"} {
+	for _, source := range []string{"let x=1; try{missing;}catch(e){}", "let x=missing;", "function f()", "let x=;", "switch(true){default:let a=1;} let b=a;"} {
 		t.Run(source, func(t *testing.T) {
 			path := fixture(t, source)
 			code, out, errOut := execute(t, path)
@@ -230,18 +230,18 @@ func TestCLISwitchSources(t *testing.T) {
 	}
 }
 
-func TestCLIRejectsSkippedUnsupportedCode(t *testing.T) {
+func TestCLIRejectsSkippedInvalidCode(t *testing.T) {
 	for _, tt := range []struct{ source, wantError string }{
-		{"function f(a){return;}", "codegen TAC_UNSUPPORTED at 1:1: unsupported function signature\n"},
-		{"function f(){try{}catch(e){}}", "codegen TAC_UNSUPPORTED at 1:14: unsupported statement in numeric TAC\n"},
-		{"function f(){} function g(x){}", "codegen TAC_UNSUPPORTED at 1:16: unsupported function signature\n"},
-		{"if(false){try{}catch(e){}}", "codegen TAC_UNSUPPORTED at 1:11: unsupported statement in numeric TAC\n"},
-		{"if(false){function f(a){}}", "codegen TAC_UNSUPPORTED at 1:11: unsupported function signature\n"},
-		{"while(false){try{}catch(e){}}", "codegen TAC_UNSUPPORTED at 1:14: unsupported statement in numeric TAC\n"},
-		{"for(;false;true?1:\"x\"){}", "codegen TAC_UNSUPPORTED at 1:19: numeric store type mismatch\n"},
+		{"function f(a){missing;return;}", "semantic SEM_UNRESOLVED at 1:15: unresolved name missing\n"},
+		{"function f(){try{missing;}catch(e){}}", "semantic SEM_UNRESOLVED at 1:18: unresolved name missing\n"},
+		{"function f(){} function g(x){missing;}", "semantic SEM_UNRESOLVED at 1:30: unresolved name missing\n"},
+		{"if(false){try{missing;}catch(e){}}", "semantic SEM_UNRESOLVED at 1:15: unresolved name missing\n"},
+		{"if(false){function f(a){missing;}}", "semantic SEM_UNRESOLVED at 1:25: unresolved name missing\n"},
+		{"while(false){try{missing;}catch(e){}}", "semantic SEM_UNRESOLVED at 1:18: unresolved name missing\n"},
+		{"for(;false;true?1:missing){}", "semantic SEM_UNRESOLVED at 1:19: unresolved name missing\n"},
 		{"break;", "semantic SEM_TRANSFER at 1:1: break outside loop or switch\n"},
 		{"continue;", "semantic SEM_TRANSFER at 1:1: continue outside loop\n"},
-		{"switch(true){case true:break; default:try{}catch(e){}}", "codegen TAC_UNSUPPORTED at 1:39: unsupported statement in numeric TAC\n"},
+		{"switch(true){case true:break; default:try{missing;}catch(e){}}", "semantic SEM_UNRESOLVED at 1:43: unresolved name missing\n"},
 	} {
 		t.Run(tt.source, func(t *testing.T) {
 			path := fixture(t, tt.source)

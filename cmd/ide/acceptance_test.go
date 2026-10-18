@@ -304,7 +304,7 @@ func TestMixedAcceptanceAPI(t *testing.T) {
 		{"for", "for(let i=0; i<2; i=i+1)", "syntax"},
 		{"const", "const rows:integer[][]=[[1]];rows[0][0]=2;", "semantic"},
 		{"shape", "let rows:integer[][]=[[1]];rows[0]=true;", "semantic"},
-		{"unsupported", "let a=[1];if(false){try{print(a[0]);}catch(e){}}", "codegen"},
+		{"invalid dead code", "let a=[1];if(false){try{print(a[missing]);}catch(e){}}", "semantic"},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {

@@ -45,6 +45,7 @@ for and foreach loops also have separate executable preservation cases.
 go test ./internal/compiscript/frontend ./internal/compiscript ./cmd/ide -run 'Test(MalformedForMissingBody|MissingLoopBodies|AcceptanceAtomicRecovery|AcceptanceMixedExecution|AcceptanceRecoveryCLI|AcceptanceValidLoops|MixedAcceptanceAPI)$' -count=1
 go test ./internal/compiscript/frontend ./internal/compiscript ./cmd/ide -count=1
 go test ./internal/compiscript -run '^TestValuesEffects' -count=1
+go test ./internal/compiscript -run '^TestDynamicExceptions' -count=1
 go vet ./internal/compiscript/frontend ./internal/compiscript ./cmd/ide
 node --test web/*.test.cjs
 go test ./... -count=1
@@ -71,7 +72,7 @@ They exercise these failures without modifying the submitted input:
 | `while(true)`, `do`, `foreach(x in [1])`, `for(let i=0; i<2; i=i+1)` | Missing bodies rejected with located diagnostics |
 | `const rows:integer[][]=[[1]];rows[0][0]=2;` | Semantic rejection; const-root checks remain authoritative |
 | `let rows:integer[][]=[[1]];rows[0]=true;` | Semantic rejection of incompatible nested shape |
-| `let a=[1];if(false){try{print(a[0]);}catch(e){}}` | Deferred handler codegen diagnostic even in an unexecuted branch; no silent omission |
+| `let a=[1];if(false){try{print(a[missing]);}catch(e){}}` | Semantic diagnostic in unexecuted source; valid handlers are no longer rejection fixtures |
 
 For each rejected compilation, `tac` is null and `codegen` is absent. Built TAC
 CLI text mode exits 1 with empty stdout and located diagnostics on stderr; JSON
@@ -89,6 +90,19 @@ The existing Node VM suite separately tests request/render/reset and stale-respo
 wiring. No real-browser appearance or performance result is claimed here.
 
 ## Recovery choice and limits
+
+### Dynamic and exception example
+
+Compile `testdata/compiscript/tac/dynamic-exceptions.cps` with the same TAC CLI
+in text or JSON mode. `TestDynamicExceptionsCompile` and
+`TestDynamicExceptionsCLI` execute its emitted IR with the shared bounded oracle:
+`result=3`, `effects=11`, and output `3\ndivision by zero\n11\n`.
+Prefix effects survive the catch; the unreachable write to 100 does not execute.
+The same suite covers untyped values/calls, typed boundaries, retained captures,
+strict invalid operations, reference identity and synchronous handler cleanup.
+`TestDynamicExceptionsFatalOracleFailures` separately proves malformed metadata
+and instruction/depth budgets bypass source handlers. See the
+[guard/handler contract](tac-design.md#guarded-values-and-synchronous-exceptions-t10).
 
 ANTLR can recover an incomplete loop header before creating its required block.
 The mapper previously indexed an empty block slice. The surgical KISS fix returns

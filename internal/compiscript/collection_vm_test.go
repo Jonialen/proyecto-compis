@@ -18,6 +18,9 @@ type testList struct {
 
 func testListElement(o tac.Operand) tac.Operand {
 	kind, rest, _ := strings.Cut(o.Shape, "/")
+	if kind == "" {
+		kind = string(model.TypeError)
+	}
 	return tac.Operand{Type: model.TypeKind(kind), Shape: rest, Class: o.Class}
 }
 
@@ -49,6 +52,9 @@ func (f *testFrame) listTypeFits(expected, actual tac.Operand) bool {
 }
 
 func (f *testFrame) collectionValue(expected tac.Operand, value frameValue) (frameValue, error) {
+	if expected.Type == model.TypeError {
+		return value, nil
+	}
 	if value.kind == model.TypeNull && (expected.Type == model.TypeClass || expected.Type == model.TypeString || expected.Type == model.TypeList) {
 		value.kind = expected.Type
 	}
@@ -56,7 +62,7 @@ func (f *testFrame) collectionValue(expected tac.Operand, value frameValue) (fra
 		value.kind = model.TypeFloat
 	}
 	if value.kind != expected.Type {
-		return value, fmt.Errorf("list element type mismatch")
+		return value, languageFaultf("list element type mismatch")
 	}
 	if err := f.checkObjectType(expected, value); err != nil {
 		return value, err
@@ -66,7 +72,7 @@ func (f *testFrame) collectionValue(expected tac.Operand, value frameValue) (fra
 
 func (f *testFrame) collectionInstruction(i tac.Instruction) error {
 	if i.Op == tac.NewList {
-		if i.Target.Type != model.TypeList || i.Target.Shape == "" {
+		if i.Target.Type != model.TypeList {
 			return fmt.Errorf("invalid list allocation type")
 		}
 		values := make([]frameValue, len(i.Arguments))
@@ -87,11 +93,11 @@ func (f *testFrame) collectionInstruction(i tac.Instruction) error {
 		return err
 	}
 	if value.value == nil {
-		return fmt.Errorf("null list")
+		return languageFaultf("null list")
 	}
 	list, ok := value.value.(*testList)
 	if !ok || list == nil || value.kind != model.TypeList {
-		return fmt.Errorf("invalid list reference")
+		return languageFaultf("invalid list reference")
 	}
 	if i.Op == tac.ListLength {
 		return f.write(i.Target, frameValue{model.TypeInteger, float64(len(list.values))})
@@ -105,10 +111,10 @@ func (f *testFrame) collectionInstruction(i tac.Instruction) error {
 	}
 	n, ok := index.value.(float64)
 	if index.kind != model.TypeInteger || !ok || math.IsNaN(n) || math.IsInf(n, 0) || math.Trunc(n) != n {
-		return fmt.Errorf("invalid list index")
+		return languageFaultf("invalid list index")
 	}
 	if n < 0 || n >= float64(len(list.values)) {
-		return fmt.Errorf("list index out of bounds")
+		return languageFaultf("list index out of bounds")
 	}
 	if i.Op == tac.LoadIndex {
 		v, err := f.collectionValue(i.Target, list.values[int(n)])
@@ -127,6 +133,14 @@ func (f *testFrame) collectionInstruction(i tac.Instruction) error {
 	v, err = f.collectionValue(testListElement(i.Left), v)
 	if err != nil {
 		return err
+	}
+	// Unknown access cannot erase a concrete allocation's original contract.
+	// Preserve the existing typed covariant-view policy for known accesses.
+	if i.Left.Type == model.TypeError || i.Left.Shape == "" || strings.Contains(i.Left.Shape, string(model.TypeError)) {
+		v, err = f.collectionValue(testListElement(list.typeOf), v)
+		if err != nil {
+			return err
+		}
 	}
 	list.values[int(n)] = v
 	return nil

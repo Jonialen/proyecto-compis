@@ -29,17 +29,8 @@ func TestGeneratePreservesInputs(t *testing.T) {
 			if !reflect.DeepEqual(first, second) || !reflect.DeepEqual(firstDiagnostics, secondDiagnostics) {
 				t.Fatal("generation is nondeterministic")
 			}
-			if source == "let x:float=1; {let x=x+2;} x=x/2;" {
-				if first == nil || len(firstDiagnostics) != 0 {
-					t.Fatalf("valid program rejected: %+v", firstDiagnostics)
-				}
-			} else if first != nil || len(firstDiagnostics) != 1 {
-				t.Fatalf("unsupported program accepted: %+v %+v", first, firstDiagnostics)
-			}
-			if source == "let x;" {
-				if first != nil || len(firstDiagnostics) != 1 || firstDiagnostics[0].Message != "only integer, float and boolean declarations are supported" {
-					t.Fatalf("missing initializer accepted: %+v %+v", first, firstDiagnostics)
-				}
+			if first == nil || len(firstDiagnostics) != 0 {
+				t.Fatalf("valid program rejected: %+v", firstDiagnostics)
 			}
 			after, err := json.Marshal([]any{program, scopes})
 			if err != nil || string(before) != string(after) {
@@ -49,7 +40,7 @@ func TestGeneratePreservesInputs(t *testing.T) {
 	}
 }
 
-func TestGenerateRejectsInferredErrorAndEffectfulExpressions(t *testing.T) {
+func TestGenerateRejectsMalformedExpressionsAndMissingDeclarations(t *testing.T) {
 	// Defensive public-lowerer checks: these AST forms must not accidentally emit
 	// numeric instructions, even when called outside the source compilation gate.
 	span := ast.Span{Start: ast.Position{Line: 1, Column: 1}, End: ast.Position{Offset: 1, Line: 1, Column: 2}}
@@ -70,11 +61,11 @@ func TestGenerateRejectsInferredErrorAndEffectfulExpressions(t *testing.T) {
 		}
 	}
 	program := ast.Program{Span: span, Statements: ast.Statements{ast.VarDeclStmt{Span: span, Name: "x", Initializer: ast.LiteralExpr{Span: span, Lexeme: "1"}}}}
-	scopes := model.ScopeSnapshots{{ID: 1, Kind: model.ScopeGlobal, Span: span, Symbols: model.Symbols{{Name: "x", Span: span, Type: model.Type{Kind: model.TypeError}}}}}
+	scopes := model.ScopeSnapshots{{ID: 1, Kind: model.ScopeGlobal, Span: span}}
 	result, diagnostics := tac.Generate(program, scopes)
-	want := model.Diagnostics{{Code: "TAC_UNSUPPORTED", Phase: model.Phase("codegen"), Message: "only integer, float and boolean declarations are supported", Span: span}}
+	want := model.Diagnostics{{Code: "TAC_UNSUPPORTED", Phase: model.Phase("codegen"), Message: "missing matching semantic declaration", Span: span}}
 	if result != nil || !reflect.DeepEqual(diagnostics, want) {
-		t.Fatalf("error type accepted: %+v %+v", result, diagnostics)
+		t.Fatalf("missing declaration accepted: %+v %+v", result, diagnostics)
 	}
 }
 
@@ -108,7 +99,7 @@ func TestGenerateConditionsPreservesASTAndScopes(t *testing.T) {
 }
 
 func TestGenerateRejectsOutOfLoopTransfers(t *testing.T) {
-	for _, source := range []string{"break;", "continue;", "while(false){} break;", "for(;;){break;} continue;", "switch(true){default:continue;}", "switch(true){case true:break;} break;", "switch(true){case true:try{}catch(e){}}"} {
+	for _, source := range []string{"break;", "continue;", "while(false){} break;", "for(;;){break;} continue;", "switch(true){default:continue;}", "switch(true){case true:break;} break;", "switch(true){case true:try{continue;}catch(e){}}"} {
 		t.Run(source, func(t *testing.T) {
 			program, diagnostics := frontend.Parse([]byte(source))
 			if len(diagnostics) != 0 {

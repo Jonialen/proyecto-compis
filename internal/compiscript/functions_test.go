@@ -203,10 +203,10 @@ func TestFunctionGlobalInitializationAndVisibility(t *testing.T) {
 		`function a():integer{return b();} let x=a(); let g=1; function b():integer{return g;}`,
 		`function a():integer{return g;} let g=1; let x=a();`,
 		`let g=0; switch(true){case true:let later=1;} function f():integer{return later;} let x=f();`,
-		`function f():integer{return 1;} {let f=2; f();}`,
+		`function f():integer{return 1;} {const f=2; f=3;}`,
 		`function f(a:integer):integer{switch(true){case true:let a=1; default:return a;} return a;}`,
 		`function f():boolean{return true;} let x=true||((true?[]:[])==null);`,
-		`function f():integer{return g();} function g():integer{return 1;} function unused(){try{}catch(e){}}`,
+		`function f():integer{return g();} function g():integer{return 1;} function unused(){try{missing;}catch(e){}}`,
 	} {
 		t.Run(source, func(t *testing.T) {
 			analysis := Analyze([]byte(source))
@@ -223,8 +223,8 @@ func TestFunctionGlobalInitializationAndVisibility(t *testing.T) {
 
 func TestFunctionCapabilityDiagnostics(t *testing.T) {
 	for _, tt := range []struct{ source, rejected, message string }{
-		{`function f(a){return;}`, `function f(a){return;}`, "unsupported function signature"},
-		{`function f(){} function g(x){}`, `function g(x){}`, "unsupported function signature"},
+		{`let x=f(1);let g=1;function f(a):integer{return g;}`, `f(1);`, "call requires initialized global binding s1.g"},
+		{`function f(){}g(1);let x=1;function g(a){x=2;}`, `g(1);`, "call requires initialized global binding s1.x"},
 		{`let x=f(); let g=1; function f():integer{return g;}`, `f();`, "call requires initialized global binding s1.g"},
 		{`function a():integer{return b();} let x=a(); let g=1; function b():integer{return g;}`, `a();`, "call requires initialized global binding s1.g"},
 		{`f(); let g=1; function f(){g=2;}`, `f();`, "call requires initialized global binding s1.g"},
@@ -238,7 +238,7 @@ func TestFunctionCapabilityDiagnostics(t *testing.T) {
 			start := strings.Index(tt.source, tt.rejected)
 			length := len(tt.rejected)
 			// Call-expression spans exclude the statement semicolon or outer equality.
-			if tt.rejected == "f();" || tt.rejected == "a();" {
+			if strings.HasSuffix(tt.rejected, ";") {
 				length--
 			}
 			want := model.Diagnostics{{Code: "TAC_UNSUPPORTED", Phase: model.Phase("codegen"), Message: tt.message, Span: compileSpan(start, start+length)}}
@@ -286,11 +286,11 @@ func TestFunctionOracleRejectsInvalidFrames(t *testing.T) {
 
 func TestCompileFunctionRejectionsAreAtomic(t *testing.T) {
 	for _, source := range []string{
-		`function f(a){return;} f(1);`,
-		`function f(a:string[]){try{print(a[0]);}catch(e){}} f(["x"]);`,
-		`function f(){try{}catch(e){}}`,
-		`function f(){return;} let x;`,
-		`function f(a){return;} function g(){return f(null);}`,
+		`f(1);let g=1;function f(a){g=2;return;}`,
+		`f(["x"]);let g=1;function f(a:string[]){try{print(a[0]);g=2;}catch(e){}}`,
+		`f();let g=1;function f(){try{g=2;}catch(e){}}`,
+		`f();let x;function f(){x=2;return;}`,
+		`g();let x;function f(a){x=2;return;} function g(){return f(null);}`,
 		`let x=f(); let g=1; function f():integer{return g;}`,
 		`function f():integer{return g();} let x=f(); let a=1; function g():integer{return a;}`,
 	} {

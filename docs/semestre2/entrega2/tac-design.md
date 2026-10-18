@@ -1,8 +1,8 @@
 # Compiscript three-address code
 
-This is the scalar, control-flow, lexical-function, object and collection subset of Entrega 2,
-not every construct accepted by Analyze. The [report](report.md) maps the PDF and
-remaining requirement gaps. Functions use explicit calls/returns and deterministic
+This describes scalar/control-flow, lexical-function, object/collection,
+guarded unknown-value and try/catch TAC for Entrega 2. The [report](report.md)
+tracks the PDF audit and outstanding final acceptance. Functions use explicit calls/returns and deterministic
 abstract-cell activation records, including direct/mutual recursion, retained closures
 and inferred function aliases. Objects include inherited fields, construction,
 virtual methods, retained receivers and strings. Lists include references, literals,
@@ -199,7 +199,8 @@ Calls bind through the active lexical environment, never by a name-only registry
 lookup. Inferred `let`/`const` function aliases and mutable alias assignments retain
 function values; an alias shadowing a function name is callable. Non-function
 shadowing remains invalid. The existing grammar uses identifier callees; no lambda
-or function-type annotation syntax is added. Bodyless external AST functions and untyped/unsupported signatures are explicitly
+or function-type annotation syntax is added. Untyped parameters use guarded tagged values;
+bodyless external AST functions and malformed signatures are explicitly
 rejected. A function uses the existing semantic function scope spanning its whole
 declaration; its parameters and direct body declarations share that scope. Real
 nested blocks and for scopes retain their own semantic IDs. Parameters are mutable
@@ -612,18 +613,19 @@ CLI-emitted JSON executes in tests to `shared = 9`, `sum = 12`, `first = 3`,
 
 The implemented source slice also supports print, `%`, lazy ternaries,
 value-producing assignments, typed uninitialized declarations and null values.
-Unsupported statements, operators, expressions and genuinely unknown types
-must still be reported explicitly with source locations.
+Unknown values use explicit guarded instructions rather than fabricated static types.
+Malformed ASTs, missing scope identities and actual diagnostics reject atomically.
 No partial TAC may escape after lexical, syntax, semantic, or lowering errors.
 Original source bytes are preserved; Compile retains the matching Analyze diagnostics/scopes.
 Numeric expression statements are supported; their final temporary is released
 without a store. Null can occupy binding, field and list-element cells as well as
-typed reference storage. A statically null inferred field has a private null layout
-type even when Analyze retains its unknown annotation. Outer alias-dependent
-fields resolve at class declaration activation, including inherited layout copies;
-the semantic report is not
-rewritten. Genuinely unknown storage/untyped signatures and try/catch remain T10
-work, not erased statements. Transfers without an enclosing eligible construct
+typed reference storage. Unannotated fields retain the analyzer's unknown contract
+in their private layouts and every inherited copy. An initializer, including null
+or an outer-alias call, supplies a value without narrowing the field's storage type.
+Absent initializers leave fields undefined; only explicit annotations constrain
+their actual tags. Initializers still execute once under constructor policy A,
+and semantic metadata is not rewritten. Unknown storage/untyped signatures and try/catch use the T10 contract
+below. Transfers without an enclosing eligible construct
 are rejected. Unsupported input is not silently skipped.
 Unsupported declarations report `only integer, float and boolean declarations are supported`.
 Legacy unsupported-expression/statement diagnostics retain their numeric wording.
@@ -637,7 +639,7 @@ Ternaries reserve a join temporary before lowering either arm, evaluate the
 condition once and execute only the selected arm. Both arms are still validated.
 Expected nested-list shape and nominal/signature origins propagate through joins.
 `branchTrue` requires a boolean at runtime; there is no numeric truthiness.
-Incompatible/unknown static arm types remain deferred rather than fabricated.
+Incompatible/unknown arm types use a tagged join cell and checked typed boundaries.
 
 `declare` resets the binding to undefined each time its declaration executes.
 Frame/environment reentry never inherits a previous value. Reading an undefined
@@ -660,6 +662,70 @@ text. References use `<object s1.A>` / `<function s1.f>`, never physical address
 Lists use `[1, 2]`, with active-cycle detection, a 64-value budget and depth limit
 8 (`<cycle>` / `...`). This deterministic, bounded representation avoids a new
 runtime or serialization dependency; it is not a product interpreter.
+
+### Guarded values and synchronous exceptions (T10)
+
+The semantic `error` kind is an absent-information placeholder, **not** a new
+source `any` type or a claim that invalid executions are well typed. An `error`
+operand stores the actual runtime tag/reference. Untyped formals, aliases,
+captures, member/index results and joins retain it. Existing statically typed
+programs need no new metadata: `guarded` is omitted unless used.
+
+| Instruction / metadata | Contract |
+|---|---|
+| Arithmetic/comparison/unary instruction with `guarded:true` | Check actual operands; numeric promotion, numeric comparisons and string addition when valid; strict boolean negation; invalid operands fault |
+| `checkValue target = left` | Validate the actual value before a typed boundary; integer-to-float widening is permitted; nominal origins and list rank/leaf contracts remain checked |
+| `callIndirect` with `guarded:true` and no `signature` | Select the actual callable once; check its complete actual formal contract before body effects; use its actual result contract |
+| `dynamicMember` / `dynamicStore` | Resolve fields/bound methods on the actual object; preserve owner, mutability and stored-value type; missing/null/non-object receivers fault |
+| `pushHandler label` / `popHandler` | Register/remove a handler in the current dynamic invocation, not in a retained lexical environment |
+| `catchException target` | Consume the pending opaque `exception` reference into a fresh catch scope; the selected handler has already been removed |
+
+The existing `copy`, list and branch operations retain their explicit checks.
+Unknown cells have no invented initialization default. Conditions never use
+truthiness. Empty/generic list references retain allocation identity; a typed use
+checks a view/contents without copying the container or silently changing its
+constraints. Known incompatible typed list contracts remain strict. Existing
+typed covariant-view mutation/fault timing is unchanged.
+
+Missing function result annotations still mean **null**, not inferred results.
+Unknown non-null returns from these functions fault before handler cleanup.
+Null remains null through typed reference views and unknown formals. Guarded
+equality permits numeric promotion and null/reference identity comparisons;
+incompatible non-null runtime tags fault rather than inventing coercions.
+Dynamic null-result calls execute once and write null to the caller's tagged
+destination without adding a callee result cell. Actual callable declaration,
+receiver, lexical environment and full nominal signature remain attached to the
+reference through unknown storage and collections.
+
+KISS exception policy: explicit language faults (undefined/null access, bounds,
+zero division/remainder, invalid dynamic type/callee/member/index/condition and
+runtime nominal/signature guards) are catchable. Their messages remain stable;
+the bounded oracle prints an exception's message without physical addresses or
+internal stack traces. Each delivered exception has opaque reference identity.
+Instruction and catch-binding source spans remain in IR; messages do not invent
+host stack locations. Effects before the fault are committed, not rolled back.
+
+The nearest handler on the **dynamic call stack** wins, abandoning intervening
+callee continuations. Escaped closure cells from abandoned calls remain retained.
+Catch faults reach an outer handler because the selected handler is removed
+before catch-body entry. A normal try path skips catch. Returning validates and
+reads its value **before** cleanup; escaping return/break/continue remove only
+crossed handlers, while transfers staying inside a try retain its handler.
+New calls do not inherit handlers from their closure's defining environment.
+
+Malformed IR, resource-budget failures and host errors are not language
+exceptions. The oracle preflights instruction/frame/layout contracts and uses
+explicit fault types, never message-substring classification or blanket panic
+recovery. It remains test-only: 10,000 instructions, 64 call levels and bounded
+frame sizes. The CLI/API generate TAC; they do not execute this oracle.
+
+Every valid AST kind has a lowering dispatch: statements Block, VarDecl,
+ConstDecl, Assign, FunctionDecl, ClassDecl, Expr, Print, If, While, DoWhile, For,
+Foreach, TryCatch, Switch, Break, Continue and Return; expressions Identifier,
+Literal, Array, This, New, Group, Unary, Binary, Ternary, Assign, PropertyAssign,
+Call, Index and PropertyAccess. `BadStmt`/`BadExpr` are recovery nodes and reject.
+This kind inventory is not a guarantee that every accepted execution succeeds:
+dynamic faults and conservative initialization guards remain intentional.
 
 ### Library quick path
 
@@ -702,8 +768,8 @@ exposes the complete report.
   garbage collection and target-specific lexical links. Abstract retained lexical
   environments and function parameter/local/temporary/result/control cells are
   implemented, not this target layout.
-- Accepted-but-unsupported source constructs are a concrete broad-translation
-  requirement gap, not a completed PDF outcome; see the [report](report.md#remaining-requirement-gaps-and-presentation-checks).
+- Final PDF/report disposition still requires the parent acceptance audit; see
+  the [report](report.md#remaining-requirement-gaps-and-presentation-checks).
 - Source-to-TAC IDE output, static main/global layouts and mixed successful/failed
   examples are implemented; real-browser visual evaluation remains pending.
 

@@ -49,6 +49,9 @@ func (l *lowerer) switchStatement(env *environment, n ast.SwitchStmt) bool {
 	if !ok {
 		return false
 	}
+	if selector.Type == model.TypeError {
+		selector = l.checkedValue(Operand{Type: model.TypeBoolean}, selector, n.Value.SourceSpan())
+	}
 	if selector.Type != model.TypeBoolean {
 		return l.unsupported(n.Value.SourceSpan(), "condition requires a boolean value")
 	}
@@ -70,6 +73,9 @@ func (l *lowerer) switchStatement(env *environment, n ast.SwitchStmt) bool {
 			value, ok := l.expression(dispatch, c.Value)
 			if !ok {
 				return false
+			}
+			if value.Type == model.TypeError {
+				value = l.checkedValue(Operand{Type: model.TypeBoolean}, value, c.Value.SourceSpan())
 			}
 			if value.Type != model.TypeBoolean {
 				return l.unsupported(c.Span, "switch case requires a boolean value")

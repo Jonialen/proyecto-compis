@@ -81,30 +81,27 @@ func TestCompileRepeatedExpressions(t *testing.T) {
 	}
 }
 
-func TestCompileRejectsUnsupportedWithoutPartialTAC(t *testing.T) {
+func TestCompileRejectsInvalidConstructionsWithoutPartialTAC(t *testing.T) {
 	for _, tt := range []struct{ source, rejected, message string }{
-		{`try{}catch(e){}`, `try{}catch(e){}`, "unsupported statement in numeric TAC"},
-		{`function f(a) {return;}`, `function f(a) {return;}`, "unsupported function signature"},
-		{`try{let y=[1,2];}catch(e){}`, `try{let y=[1,2];}catch(e){}`, "unsupported statement in numeric TAC"},
-		{`try{let y=["a","b"];}catch(e){}`, `try{let y=["a","b"];}catch(e){}`, "unsupported statement in numeric TAC"},
-		{`let y;`, `let y;`, "only integer, float and boolean declarations are supported"},
-		{`function y(a){}`, `function y(a){}`, "unsupported function signature"},
-		{`let y=true?1:"x";`, `let y=true?1:"x";`, "only integer, float and boolean declarations are supported"},
-		{`let y=0; try{y=2;}catch(e){}`, `try{y=2;}catch(e){}`, "unsupported statement in numeric TAC"},
+		{`try{missing;}catch(e){}`, `missing`, "unresolved name missing"},
+		{`function f(a) {missing;return;}`, `missing`, "unresolved name missing"},
+		{`try{let y=[1,missing];}catch(e){}`, `missing`, "unresolved name missing"},
+		{`try{let y=["a",missing];}catch(e){}`, `missing`, "unresolved name missing"},
+		{`let y=missing;`, `missing`, "unresolved name missing"},
+		{`function y(a){missing;}`, `missing`, "unresolved name missing"},
+		{`let y=true?1:missing;`, `missing`, "unresolved name missing"},
+		{`let y=0; try{y=missing;}catch(e){}`, `missing`, "unresolved name missing"},
 	} {
 		t.Run(tt.source, func(t *testing.T) {
 			input := []byte("let x=1; " + tt.source)
 			analysis := Analyze(input)
-			if len(analysis.Diagnostics) != 0 {
-				t.Fatalf("fixture must pass semantics: %+v", analysis.Diagnostics)
-			}
 			report := Compile(input)
 			if report.TAC != nil || len(report.Diagnostics) != 1 {
 				t.Fatalf("expected rejection without TAC: %+v", report)
 			}
 			start := strings.Index(string(input), tt.rejected)
-			want := model.Diagnostics{{Code: "TAC_UNSUPPORTED", Phase: model.Phase("codegen"), Message: tt.message, Span: compileSpan(start, start+len(tt.rejected))}}
-			if !reflect.DeepEqual(report.Diagnostics, want) {
+			want := model.Diagnostics{{Code: "SEM_UNRESOLVED", Phase: model.Phase("semantic"), Message: tt.message, Span: compileSpan(start, start+len(tt.rejected))}}
+			if report.Codegen != nil || !reflect.DeepEqual(report.Diagnostics, want) || !reflect.DeepEqual(analysis.Diagnostics, want) {
 				t.Fatalf("diagnostics = %+v, want %+v", report.Diagnostics, want)
 			}
 			if !reflect.DeepEqual(report.Scopes, analysis.Scopes) {

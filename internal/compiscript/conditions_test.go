@@ -149,10 +149,10 @@ func TestConditionalBranchBindings(t *testing.T) {
 func TestConditionalStaticRejection(t *testing.T) {
 	for _, source := range []string{
 		`let x=false&&((true?[]:[])==null);`, `let x=true||((true?[]:[])==null);`,
-		`if(false){try{}catch(e){}}`, `if(true){}else{let s=[];}`,
-		`if(false){foreach(x in [1,2]){try{}catch(e){}}}`, `let x=true||(missing>0);`,
+		`if(false){try{missing;}catch(e){}}`, `if(true){}else{let s=[missing];}`,
+		`if(false){foreach(x in [1,2]){try{missing;}catch(e){}}}`, `let x=true||(missing>0);`,
 		`if(true){let x=1;} x=2;`, `let x=false&&(true+1>0);`,
-		`let x;`, `let x=true?1:"x";`, `if(false){let x=0; try{x=(x=2);}catch(e){}}`,
+		`let x=missing;`, `let x=true?1:missing;`, `if(false){let x=0; try{x=(x=missing);}catch(e){}}`,
 		`if(false){switch(1){case 1: break;}}`,
 	} {
 		t.Run(source, func(t *testing.T) {

@@ -45,7 +45,7 @@ func (l *lowerer) condition(env *environment, expression ast.Expression, yes, no
 	if !ok {
 		return false
 	}
-	if value.Type != model.TypeBoolean {
+	if value.Type != model.TypeBoolean && value.Type != model.TypeError {
 		return l.unsupported(expression.SourceSpan(), "condition requires a boolean value")
 	}
 	l.program.Instructions = append(l.program.Instructions, Instruction{Op: BranchTrue, Left: value, Label: yes, Span: expression.SourceSpan()})

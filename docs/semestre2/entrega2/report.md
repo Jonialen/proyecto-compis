@@ -6,7 +6,7 @@ The implementation translates numeric/boolean control flow, recursive and retain
 
 Normative source: [Proyecto 2 PDF](Proyecto_2__Compiladores.pdf), pages 1–4, read in full. The source is a human-provided, untracked read-only file; this documentation does not add, export or modify it. Its SHA-256 at verification was `0ba21279ad758dd8ef69344adae9d31193d5ca4d064ce525257da6974c707bdc`. A fresh Git checkout may need the original supplied separately. The matrix below retains short Spanish quotations; page numbers refer to PDF pages, not repository line numbers.
 
-The key result is one compiler with explicit ownership and atomic rejection. [Architecture](architecture.md) explains the decisions; [TAC design](tac-design.md) specifies the complete implemented IR, examples and assumptions. [Run instructions](README.md) and [acceptance](acceptance.md) provide the executable entry points. Known unsupported source constructs remain an actionable requirement gap, not evidence of complete language translation.
+The key result is one compiler with explicit ownership and atomic rejection. [Architecture](architecture.md) explains the decisions; [TAC design](tac-design.md) specifies the implemented IR, examples and assumptions. [Run instructions](README.md) and [acceptance](acceptance.md) provide the executable entry points. T9/T10 address the initial construction gaps; the final independent acceptance and report refresh remain separate from implementation claims.
 
 ## PDF requirement and evidence matrix
 
@@ -14,17 +14,17 @@ Compiler files below are under `internal/compiscript`; lowering filenames are in
 
 | Page / short verbatim requirement | Implementation and evidence | Outcome |
 |---|---|---|
-| 1: “traducen cada construcción de Compiscript” | `internal/compiscript/compile.go`; `TestCompileRejectsUnsupportedWithoutPartialTAC` contrasts successful Analyze with rejected TAC | **Gap:** not every accepted construction is lowered; see reproduction below |
+| 1: “traducen cada construcción de Compiscript” | T9 values/effects and T10 guarded values/handlers; `TestDynamicExceptionsCompile` / `TestDynamicExceptionsCLI`; [AST kind inventory](tac-design.md#guarded-values-and-synchronous-exceptions-t10) | Construction dispatch completed; final independent/report audit pending, not whole-assignment certification |
 | 1: “asignación, operaciones binarias y unarias, copia” | `tac/ir.go`, `expression.go`; `TestCompileNumeric`, `TestCompileInstructionMetadata`; numeric translation in [reference](tac-design.md#representation) | Implemented numeric core |
 | 1: “saltos condicionales e incondicionales, etiquetas” | `tac/flow.go`, `loops.go`, `switch.go`; `conditions_test.go`, `loops_test.go`, `switch_test.go`; checked-in examples | Implemented |
 | 1: “llamadas a procedimientos, acceso indexado” | `tac/calls.go`, `collections.go`; `functions_test.go`, `collections_test.go` | Implemented |
 | 1: “consistente y estar documentada” | [Instruction reference](tac-design.md), typed text/JSON, formatting tests `tac/ir_test.go`, `procedures_test.go` | Documented implemented syntax |
 | 1: “(+, -, *, /) respetando precedencia y asociatividad” | `tac/expression.go`, `TestCompileNumeric`; `numeric.cps`, explicit `i2f` and float division | Implemented named arithmetic |
 | 1: “(&&, \|\|, !) y de comparación (==, !=, <, <=, >, >=)” | `tac/flow.go`, `conditions_test.go`; short-circuit execution/trap checks | Implemented named logic/comparisons |
-| 1: “declaraciones y asignaciones de variables y constantes” | `tac/lower.go`; `compile_test.go`, semantic const tests, `TestCollectionAtomicRejection`, `TestValuesEffectsCompile` | Typed undefined declarations and static assignment values added in T9; genuinely unknown bindings remain T10 work |
+| 1: “declaraciones y asignaciones de variables y constantes” | `tac/lower.go`; `compile_test.go`, semantic const tests, `TestCollectionAtomicRejection`, values/effects and dynamic/exception suites | Typed and unknown undefined declarations; no fabricated default; runtime guards preserve const/type contracts |
 | 2: “if/else, while, do-while, for y switch” | `flow.go`, `loops.go`, `switch.go`; named example files under `testdata/compiscript/tac`, `TestAcceptanceValidLoops` | Implemented within current semantic contracts (boolean switch) |
 | 2: “break y continue” | Shared transfer stack; loop/switch/collection tests, mixed `acceptance.cps` | Implemented nearest eligible targets |
-| 2: “paso de parámetros, llamadas y valores de retorno” | `tac/functions.go`, `calls.go`, `frames.go`; `TestFunctionFrameExecution`, `TestFunctionFrameMetadata` | Implemented typed signatures/results; unsupported untyped signatures explicitly reject |
+| 2: “paso de parámetros, llamadas y valores de retorno” | `tac/functions.go`, `calls.go`, `frames.go`, `dynamic.go`; frame and dynamic/exception suites | Typed/untyped formals with actual runtime guards; missing result annotation remains null |
 | 2: “funciones recursivas” | Fixed-point dependencies and fresh frames; `recursion_test.go`, `recursion_dependencies_test.go`, `recursion.cps` | Implemented self/mutual recursion; termination not promised |
 | 2: “funciones anidadas y closures” | `tac/closures.go`; `TestClosureExecution`, `closure_compositions_test.go`, `closures.cps` | Implemented retained shared cells and escaped aliases |
 | 2: “creación de objetos e invocación del constructor” | `tac/objects.go`; `TestObjectExecution`, `TestObjectThreeLevelPolicyA`, `objects.cps` | Implemented explicit initialization policy A |
@@ -71,9 +71,16 @@ A Git author record is not an attestation of the human who performed each task. 
 
 ## Remaining requirement gaps and presentation checks
 
-**Concrete normative gap — accepted source without TAC lowering.** Page 1 says “traducen cada construcción de Compiscript”. The initial T8 audit found print, remainder, ternary, assignment-value, undefined/null storage and untyped-signature gaps. T9 adds the static values/effects subset with `TestValuesEffectsCompile` / `TestValuesEffectsCLI` and the [format/guard contract](tac-design.md#static-values-and-effects-t9). The old negative fixtures now use genuinely invalid or deferred constructs while retaining atomic and dead-code validation.
+**Historical normative gap — accepted source without TAC lowering.** Page 1 says “traducen cada construcción de Compiscript”. The initial T8 audit found print, remainder, ternary, assignment-value, undefined/null storage and untyped-signature gaps. T9 adds the static values/effects subset with `TestValuesEffectsCompile` / `TestValuesEffectsCLI` and the [format/guard contract](tac-design.md#static-values-and-effects-t9). Updated negative fixtures use actual invalid source or explicit initialization/scope guards while retaining atomic and dead-code validation.
 
-Remaining examples include `function f(a){return;}`, `let value;` and `try{let x=1;}catch(e){print(e);}`: unknown values/untyped signatures and handler/unwinding behavior are T10 work. Print is no longer a valid rejection fixture. Historical T8 verification above describes the baseline audit, not current rejection of those now-supported constructs. Final matrix refresh and full-assignment disposition remain pending T10 and parent verification; this unit does not claim the whole PDF complete.
+T10 implements `function f(a){return;}`, `let value;` and
+`try{let x=1;}catch(e){print(e);}` with explicit guarded values and synchronous
+handlers. These and print are no longer valid rejection fixtures. Negative tests
+retain actual syntax/semantic failures, scope-boundary checks and initialization
+guards. Historical T8 verification above describes its baseline audit, not current
+rejection of supported constructs. Final architecture/contribution refresh,
+independent verification and whole-assignment disposition remain parent-owned;
+this unit does not claim the whole PDF complete.
 
 **Human/evaluation checks still pending:** verify real individual contributions, GitHub visibility and availability of the untracked PDF; run the battery in the evaluation environment; open the real browser and check `.cps` load/edit/save, Compile/Analyze, located errors, TAC/symbol views, resets and unchanged YAPar behavior. Confirm CDN availability, layout/accessibility and presentation-day operation. Automated DOM proof does not discharge these steps.
 

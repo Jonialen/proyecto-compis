@@ -75,6 +75,13 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 			if !ok {
 				return Operand{}, false
 			}
+			if value.Type == model.TypeError {
+				kind, op := model.TypeError, Negate
+				if n.Operator == "!" {
+					kind, op = model.TypeBoolean, LogicalNot
+				}
+				return l.guardedOperation(op, value, nil, kind, n.Span), true
+			}
 			if n.Operator == "-" && numeric(value.Type) {
 				return l.operation(Negate, value, nil, value.Type, n.Span), true
 			}
@@ -100,11 +107,18 @@ func (l *lowerer) expression(env *environment, expression ast.Expression) (Opera
 				return Operand{}, false
 			}
 			comparison := n.Operator == "==" || n.Operator == "!=" || n.Operator == "<" || n.Operator == "<=" || n.Operator == ">" || n.Operator == ">="
+			if left.Type == model.TypeError || right.Type == model.TypeError {
+				kind := model.TypeError
+				if comparison {
+					kind = model.TypeBoolean
+				}
+				return l.guardedOperation(Opcode(n.Operator), left, &right, kind, n.Span), true
+			}
 			if !numeric(left.Type) || !numeric(right.Type) {
 				if n.Operator == "+" && left.Type == model.TypeString && right.Type == model.TypeString {
 					return l.operation(Add, left, &right, model.TypeString, n.Span), true
 				}
-				if (n.Operator == "==" || n.Operator == "!=") && ((left.Type == model.TypeList && right.Type == model.TypeList) || (left.Type == model.TypeString && right.Type == model.TypeString) || (left.Type == model.TypeClass && right.Type == model.TypeClass) || left.Type == model.TypeNull || right.Type == model.TypeNull) {
+				if (n.Operator == "==" || n.Operator == "!=") && ((left.Type == model.TypeFunction && right.Type == model.TypeFunction) || (left.Type == model.TypeException && right.Type == model.TypeException) || (left.Type == model.TypeList && right.Type == model.TypeList) || (left.Type == model.TypeString && right.Type == model.TypeString) || (left.Type == model.TypeClass && right.Type == model.TypeClass) || left.Type == model.TypeNull || right.Type == model.TypeNull) {
 					return l.operation(Opcode(n.Operator), left, &right, model.TypeBoolean, n.Span), true
 				}
 				if (n.Operator == "==" || n.Operator == "!=") && left.Type == model.TypeBoolean && right.Type == model.TypeBoolean {

@@ -56,6 +56,7 @@ type lowerer struct {
 	registry    *functionRegistry
 	current     *functionInfo
 	globalID    int
+	handlers    int
 }
 
 // Generate lowers a semantically validated AST using its matching scope inventory.
@@ -125,6 +126,8 @@ func (l *lowerer) statements(env *environment, statements ast.Statements) bool {
 
 func (l *lowerer) statement(env *environment, statement ast.Statement) bool {
 	switch n := statement.(type) {
+	case ast.TryCatchStmt:
+		return l.tryCatch(env, n)
 	case ast.PrintStmt:
 		value, ok := l.expression(env, n.Value)
 		if !ok {
@@ -274,6 +277,9 @@ func (l *lowerer) store(env *environment, target Operand, expression ast.Express
 }
 
 func (l *lowerer) storeValue(target, value Operand, valueSpan, span ast.Span) bool {
+	if value.Type == model.TypeError && target.Type != model.TypeError {
+		value = l.checkedValue(target, value, valueSpan)
+	}
 	if target.Type == model.TypeFloat {
 		value = l.widen(value, valueSpan)
 	}
@@ -291,5 +297,5 @@ func scalar(kind model.TypeKind) bool { return numeric(kind) || kind == model.Ty
 
 // Storage capability is deliberately separate from scalar arithmetic capability.
 func storedValue(kind model.TypeKind) bool {
-	return scalar(kind) || kind == model.TypeNull || kind == model.TypeFunction || kind == model.TypeString || kind == model.TypeClass || kind == model.TypeList
+	return scalar(kind) || kind == model.TypeError || kind == model.TypeException || kind == model.TypeNull || kind == model.TypeFunction || kind == model.TypeString || kind == model.TypeClass || kind == model.TypeList
 }

@@ -216,8 +216,8 @@ func TestObjectThreeLevelPolicyA(t *testing.T) {
 
 func TestObjectAtomicRejections(t *testing.T) {
 	for _, source := range []string{
-		`class Unused{function bad(){try{}catch(e){}}}`,
-		`class Unused{let bad;}`,
+		`class Unused{function bad(){try{missing;}catch(e){}}}`,
+		`class Unused{let bad=missing;}`,
 		`class Box{const n:integer=1;}let box=new Box();box.n=2;`,
 		`class Box{}let box=new Box();let x=box.missing;`,
 		`class Box{function constructor(n:integer){}}let box=new Box(true);`,

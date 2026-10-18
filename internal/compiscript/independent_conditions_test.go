@@ -50,8 +50,8 @@ func TestIndependentUnchosenSourceValidation(t *testing.T) {
 		"let result=false && missing;",
 		"let result=true || ((true?[]:[])==null);",
 		"let result=false && ((false?[]:[])==null);",
-		"if (true) {} else {try{}catch(e){}}",
-		"if (false) {foreach(x in [1,2]) {try{}catch(e){}}}",
+		"if (true) {} else {try{missing;}catch(e){}}",
+		"if (false) {foreach(x in [1,2]) {try{missing;}catch(e){}}}",
 		"if (false) {let x=missing;}",
 	} {
 		t.Run(source, func(t *testing.T) {
