@@ -26,10 +26,10 @@ Para el IDE, ejecutar el servidor desde la raíz porque sirve la carpeta relativ
 
 ## Entrega 3: intérprete SQL
 
-El mismo repositorio incluye un intérprete SQL con almacenamiento en archivos (lexer, parser, AST, análisis semántico, `CREATE`/`DROP`/`INSERT`). Detalles, formato de almacenamiento y límites en la [guía de Entrega 3](docs/semestre2/entrega3/README.md).
+El mismo repositorio incluye un intérprete SQL con almacenamiento en archivos (lexer, parser, AST, análisis semántico, `CREATE`/`DROP`/`INSERT`, `SELECT` con `JOIN`, agregaciones y subconsultas, `UPDATE`/`DELETE` e índices en archivos). Detalles, formato de almacenamiento y límites en la [guía de Entrega 3](docs/semestre2/entrega3/README.md).
 
 ```sh
-go run ./cmd/sql -db /tmp/mibd testdata/sql/ok/demo.sql
+go run ./cmd/sql -db /tmp/mibd testdata/sql/ok/tienda.sql
 go run ./cmd/ide   # y abrir http://localhost:8080/sql.html
 ```
 
