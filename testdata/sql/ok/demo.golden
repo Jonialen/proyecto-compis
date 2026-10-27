@@ -1,3 +1,7 @@
+[1] Tabla "estudiantes" creada
+[2] Tabla "cursos" creada
+[3] 2 fila(s) insertada(s) en "estudiantes"
+[4] 1 fila(s) insertada(s) en "cursos"
 === cursos.csv ===
 id,nombre
 3,Compiladores

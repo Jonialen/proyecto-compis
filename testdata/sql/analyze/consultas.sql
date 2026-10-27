@@ -1,5 +1,5 @@
 -- statements: 27
--- Consultas complejas que solo se analizan (su ejecución es de las etapas 5 a 7).
+-- Consultas complejas sobre un esquema sin datos: prueban solo el análisis (léxico, sintaxis, AST y semántico).
 CREATE TABLE estudiantes (id INT PRIMARY KEY, nombre VARCHAR(30) NOT NULL, edad INT, promedio FLOAT, activo BOOLEAN, nacimiento DATE);
 CREATE TABLE cursos (id INT PRIMARY KEY, nombre VARCHAR(40) NOT NULL, creditos INT NOT NULL);
 CREATE TABLE inscripciones (estudiante_id INT NOT NULL, curso_id INT NOT NULL, nota FLOAT, fecha DATE);

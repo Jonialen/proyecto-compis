@@ -126,6 +126,10 @@ type Select struct {
 	GroupBy []Expr
 	Having  Expr
 	OrderBy []OrderItem
+
+	// Correlated is set by the analyzer when the query refers to a column of
+	// an enclosing query, so the executor cannot evaluate it only once.
+	Correlated bool
 }
 
 // Expressions.

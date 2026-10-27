@@ -1,3 +1,5 @@
+[1] Tabla "tipos" creada
+[2] 7 fila(s) insertada(s) en "tipos"
 === metadata.txt ===
 # Compiscript SQL metadata v1
 TABLE tipos
@@ -9,7 +11,7 @@ COLUMN d DATE
 END
 === tipos.csv ===
 n,f,s,b,d
-9223372036854775807,3.14159,,TRUE,2000-02-29
+9223372036854775807,3.14159,"",TRUE,2000-02-29
 -9223372036854775808,0,"línea con , coma",FALSE,1999-12-31
 0,0,"comilla ""doble"" y 'simple'",\N,1900-01-01
 40,2.5,\\N,TRUE,\N

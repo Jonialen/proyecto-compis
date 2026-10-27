@@ -369,17 +369,6 @@ func TestPrimaryKeyViolationIsAtomic(t *testing.T) {
 	}
 }
 
-func TestStatementsPastImplementedStageFailAtExecutionAfterEarlierOnes(t *testing.T) {
-	e := newEngine(t)
-	rep := e.Run("CREATE TABLE a (x INT); SELECT x FROM a;", true)
-	if len(rep.Results) != 1 || len(rep.Diagnostics) != 1 || rep.Diagnostics[0].Phase != "execution" || rep.Diagnostics[0].Statement != 2 {
-		t.Fatalf("report = %+v", rep)
-	}
-	if !strings.Contains(rep.Diagnostics[0].Message, "aún no se ejecuta") {
-		t.Errorf("message = %q", rep.Diagnostics[0].Message)
-	}
-}
-
 func TestCorruptMetadataIsReported(t *testing.T) {
 	e := newEngine(t)
 	os.MkdirAll(e.Dir, 0o755)

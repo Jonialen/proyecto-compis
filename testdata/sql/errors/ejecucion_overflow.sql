@@ -1,0 +1,4 @@
+-- mode: execute
+CREATE TABLE t (n INT);
+INSERT INTO t VALUES (9223372036854775807);
+UPDATE t SET n = n + 1;

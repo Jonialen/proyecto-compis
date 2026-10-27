@@ -1,0 +1,1 @@
+5:1: error execution: Violación de PRIMARY KEY: el valor 1 de la columna "id" aparece más de una vez en la tabla "t"; no se modificó ninguna fila

@@ -1,3 +1,12 @@
+[1] Tabla "Productos" creada
+[2] 2 fila(s) insertada(s) en "Productos"
+[3] 1 fila(s) insertada(s) en "Productos"
+[4] 2 fila(s) insertada(s) en "Productos"
+[5] Tabla "Marcas" creada
+[6] 2 fila(s) insertada(s) en "Marcas"
+[7] Tabla "Marcas" eliminada
+[8] Tabla "marcas" creada
+[9] 2 fila(s) insertada(s) en "marcas"
 === marcas.csv ===
 id,nombre
 1,A

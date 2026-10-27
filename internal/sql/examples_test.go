@@ -68,13 +68,22 @@ func dumpDB(t *testing.T, dir string) string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		b.WriteString("=== " + n + " ===\n" + string(data))
+		content := string(data)
+		if strings.HasSuffix(n, ".idx") {
+			// The stamp holds the table file's modification time: mask it.
+			head, rest, _ := strings.Cut(content, "\n")
+			f := strings.Split(head, ",")
+			f[4] = "<stamp>"
+			content = strings.Join(f, ",") + "\n" + rest
+		}
+		b.WriteString("=== " + n + " ===\n" + content)
 	}
 	return b.String()
 }
 
 // Every ok/*.sql script must execute cleanly and leave exactly the files in
-// its .golden next to it.
+// its .golden next to it: every statement result (rows and read plan for a
+// SELECT) followed by the files of the database.
 func TestExamplesExecuteAndPersist(t *testing.T) {
 	for _, f := range exampleFiles(t, "ok") {
 		t.Run(filepath.Base(f), func(t *testing.T) {
@@ -83,7 +92,11 @@ func TestExamplesExecuteAndPersist(t *testing.T) {
 			if len(rep.Diagnostics) != 0 || !rep.Executed {
 				t.Fatalf("diagnostics = %v", rep.Diagnostics)
 			}
-			compareFile(t, strings.TrimSuffix(f, ".sql")+".golden", dumpDB(t, e.Dir))
+			var out strings.Builder
+			for _, r := range rep.Results {
+				out.WriteString(FormatResult(r))
+			}
+			compareFile(t, strings.TrimSuffix(f, ".sql")+".golden", out.String()+dumpDB(t, e.Dir))
 
 			// The stored database must reload and re-analyse cleanly.
 			cat, err := LoadCatalog(e.Dir)

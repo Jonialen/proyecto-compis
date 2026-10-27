@@ -1,3 +1,13 @@
+[1] Tabla "estudiantes" creada
+[2] Tabla "cursos" creada
+[3] Tabla "inscripciones" creada
+[4] 5 fila(s) insertada(s) en "estudiantes"
+[5] 4 fila(s) insertada(s) en "cursos"
+[6] 2 fila(s) insertada(s) en "inscripciones"
+[7] 4 fila(s) insertada(s) en "inscripciones"
+[8] Tabla "temporal" creada
+[9] 3 fila(s) insertada(s) en "temporal"
+[10] Tabla "temporal" eliminada
 === cursos.csv ===
 id,nombre,creditos
 1,Compiladores,5

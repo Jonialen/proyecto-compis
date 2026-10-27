@@ -137,6 +137,9 @@ func Lex(src string) ([]Token, []Diagnostic) {
 			closed := false
 			for i < len(rs) {
 				c := adv()
+				if c == '\r' && i < len(rs) && rs[i] == '\n' {
+					continue // CRLF inside a string is stored as LF, as CSV readers would do anyway
+				}
 				if c == '\'' {
 					if i < len(rs) && rs[i] == '\'' {
 						adv()

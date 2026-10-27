@@ -1,0 +1,1 @@
+4:23: error execution: El valor excede la longitud máxima de VARCHAR(5) en la columna "nombre" (longitud 15)

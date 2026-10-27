@@ -21,7 +21,8 @@ type scopeEntry struct {
 type scope struct {
 	entries []scopeEntry
 	parent  *scope
-	broken  bool // a table of this scope does not exist; do not cascade column errors
+	sel     *Select // query that owns this scope; nil for UPDATE and DELETE
+	broken  bool    // a table of this scope does not exist; do not cascade column errors
 }
 
 type analyzer struct {
@@ -227,7 +228,7 @@ type selCol struct {
 }
 
 func (a *analyzer) selectStmt(s *Select, parent *scope) []selCol {
-	sc := &scope{parent: parent}
+	sc := &scope{parent: parent, sel: s}
 	labels := map[string]bool{}
 	add := func(tr TableRef) {
 		t := a.cat.Table(tr.Name.Name)
@@ -381,6 +382,12 @@ func (a *analyzer) checkGrouping(s *Select, sc *scope) {
 	if s.Having != nil {
 		bareColumns(s.Having, &bare)
 	}
+	for _, o := range s.OrderBy {
+		if c, ok := o.Expr.(*ColumnRef); ok && c.Qualifier == "" && hasAlias(s, c.Name) {
+			continue
+		}
+		bareColumns(o.Expr, &bare)
+	}
 	for _, c := range bare {
 		if k, ok := key(c); ok && !grouped[k] {
 			a.errAt(c.Pos, "La columna %q debe aparecer en GROUP BY o dentro de una función de agregación", c.Name)
@@ -416,6 +423,11 @@ func (a *analyzer) resolve(sc *scope, ref *ColumnRef) (string, *Column, bool) {
 			a.errAt(ref.Pos, "Referencia ambigua: la columna %q existe en más de una tabla; califíquela con el nombre o alias de la tabla", ref.Name)
 			return "", &Column{Name: ref.Name}, false
 		case len(hits) == 1:
+			for x := sc; x != s; x = x.parent {
+				if x.sel != nil {
+					x.sel.Correlated = true
+				}
+			}
 			return hits[0].label, hits[0].col, true
 		case tableSeen:
 			a.errAt(ref.Pos, "La columna %q no existe en la tabla %q", ref.Name, ref.Qualifier)
@@ -600,6 +612,8 @@ type posErr struct {
 	Msg string
 }
 
+func (p *posErr) Error() string { return p.Msg }
+
 func evalConst(e Expr) (any, *posErr) {
 	switch e := e.(type) {
 	case *Literal:
@@ -645,59 +659,14 @@ func evalConst(e Expr) (any, *posErr) {
 		if err != nil {
 			return nil, err
 		}
-		return constArith(e, l, r)
+		if l == nil || r == nil {
+			return nil, nil
+		}
+		return arith(e.Op, l, r, e.Pos)
 	case *ColumnRef:
 		return nil, &posErr{e.Position(), fmt.Sprintf("Referencia inválida: VALUES no puede usar la columna %q", e.Name)}
 	}
 	return nil, &posErr{e.Position(), "VALUES solo admite valores constantes"}
-}
-
-func constArith(e *Binary, l, r any) (any, *posErr) {
-	if e.Op != "+" && e.Op != "-" && e.Op != "*" && e.Op != "/" {
-		return nil, &posErr{e.Pos, fmt.Sprintf("El operador '%s' no se admite en VALUES", e.Op)}
-	}
-	li, lInt := l.(int64)
-	ri, rInt := r.(int64)
-	if lInt && rInt {
-		switch e.Op {
-		case "+":
-			return li + ri, nil
-		case "-":
-			return li - ri, nil
-		case "*":
-			return li * ri, nil
-		}
-		if ri == 0 {
-			return nil, &posErr{e.Pos, "División por cero"}
-		}
-		return li / ri, nil
-	}
-	toF := func(v any) (float64, bool) {
-		switch x := v.(type) {
-		case int64:
-			return float64(x), true
-		case float64:
-			return x, true
-		}
-		return 0, false
-	}
-	lf, lok := toF(l)
-	rf, rok := toF(r)
-	if !lok || !rok {
-		return nil, &posErr{e.Pos, fmt.Sprintf("El operador '%s' requiere valores numéricos pero recibió %s y %s", e.Op, kindOf(l), kindOf(r))}
-	}
-	switch e.Op {
-	case "+":
-		return lf + rf, nil
-	case "-":
-		return lf - rf, nil
-	case "*":
-		return lf * rf, nil
-	}
-	if rf == 0 {
-		return nil, &posErr{e.Pos, "División por cero"}
-	}
-	return lf / rf, nil
 }
 
 // coerce converts a constant to the representation of the column type.

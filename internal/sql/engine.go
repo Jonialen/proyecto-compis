@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,7 +9,12 @@ import (
 )
 
 // Engine runs SQL scripts against a database directory.
-type Engine struct{ Dir string }
+type Engine struct {
+	Dir string
+	// NoIndex makes queries ignore indexes; tests use it to check that an
+	// indexed run returns the same rows as a full scan.
+	NoIndex bool
+}
 
 // StmtResult is the outcome of one executed statement.
 type StmtResult struct {
@@ -16,6 +22,10 @@ type StmtResult struct {
 	Kind         string `json:"kind"`
 	Message      string `json:"message"`
 	RowsAffected int    `json:"rowsAffected"`
+	// SELECT only: result set and how each table was read (index or full scan).
+	Columns []string `json:"columns,omitempty"`
+	Rows    [][]any  `json:"rows,omitempty"`
+	Plan    []string `json:"plan,omitempty"`
 }
 
 type ColumnInfo struct {
@@ -38,6 +48,7 @@ type Report struct {
 	Results     []StmtResult `json:"results"`
 	Executed    bool         `json:"executed"`
 	Schema      []TableInfo  `json:"schema"`
+	Indexes     []IndexDef   `json:"indexes"`
 }
 
 // Run lexes, parses and analyses src. When execute is true and the script
@@ -68,6 +79,10 @@ func (e *Engine) Run(src string, execute bool) Report {
 		}
 	}
 	rep.Schema = e.schemaInfo(cat)
+	rep.Indexes = []IndexDef{}
+	for _, k := range cat.idxOrd {
+		rep.Indexes = append(rep.Indexes, *cat.Indexes[k])
+	}
 	return rep
 }
 
@@ -96,6 +111,10 @@ func (e *Engine) execute(stmts []Statement, cat *Catalog, rep *Report) {
 		res, err := e.executeOne(s, cat)
 		if err != nil {
 			p := s.Position()
+			var pe *posErr
+			if errors.As(err, &pe) {
+				p = pe.Pos
+			}
 			rep.Diagnostics = append(rep.Diagnostics, Diagnostic{Phase: "execution", Message: err.Error(), Line: p.Line, Col: p.Col, Statement: n})
 			return
 		}
@@ -128,19 +147,36 @@ func (e *Engine) executeOne(s Statement, cat *Catalog) (StmtResult, error) {
 		return StmtResult{Kind: "CREATE TABLE", Message: fmt.Sprintf("Tabla %q creada", t.Name)}, nil
 	case *DropTable:
 		t := cat.Table(s.Name.Name)
+		var idxFiles []string
+		for _, ix := range cat.Indexes {
+			if strings.EqualFold(ix.Table, t.Name) {
+				idxFiles = append(idxFiles, indexFile(e.Dir, ix.Name))
+			}
+		}
 		cat.DropTable(t.Name)
 		if err := cat.Save(e.Dir); err != nil {
 			return StmtResult{}, err
 		}
-		if err := os.Remove(tableFile(e.Dir, t)); err != nil && !os.IsNotExist(err) {
-			return StmtResult{}, err
+		for _, f := range append(idxFiles, tableFile(e.Dir, t)) {
+			if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
+				return StmtResult{}, err
+			}
 		}
 		return StmtResult{Kind: "DROP TABLE", Message: fmt.Sprintf("Tabla %q eliminada", t.Name)}, nil
 	case *Insert:
 		return e.insert(s, cat)
+	case *Select:
+		return e.query(s, cat)
+	case *Update:
+		return e.update(s, cat)
+	case *Delete:
+		return e.deleteRows(s, cat)
+	case *CreateIndex:
+		return e.createIndex(s, cat)
+	case *DropIndex:
+		return e.dropIndex(s, cat)
 	}
-	kind := map[string]string{"Select": "SELECT", "Update": "UPDATE", "Delete": "DELETE", "CreateIndex": "CREATE INDEX", "DropIndex": "DROP INDEX"}[strings.TrimPrefix(fmt.Sprintf("%T", s), "*sql.")]
-	return StmtResult{}, fmt.Errorf("La sentencia %s se analiza pero aún no se ejecuta: su ejecución pertenece a una etapa posterior", kind)
+	return StmtResult{}, fmt.Errorf("sentencia no soportada: %T", s)
 }
 
 func (e *Engine) insert(s *Insert, cat *Catalog) (StmtResult, error) {
@@ -176,7 +212,7 @@ func (e *Engine) insert(s *Insert, cat *Catalog) (StmtResult, error) {
 			seen[r[pk]] = true
 		}
 	}
-	if err := writeRows(e.Dir, t, append(rows, newRows...)); err != nil {
+	if err := e.writeTable(cat, t, append(rows, newRows...)); err != nil {
 		return StmtResult{}, err
 	}
 	return StmtResult{Kind: "INSERT", RowsAffected: len(newRows), Message: fmt.Sprintf("%d fila(s) insertada(s) en %q", len(newRows), t.Name)}, nil
