@@ -1,0 +1,3 @@
+CREATE TABLE t (a INT, b VARCHAR(5));
+INSERT INTO t VALUES (1, 'sin cerrar);
+SELECT a FROM t;

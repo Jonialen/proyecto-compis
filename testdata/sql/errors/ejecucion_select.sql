@@ -1,0 +1,5 @@
+-- mode: execute
+CREATE TABLE t (id INT);
+INSERT INTO t VALUES (1);
+SELECT id FROM t;
+INSERT INTO t VALUES (2);

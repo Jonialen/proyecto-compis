@@ -1,0 +1,5 @@
+-- mode: execute
+CREATE TABLE t (id INT PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1, 10), (2, 20);
+INSERT INTO t VALUES (3, 30), (2, 99);
+INSERT INTO t VALUES (4, 40);

@@ -1,0 +1,19 @@
+3:8: error semantic: La columna "zz" no existe
+4:8: error semantic: Referencia ambigua: la columna "id" existe en más de una tabla; califíquela con el nombre o alias de la tabla
+5:8: error semantic: Referencia inválida: "q" no es una tabla ni un alias de esta consulta
+6:34: error semantic: Tipos incompatibles: no se puede aplicar '=' entre FLOAT y VARCHAR
+7:35: error semantic: Tipos incompatibles: no se puede aplicar '>' entre DATE y VARCHAR
+8:28: error semantic: La condición debe ser de tipo BOOLEAN pero es FLOAT
+9:28: error semantic: La función de agregación COUNT no se permite en esta cláusula
+10:8: error semantic: La columna "nombre" debe aparecer en GROUP BY o dentro de una función de agregación
+11:8: error semantic: SUM requiere una columna numérica pero recibió VARCHAR
+12:35: error semantic: La subconsulta de IN debe retornar exactamente una columna pero retorna 2
+13:37: error semantic: Subconsulta escalar inválida: retorna 2 columnas y debe retornar exactamente una
+14:31: error semantic: Tipos incompatibles: no se puede aplicar 'IN' entre INT y BOOLEAN
+15:20: error semantic: La tabla "fantasma" no existe
+16:35: error semantic: Referencia ambigua: el nombre o alias "a" se usa más de una vez en FROM
+17:14: error semantic: La columna "zz" no existe en la tabla "a"
+18:23: error semantic: Tipos incompatibles: no se puede asignar un valor INT a la columna "nombre" de tipo VARCHAR(10)
+18:26: error semantic: La columna "nombre" se asigna más de una vez en UPDATE
+19:21: error semantic: La columna "zz" no existe
+20:15: error semantic: El operador '>' no se puede aplicar a valores BOOLEAN

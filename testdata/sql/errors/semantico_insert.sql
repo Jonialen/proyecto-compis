@@ -1,0 +1,15 @@
+CREATE TABLE personas (id INT PRIMARY KEY, nombre VARCHAR(5) NOT NULL, altura FLOAT, nace DATE, activo BOOLEAN);
+INSERT INTO fantasma VALUES (1);
+INSERT INTO personas (id, zzz) VALUES (1, 'a');
+INSERT INTO personas (id, id, nombre) VALUES (1, 2, 'a');
+INSERT INTO personas (id) VALUES (1);
+INSERT INTO personas VALUES (1, 'a');
+INSERT INTO personas VALUES ('uno', 'a', 1.5, '2000-01-01', TRUE);
+INSERT INTO personas VALUES (1, NULL, 1.5, '2000-01-01', TRUE);
+INSERT INTO personas VALUES (1, 'demasiado largo', 1.5, '2000-01-01', TRUE);
+INSERT INTO personas VALUES (1, 'a', 'alto', '2000-01-01', TRUE);
+INSERT INTO personas VALUES (1, 'a', 1.5, '2000-13-45', TRUE);
+INSERT INTO personas VALUES (1, 'a', 1.5, '2000-01-01', 1);
+INSERT INTO personas VALUES (id, 'a', 1.5, '2000-01-01', TRUE);
+INSERT INTO personas VALUES (1 / 0, 'a', 1.5, '2000-01-01', TRUE);
+INSERT INTO personas VALUES (1.5, 'a', 1.5, '2000-01-01', TRUE);

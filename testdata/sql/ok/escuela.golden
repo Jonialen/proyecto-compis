@@ -1,0 +1,42 @@
+=== cursos.csv ===
+id,nombre,creditos
+1,Compiladores,5
+2,Bases de Datos,4
+3,Álgebra,3
+4,Física,6
+=== estudiantes.csv ===
+id,nombre,edad,promedio,activo,nacimiento
+1,Ana María,20,88.5,TRUE,2005-03-14
+2,Luis,17,71,TRUE,2008-11-02
+3,O'Brien,22,\N,FALSE,2003-02-28
+4,Zoë,21,95.25,TRUE,2004-02-29
+5,Pedro,18,90,\N,\N
+=== inscripciones.csv ===
+estudiante_id,curso_id,nota,fecha
+1,1,90,2026-02-01
+2,1,\N,2026-02-01
+3,2,\N,\N
+4,1,\N,\N
+4,3,\N,\N
+5,4,\N,\N
+=== metadata.txt ===
+# Compiscript SQL metadata v1
+TABLE estudiantes
+COLUMN id INT PRIMARY_KEY NOT_NULL
+COLUMN nombre VARCHAR(30) NOT_NULL
+COLUMN edad INT
+COLUMN promedio FLOAT
+COLUMN activo BOOLEAN
+COLUMN nacimiento DATE
+END
+TABLE cursos
+COLUMN id INT PRIMARY_KEY NOT_NULL
+COLUMN nombre VARCHAR(40) NOT_NULL
+COLUMN creditos INT NOT_NULL
+END
+TABLE inscripciones
+COLUMN estudiante_id INT NOT_NULL
+COLUMN curso_id INT NOT_NULL
+COLUMN nota FLOAT
+COLUMN fecha DATE
+END

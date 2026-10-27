@@ -1,0 +1,6 @@
+2:10: error lexical: Carácter no reconocido "#"
+3:8: error lexical: Número mal formado "12abc"
+4:29: error lexical: Carácter no reconocido "@"
+5:1: error lexical: Comentario de bloque sin cerrar
+3:14: error syntax: Se esperaba una expresión pero se encontró la palabra reservada 'FROM'
+4:31: error syntax: Se esperaba ';' o el fin de la entrada pero se encontró '2'

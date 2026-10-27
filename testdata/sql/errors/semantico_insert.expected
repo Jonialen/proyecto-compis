@@ -1,0 +1,14 @@
+2:13: error semantic: La tabla "fantasma" no existe
+3:27: error semantic: La columna "zzz" no existe en la tabla "personas"
+4:27: error semantic: La columna "id" se repite en el INSERT
+5:1: error semantic: La columna "nombre" es NOT NULL y el INSERT no le asigna valor
+6:30: error semantic: La fila 1 tiene 2 valores pero se esperaban 5
+7:30: error semantic: Tipos incompatibles: no se puede asignar un valor VARCHAR a la columna "id" de tipo INT
+8:33: error semantic: La columna "nombre" no admite NULL
+9:33: error semantic: El valor excede la longitud máxima de VARCHAR(5) en la columna "nombre" (longitud 15)
+10:38: error semantic: Tipos incompatibles: no se puede asignar un valor VARCHAR a la columna "altura" de tipo FLOAT
+11:43: error semantic: Fecha inválida "2000-13-45" para la columna "nace" (se esperaba YYYY-MM-DD)
+12:57: error semantic: Tipos incompatibles: no se puede asignar un valor INT a la columna "activo" de tipo BOOLEAN
+13:30: error semantic: Referencia inválida: VALUES no puede usar la columna "id"
+14:32: error semantic: División por cero
+15:30: error semantic: Tipos incompatibles: no se puede asignar un valor FLOAT a la columna "id" de tipo INT

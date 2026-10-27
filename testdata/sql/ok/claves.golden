@@ -1,0 +1,22 @@
+=== marcas.csv ===
+id,nombre
+1,A
+1,A
+=== metadata.txt ===
+# Compiscript SQL metadata v1
+TABLE Productos
+COLUMN codigo INT PRIMARY_KEY NOT_NULL
+COLUMN nombre VARCHAR(20) NOT_NULL
+COLUMN precio FLOAT NOT_NULL
+END
+TABLE marcas
+COLUMN id INT
+COLUMN nombre VARCHAR(10) NOT_NULL
+END
+=== productos.csv ===
+codigo,nombre,precio
+10,Lápiz,1.5
+20,Cuaderno,12.75
+30,Regla,3
+40,Borrador,0.75
+50,Tijeras,10

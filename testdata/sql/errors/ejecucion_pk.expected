@@ -1,0 +1,1 @@
+4:1: error execution: Violación de PRIMARY KEY: el valor 2 de la columna "id" ya existe en la tabla "t" (fila 2 del INSERT); no se insertó ninguna fila

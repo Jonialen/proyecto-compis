@@ -1,0 +1,8 @@
+1:8: error syntax: Se esperaba una expresión pero se encontró la palabra reservada 'FROM'
+2:14: error syntax: Se esperaba el nombre de la tabla pero se encontró '('
+3:19: error syntax: Se esperaba un tipo de dato (INT, FLOAT, VARCHAR(n), BOOLEAN o DATE) pero se encontró 'TEXT'
+4:27: error syntax: Se esperaba ')' o ',' pero se encontró ';'
+5:14: error syntax: Se esperaba el nombre de la columna pero se encontró la palabra reservada 'WHERE'
+6:27: error syntax: Se esperaba una expresión pero se encontró ';'
+7:14: error syntax: Se esperaba ';' o el fin de la entrada pero se encontró la palabra reservada 'DROP'
+8:12: error syntax: '*' solo es válido dentro de COUNT

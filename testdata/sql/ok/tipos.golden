@@ -1,0 +1,19 @@
+=== metadata.txt ===
+# Compiscript SQL metadata v1
+TABLE tipos
+COLUMN n INT
+COLUMN f FLOAT
+COLUMN s VARCHAR(40)
+COLUMN b BOOLEAN
+COLUMN d DATE
+END
+=== tipos.csv ===
+n,f,s,b,d
+9223372036854775807,3.14159,,TRUE,2000-02-29
+-9223372036854775808,0,"línea con , coma",FALSE,1999-12-31
+0,0,"comilla ""doble"" y 'simple'",\N,1900-01-01
+40,2.5,\\N,TRUE,\N
+\N,\N,\N,\N,\N
+-5,-2.5,\\barra,FALSE,2024-12-31
+1,1,"salto
+de línea",TRUE,2023-01-01
