@@ -11,10 +11,16 @@ const SAMPLE = `CREATE TABLE estudiantes (
 
 INSERT INTO estudiantes VALUES
   (1, 'Ana', 20, 88.5, TRUE, '2005-03-14'),
-  (2, 'Luis', 17, 71.0, TRUE, '2008-11-02');
+  (2, 'Luis', 17, 71.0, TRUE, '2008-11-02'),
+  (3, 'Marta', 22, NULL, FALSE, '2003-02-28');
 
--- SELECT, UPDATE y DELETE se analizan, pero su ejecución es de una etapa posterior.
--- SELECT nombre FROM estudiantes WHERE edad >= 18;
+CREATE INDEX idx_edad ON estudiantes (edad);
+
+SELECT nombre FROM estudiantes WHERE edad >= 18 ORDER BY nombre;
+SELECT activo, COUNT(*) AS total, AVG(promedio) FROM estudiantes GROUP BY activo;
+
+-- Se borra al final para poder ejecutar el ejemplo otra vez.
+DROP TABLE estudiantes;
 `;
 
 const TABS = [
@@ -57,7 +63,7 @@ function table(headers, rows) {
   t.appendChild(head);
   rows.forEach((r) => {
     const tr = el('tr');
-    r.forEach((c) => tr.appendChild(el('td', '', c === null ? 'NULL' : String(c))));
+    r.forEach((c) => tr.appendChild(el('td', '', c === null ? 'NULL' : typeof c === 'boolean' ? (c ? 'TRUE' : 'FALSE') : String(c))));
     t.appendChild(tr);
   });
   return t;
@@ -117,7 +123,14 @@ function render() {
       if (!r.executed) {
         out.appendChild(el('div', 'muted', r.diagnostics.length ? 'No se ejecutó: corrige los errores primero.' : 'Solo se analizó. Usa Ejecutar para aplicar las sentencias.'));
       }
-      r.results.forEach((x) => out.appendChild(el('div', 'ok', `[${x.statement}] ${x.message}`)));
+      r.results.forEach((x) => {
+        out.appendChild(el('div', 'ok', `[${x.statement}] ${x.message}`));
+        if (x.columns) {
+          out.appendChild(table(x.columns, x.rows || []));
+        }
+        (x.plan || []).forEach((p) => out.appendChild(el('div', 'muted', '  plan: ' + p)));
+        out.appendChild(el('div', '', ' '));
+      });
       break;
     case 'schema':
       if (r.schema.length === 0) out.appendChild(el('div', 'muted', 'La base de datos no tiene tablas.'));
@@ -126,6 +139,7 @@ function render() {
         out.appendChild(table(['Columna', 'Tipo', 'PK', 'NOT NULL'], t.columns.map((c) => [c.name, c.type, c.primaryKey ? 'sí' : '', c.notNull ? 'sí' : ''])));
         out.appendChild(el('div', '', ' '));
       });
+      (r.indexes || []).forEach((ix) => out.appendChild(el('div', 'muted', `índice ${ix.name} sobre ${ix.table}(${ix.column})`)));
       break;
   }
 }

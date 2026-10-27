@@ -20,9 +20,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	db := fs.String("db", sql.DefaultDir(), "directorio de la base de datos")
 	analyze := fs.Bool("analyze", false, "solo analizar; no ejecutar ni modificar la base de datos")
+	noIndex := fs.Bool("noindex", false, "ignorar los índices al ejecutar (para comparar el plan y el resultado)")
 	format := fs.String("format", "text", "formato de salida: text o json")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Uso: sql [-db dir] [-analyze] [-format text|json] [archivo.sql]")
+		fmt.Fprintln(stderr, "Uso: sql [-db dir] [-analyze] [-noindex] [-format text|json] [archivo.sql]")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -51,14 +52,14 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	rep := (&sql.Engine{Dir: *db}).Run(string(src), !*analyze)
+	rep := (&sql.Engine{Dir: *db, NoIndex: *noIndex}).Run(string(src), !*analyze)
 	if *format == "json" {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		enc.Encode(rep)
 	} else {
 		for _, r := range rep.Results {
-			fmt.Fprintf(stdout, "[%d] %s\n", r.Statement, r.Message)
+			fmt.Fprint(stdout, sql.FormatResult(r))
 		}
 		for _, d := range rep.Diagnostics {
 			fmt.Fprintf(stderr, "%s:%s\n", name, d)

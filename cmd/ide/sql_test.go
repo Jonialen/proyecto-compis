@@ -102,3 +102,32 @@ func TestSQLRunTransportBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestSQLRunReturnsSelectRowsPlanAndIndexes(t *testing.T) {
+	withSQLDir(t)
+	body := `{"source":"CREATE TABLE t (id INT PRIMARY KEY, n VARCHAR(5)); INSERT INTO t VALUES (1, 'a'), (2, NULL), (3, 'c'); CREATE INDEX i ON t (id); SELECT n FROM t WHERE id >= 2 ORDER BY id;","execute":true}`
+	rec := request(t, http.MethodPost, "/api/sql/run", "application/json", body)
+	var rep struct {
+		Diagnostics []any `json:"diagnostics"`
+		Results     []struct {
+			Kind    string   `json:"kind"`
+			Columns []string `json:"columns"`
+			Rows    [][]any  `json:"rows"`
+			Plan    []string `json:"plan"`
+		} `json:"results"`
+		Indexes []struct{ Name, Table, Column string } `json:"indexes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &rep); err != nil || len(rep.Diagnostics) != 0 {
+		t.Fatalf("body = %s (err %v)", rec.Body, err)
+	}
+	sel := rep.Results[len(rep.Results)-1]
+	if sel.Kind != "SELECT" || len(sel.Columns) != 1 || sel.Columns[0] != "n" || len(sel.Rows) != 2 || sel.Rows[0][0] != nil || sel.Rows[1][0] != "c" {
+		t.Errorf("select result = %+v", sel)
+	}
+	if len(sel.Plan) != 1 || !strings.Contains(sel.Plan[0], `Índice "i" usado en "t"`) {
+		t.Errorf("plan = %v", sel.Plan)
+	}
+	if len(rep.Indexes) != 1 || rep.Indexes[0].Name != "i" {
+		t.Errorf("indexes = %+v", rep.Indexes)
+	}
+}
