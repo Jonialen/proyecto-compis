@@ -24,6 +24,15 @@ El primer ejemplo genera TAC de una expresión numérica; el segundo devuelve el
 
 Para el IDE, ejecutar el servidor desde la raíz porque sirve la carpeta relativa `web`. Seleccionar Compiscript, cargar o editar un `.cps` y elegir **Compile .cps**; **Analyze .cps (AST)** conserva el análisis anterior. El servidor escucha en `:8080`, no exclusivamente en loopback: usarlo en un entorno local confiable y detenerlo con Ctrl+C. Los detalles de paneles y errores están en el [manual del IDE](docs/semestre2/entrega2/ide.md).
 
+## Entrega 3: intérprete SQL
+
+El mismo repositorio incluye un intérprete SQL con almacenamiento en archivos (lexer, parser, AST, análisis semántico, `CREATE`/`DROP`/`INSERT`). Detalles, formato de almacenamiento y límites en la [guía de Entrega 3](docs/semestre2/entrega3/README.md).
+
+```sh
+go run ./cmd/sql -db /tmp/mibd testdata/sql/ok/demo.sql
+go run ./cmd/ide   # y abrir http://localhost:8080/sql.html
+```
+
 ## Informes, instrucciones y entregables
 
 Los Markdown son las fuentes editables. Los cuatro PDF versionados están separados en `deliverables/entrega2/`; conservarlos juntos para los enlaces internos del paquete.
