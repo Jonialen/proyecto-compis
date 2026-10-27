@@ -7,8 +7,8 @@ Implementa las ocho etapas de [Proyecto_2_1__Compiladores-2.md](Proyecto_2_1__Co
 Desde la raíz del repositorio:
 
 ```sh
-go run ./cmd/sql -db /tmp/mibd testdata/sql/ok/tienda.sql         # analiza y ejecuta
-go run ./cmd/sql -db /tmp/mibd -analyze testdata/sql/ok/tienda.sql # solo analiza, no toca el disco
+go run ./cmd/sql -db /tmp/mibd testdata/sql/ok/enunciado.sql      # analiza y ejecuta (ejemplos del enunciado)
+go run ./cmd/sql -db /tmp/mibd -analyze testdata/sql/ok/enunciado.sql # solo analiza, no toca el disco
 go run ./cmd/sql -db /tmp/mibd -noindex consulta.sql              # ignora los índices (para comparar el plan)
 go run ./cmd/sql -format=json -analyze consulta.sql               # tokens, árbol, AST y errores
 go run ./cmd/ide                                                   # interfaz en http://localhost:8080/sql.html
@@ -79,7 +79,7 @@ INDEX idx_edad ON estudiantes(edad)
 
 - Lógica de tres valores: comparar con `NULL` da `NULL`, y `WHERE` conserva solo las filas con resultado verdadero. `x NOT IN (…)` es `NULL` si la lista contiene `NULL`.
 - Dos enteros operados dan un entero (la división trunca: `1 / 2` es `0`); si interviene un `FLOAT` el resultado es `FLOAT`. Los desbordamientos y la división por cero son errores de ejecución con su posición.
-- `ORDER BY` pone los `NULL` primero en orden ascendente (y últimos en descendente); sin `ORDER BY`, el orden es el de la tabla (en un `JOIN`, el de los bucles anidados).
+- Sin `ORDER BY` el resultado sale en el orden de la tabla, con o sin índice (el índice nunca cambia el orden). `ORDER BY` pone los `NULL` primero en orden ascendente (y últimos en descendente); sin `ORDER BY`, el orden es el de la tabla (en un `JOIN`, el de los bucles anidados).
 - Agregaciones: `COUNT(*)` cuenta filas, las demás ignoran `NULL`; sobre una tabla vacía `COUNT` da `0` y las otras `NULL`. Las columnas fuera de una agregación deben estar en `GROUP BY` (error semántico en caso contrario).
 - Subconsultas: `IN`, `NOT IN`, `EXISTS`, `NOT EXISTS` y escalares, anidadas y correlacionadas. Una subconsulta que no depende de la consulta exterior se evalúa una sola vez. Una escalar con más de una columna es error semántico; con más de un registro, error de ejecución.
 
@@ -103,7 +103,7 @@ Están en `testdata/sql/` y los ejecuta `go test ./internal/sql` (`examples_test
 
 | Carpeta | Contenido | Se compara con |
 |---|---|---|
-| `ok/` | `tienda.sql` (4 tablas, 21 consultas con `JOIN`, agregaciones, subconsultas e índices, y `UPDATE`/`DELETE`), `escuela.sql`, `tipos.sql` (límites de cada tipo y de la codificación CSV), `claves.sql`, `demo.sql` | `.golden`: resultado de cada sentencia, plan de lectura y contenido de todos los archivos de la base |
+| `ok/` | `enunciado.sql` (las tablas y las dos consultas del PDF del enunciado, tal cual, más las otras subconsultas, agregaciones e índice), `tienda.sql` (4 tablas, 21 consultas con `JOIN`, agregaciones, subconsultas e índices, y `UPDATE`/`DELETE`), `escuela.sql`, `tipos.sql` (límites de cada tipo y de la codificación CSV), `claves.sql`, `demo.sql` | `.golden`: resultado de cada sentencia, plan de lectura y contenido de todos los archivos de la base |
 | `analyze/` | `consultas.sql`: 27 sentencias complejas sobre un esquema sin datos; solo se analizan | cero errores y 27 sentencias en el AST |
 | `errors/` | Un archivo por fase: `lexico_*`, `sintaxis`, `semantico_*`, `ejecucion_*` | `.expected`: línea, columna, fase y mensaje de cada error |
 

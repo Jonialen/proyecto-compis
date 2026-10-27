@@ -1,0 +1,122 @@
+[1] Tabla "estudiantes" creada
+[2] Tabla "cursos" creada
+[3] Tabla "inscripciones" creada
+[4] 5 fila(s) insertada(s) en "estudiantes"
+[5] 3 fila(s) insertada(s) en "cursos"
+[6] 6 fila(s) insertada(s) en "inscripciones"
+[7] 3 fila(s)
+nombre
+------
+Ana
+Marta
+Zoe
+  plan: Recorrido completo de "estudiantes": 5 registros
+[8] 3 fila(s)
+nombre
+------
+Ana
+Marta
+Pedro
+  plan: Recorrido completo de "estudiantes": 5 registros
+  plan: Recorrido completo de "inscripciones": 6 registros
+[9] 2 fila(s)
+nombre
+------
+Luis
+Zoe
+  plan: Recorrido completo de "estudiantes": 5 registros
+  plan: Recorrido completo de "inscripciones": 6 registros
+[10] 2 fila(s)
+nombre
+------
+Ana
+Luis
+  plan: Recorrido completo de "estudiantes": 5 registros
+  plan: Recorrido completo de "inscripciones": 6 registros
+[11] 3 fila(s)
+nombre
+------
+Marta
+Zoe
+Pedro
+  plan: Recorrido completo de "estudiantes": 5 registros
+  plan: Recorrido completo de "inscripciones": 6 registros
+[12] 2 fila(s)
+nombre
+------
+Ana
+Marta
+  plan: Recorrido completo de "estudiantes": 5 registros
+[13] 2 fila(s)
+c.nombre     | inscritos | MIN(e.edad) | MAX(e.edad) | AVG(e.edad)        | SUM(e.edad)
+-------------+-----------+-------------+-------------+--------------------+------------
+Algebra      | 3         | 16          | 22          | 19.333333333333332 | 58
+Compiladores | 2         | 17          | 20          | 18.5               | 37
+  plan: Recorrido completo de "cursos": 3 registros
+  plan: Recorrido completo de "inscripciones": 6 registros
+  plan: Recorrido completo de "estudiantes": 5 registros
+[14] Índice "idx_edad" creado sobre estudiantes(edad)
+[15] 3 fila(s)
+nombre
+------
+Ana
+Marta
+Zoe
+  plan: Índice "idx_edad" usado en "estudiantes" por edad >= 18: 3 de 5 registros leídos
+[16] 1 fila(s) insertada(s) en "estudiantes"
+[17] 1 fila(s) actualizada(s) en "estudiantes"
+  plan: Recorrido completo de "estudiantes": 6 registros
+[18] 1 fila(s) eliminada(s) de "estudiantes"
+  plan: Índice "idx_edad" usado en "estudiantes" por edad = 17: 1 de 6 registros evaluados
+[19] 5 fila(s)
+nombre | edad
+-------+-----
+Sofia  | 30
+Marta  | 22
+Ana    | 20
+Pedro  | 19
+Zoe    | 18
+  plan: Índice "idx_edad" usado en "estudiantes" por edad >= 18: 5 de 5 registros leídos
+=== cursos.csv ===
+id,nombre
+1,Compiladores
+2,Bases de Datos
+3,Algebra
+=== estudiantes.csv ===
+id,nombre,edad
+1,Ana,20
+3,Marta,22
+4,Zoe,18
+5,Pedro,19
+6,Sofia,30
+=== idx_edad.idx ===
+#INDEX,idx_edad,estudiantes,edad,<stamp>,5
+18,35
+19,44
+20,15
+22,24
+30,55
+=== inscripciones.csv ===
+estudiante_id,curso_id
+1,3
+2,1
+3,3
+4,2
+5,3
+1,1
+=== metadata.txt ===
+# Compiscript SQL metadata v1
+TABLE estudiantes
+COLUMN id INT PRIMARY_KEY NOT_NULL
+COLUMN nombre VARCHAR(50) NOT_NULL
+COLUMN edad INT NOT_NULL
+END
+TABLE cursos
+COLUMN id INT PRIMARY_KEY NOT_NULL
+COLUMN nombre VARCHAR(50) NOT_NULL
+END
+TABLE inscripciones
+COLUMN estudiante_id INT NOT_NULL
+COLUMN curso_id INT NOT_NULL
+END
+INDEX idx_edad ON estudiantes(edad)
