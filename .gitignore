@@ -8,3 +8,6 @@ tools/antlr/*.jar
 /README.pdf
 # Keep the human-provided original locally; instructions.md is canonical in Git.
 /docs/semestre2/entrega2/Proyecto_2__Compiladores.pdf
+
+# Local SQL databases created by the SQL interpreter
+/sqldata/

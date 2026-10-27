@@ -1,0 +1,104 @@
+package main
+
+import (
+	"encoding/json"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func withSQLDir(t *testing.T) string {
+	t.Helper()
+	old := sqlDataDir
+	sqlDataDir = filepath.Join(t.TempDir(), "db")
+	t.Cleanup(func() { sqlDataDir = old })
+	return sqlDataDir
+}
+
+type sqlResponse struct {
+	Tokens      []map[string]any `json:"tokens"`
+	ParseTree   map[string]any   `json:"parseTree"`
+	AST         map[string]any   `json:"ast"`
+	Diagnostics []struct {
+		Phase   string `json:"phase"`
+		Message string `json:"message"`
+		Line    int    `json:"line"`
+		Col     int    `json:"col"`
+	} `json:"diagnostics"`
+	Results  []map[string]any `json:"results"`
+	Executed bool             `json:"executed"`
+}
+
+func TestSQLRunExecutesAndReturnsEveryView(t *testing.T) {
+	dir := withSQLDir(t)
+	body := `{"source":"CREATE TABLE a (id INT PRIMARY KEY, n VARCHAR(5)); INSERT INTO a VALUES (1, 'x');","execute":true}`
+	rec := request(t, http.MethodPost, "/api/sql/run", "application/json", body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+	}
+	var rep sqlResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &rep); err != nil {
+		t.Fatal(err)
+	}
+	if !rep.Executed || len(rep.Results) != 2 || len(rep.Diagnostics) != 0 || len(rep.Tokens) == 0 || rep.ParseTree == nil || rep.AST == nil {
+		t.Fatalf("report = %+v", rep)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "a.csv")); err != nil {
+		t.Errorf("table file missing: %v", err)
+	}
+}
+
+func TestSQLRunAnalyzeOnlyDoesNotExecute(t *testing.T) {
+	dir := withSQLDir(t)
+	rec := request(t, http.MethodPost, "/api/sql/run", "application/json", `{"source":"CREATE TABLE a (id INT);"}`)
+	var rep sqlResponse
+	json.Unmarshal(rec.Body.Bytes(), &rep)
+	if rep.Executed || len(rep.Diagnostics) != 0 {
+		t.Fatalf("report = %+v", rep)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Errorf("analysis-only run touched disk: %v", err)
+	}
+}
+
+func TestSQLRunReportsAllErrorPhases(t *testing.T) {
+	withSQLDir(t)
+	for source, phase := range map[string]string{
+		"SELECT @;":          "lexical",
+		"SELECT FROM t;":     "syntax",
+		"DROP TABLE nada;":   "semantic",
+		"SELECT 'sin cerrar": "lexical",
+	} {
+		b, _ := json.Marshal(map[string]any{"source": source, "execute": true})
+		rec := request(t, http.MethodPost, "/api/sql/run", "application/json", string(b))
+		var rep sqlResponse
+		json.Unmarshal(rec.Body.Bytes(), &rep)
+		if len(rep.Diagnostics) == 0 || rep.Diagnostics[0].Phase != phase || rep.Diagnostics[0].Line != 1 || rep.Diagnostics[0].Col == 0 {
+			t.Errorf("%q: diagnostics = %+v, want first phase %s", source, rep.Diagnostics, phase)
+		}
+		if rep.Executed {
+			t.Errorf("%q: must not execute with errors", source)
+		}
+	}
+}
+
+func TestSQLRunTransportBoundary(t *testing.T) {
+	withSQLDir(t)
+	cases := []struct {
+		name, method, ct, body string
+		want                   int
+	}{
+		{"wrong method", http.MethodGet, "", "", http.StatusMethodNotAllowed},
+		{"wrong content type", http.MethodPost, "text/plain", `{}`, http.StatusUnsupportedMediaType},
+		{"unknown field", http.MethodPost, "application/json", `{"source":"","dir":"/etc"}`, http.StatusBadRequest},
+		{"invalid json", http.MethodPost, "application/json", `{`, http.StatusBadRequest},
+		{"too large", http.MethodPost, "application/json", `{"source":"` + strings.Repeat("a", maxCompiscriptRequestBytes) + `"}`, http.StatusRequestEntityTooLarge},
+	}
+	for _, c := range cases {
+		if rec := request(t, c.method, "/api/sql/run", c.ct, c.body); rec.Code != c.want {
+			t.Errorf("%s: status = %d, want %d", c.name, rec.Code, c.want)
+		}
+	}
+}

@@ -33,6 +33,7 @@ func newMux() *http.ServeMux {
 	mux.HandleFunc("/api/process", cors(handleProcess))
 	mux.HandleFunc("/api/compiscript/analyze", cors(handleCompiscriptAnalyze))
 	mux.HandleFunc("/api/compiscript/compile", cors(handleCompiscriptCompile))
+	mux.HandleFunc("/api/sql/run", cors(handleSQLRun))
 	mux.HandleFunc("/api/health", cors(handleHealth))
 	return mux
 }
