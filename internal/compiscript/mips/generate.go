@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"genanalex/internal/compiscript/ast"
 	"genanalex/internal/compiscript/model"
 	"genanalex/internal/compiscript/tac"
 )
@@ -31,6 +32,7 @@ type Error struct {
 	Procedure   string
 	Instruction int
 	Message     string
+	Span        ast.Span
 }
 
 func (e *Error) Error() string {
@@ -325,7 +327,7 @@ func (g *generator) emitProcedure(label string, p *tac.Procedure, tape []tac.Ins
 		g.registers.used = 0
 		g.emit("    # TAC %d: %s", pc, i.Op)
 		if err := g.instruction(i); err != nil {
-			return &Error{label, pc, err.Error()}
+			return &Error{Procedure: label, Instruction: pc, Message: err.Error(), Span: i.Span}
 		}
 	}
 	if p == nil {

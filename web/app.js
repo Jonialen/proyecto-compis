@@ -198,6 +198,12 @@ function downloadText(text, filename) {
 function bindRunButton() {
   document.getElementById('btn-run').addEventListener('click', triggerRun);
   document.getElementById('btn-compile').addEventListener('click', () => runCompiscript('compile'));
+  document.getElementById('btn-mips').addEventListener('click', () => runCompiscript('mips'));
+  document.getElementById('btn-download-mips').addEventListener('click', () => {
+    if (!state.mipsText || state.loading) return;
+    const filename = (state.fileNames.cps || 'program.cps').replace(/\.cps$/i, '.asm');
+    downloadText(state.mipsText, filename);
+  });
   document.getElementById('btn-analyze-cps').addEventListener('click', () => runCompiscript());
   document.getElementById('btn-clear-cps').addEventListener('click', () => replaceCompiscriptSource(''));
   document.getElementById('btn-sample-cps').addEventListener('click', () => replaceCompiscriptSource(COMPISCRIPT_SAMPLE));
@@ -702,7 +708,7 @@ let values = [1, 2, 3];
 let total: integer = 0;
 foreach (value in values) { total = total + add(value); }
 `;
-const COMPISCRIPT_PANELS = ['source', 'ast', 'diagnostics', 'environments', 'tac', 'symbols'];
+const COMPISCRIPT_PANELS = ['source', 'ast', 'diagnostics', 'environments', 'tac', 'symbols', 'mips'];
 
 function invalidateRequest() {
   state.requestRevision++;
@@ -738,9 +744,10 @@ async function runCompiscript(mode = 'analyze') {
   const revision = ++state.requestRevision;
   clearCompiscriptResults('Processing…', false);
   setLoading(true);
-  setStatus(mode === 'compile' ? 'Compiling Compiscript…' : 'Analysing Compiscript…', 'loading');
+  setStatus(mode === 'analyze' ? 'Analysing Compiscript…' : 'Compiling Compiscript…', 'loading');
   try {
-    const res = await fetch(mode === 'compile' ? '/api/compiscript/compile' : '/api/compiscript/analyze', {
+    const endpoint = mode === 'mips' ? '/api/compiscript/mips' : (mode === 'compile' ? '/api/compiscript/compile' : '/api/compiscript/analyze');
+    const res = await fetch(endpoint, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source }),
     });
@@ -748,7 +755,7 @@ async function runCompiscript(mode = 'analyze') {
     if (revision !== state.requestRevision) return;
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     renderCompiscript(source, data);
-    const action = mode === 'compile' ? 'Compilation' : 'Analysis';
+    const action = mode === 'mips' ? 'MIPS compilation' : (mode === 'compile' ? 'Compilation' : 'Analysis');
     setStatus(data.diagnostics.length ? `${action} complete with diagnostics` : `✓ ${action} complete`, data.diagnostics.length ? 'error' : 'ok');
   } catch (err) {
     if (revision !== state.requestRevision) return;
@@ -760,6 +767,8 @@ async function runCompiscript(mode = 'analyze') {
 }
 
 function clearCompiscriptResults(message, select = true) {
+  state.mipsText = '';
+  document.getElementById('btn-download-mips').disabled = true;
   COMPISCRIPT_PANELS.forEach(name => {
     document.getElementById(`rp-${name}`).replaceChildren(element('div', message, 'empty-state'));
   });
@@ -811,7 +820,10 @@ function renderCompiscript(source, report) {
   environmentPanel.replaceChildren(...(roots.length ? roots : [element('div', 'No environments.', 'empty-state')]));
   document.getElementById('rp-tac').replaceChildren(element('pre', report.tacText || 'No TAC. Compile a valid supported program.', 'source-view'));
   renderCodegen(report.codegen);
-  switchResultsTab(report.diagnostics?.length ? 'diagnostics' : (report.tac ? 'tac' : 'source'));
+  state.mipsText = report.diagnostics?.length ? '' : (report.mipsText || '');
+  document.getElementById('rp-mips').replaceChildren(element('pre', state.mipsText || 'No MIPS. Choose Compile MIPS for a valid program.', 'source-view'));
+  document.getElementById('btn-download-mips').disabled = !state.mipsText;
+  switchResultsTab(report.diagnostics?.length ? 'diagnostics' : (state.mipsText ? 'mips' : (report.tac ? 'tac' : 'source')));
 }
 
 function renderCodegen(codegen) {
@@ -930,6 +942,8 @@ function setLoading(on) {
   state.loading = on;
   document.getElementById('btn-run').disabled = on;
   document.getElementById('btn-compile').disabled = on;
+  document.getElementById('btn-mips').disabled = on;
+  document.getElementById('btn-download-mips').disabled = on || !state.mipsText;
   document.getElementById('btn-analyze-cps').disabled = on;
 }
 
