@@ -1,4 +1,4 @@
-# Backend MIPS de Compiscript — en desarrollo
+# Backend MIPS de Compiscript
 
 `Generate(*tac.Program) (string, error)` traduce el IR estructurado, no su representación textual. Devuelve ensamblador MARS o un error sin ensamblador parcial. No ejecuta el programa durante la compilación.
 
@@ -24,6 +24,6 @@ Las pruebas generan ensamblador desde `.cps` mediante el compilador existente y 
 - El resto numérico usa reducción binaria sobre doubles, sin truncar el cociente a un entero de 32 bits.
 - La salida numérica usa impresión entera cuando el valor es integral y cabe en 32 bits; el resto usa la impresión double de MARS. No se promete formato decimal idéntico a Go para valores extremos.
 
-## Cobertura y siguientes pasos
+## Cobertura y verificación
 
-Este corte cubre valores escalares, operaciones, cadenas, impresión, control, funciones directas, parámetros, retornos y recursión. Las pruebas incluyen Fibonacci, recursión mutua, aislamiento de locales, widening y diez argumentos con llamadas anidadas. También cubre entornos retenidos, capturas mutables, reentrada de bloques, closures y llamadas indirectas con validación de firma; las funciones se comparan dinámicamente por código, entorno y receptor. El runtime agrega [objetos, herencia, métodos ligados, listas y valores dinámicos](references.md), junto con [excepciones y desenrollado](exceptions.md). Ambos bloques y sus regresiones pasaron en MARS. Un sentinel privado distingue un binding declarado sin valor de uno aún no declarado; leer cualquiera sin inicialización falla. La suite también rechaza metadata inválida aunque no se use. Todavía falta integrar CLI/API/IDE y ejecutar la aceptación final de [`odd/tasks/compiscript-mips.md`](../../../odd/tasks/compiscript-mips.md).
+Este corte cubre valores escalares, operaciones, cadenas, impresión, control, funciones directas, parámetros, retornos y recursión. Las pruebas incluyen Fibonacci, recursión mutua, aislamiento de locales, widening y diez argumentos con llamadas anidadas. También cubre entornos retenidos, capturas mutables, reentrada de bloques, closures y llamadas indirectas con validación de firma; las funciones se comparan dinámicamente por código, entorno y receptor. El runtime agrega [objetos, herencia, métodos ligados, listas y valores dinámicos](references.md), junto con [excepciones y desenrollado](exceptions.md). Ambos bloques y sus regresiones pasaron en MARS. Un sentinel privado distingue un binding declarado sin valor de uno aún no declarado; leer cualquiera sin inicialización falla. La suite también rechaza metadata inválida aunque no se use. La integración CLI/API/IDE y la aceptación global pasaron; la [guía](../../../docs/semestre2/mips/README.md) y la [evidencia final](../../../docs/semestre2/mips/acceptance.md) describen comandos, 150 escenarios, límites y controles humanos pendientes. El [registro de trabajo](../../../odd/tasks/compiscript-mips.md) conserva decisiones y commits.

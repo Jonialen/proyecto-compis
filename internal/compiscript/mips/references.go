@@ -134,6 +134,8 @@ func runtimeTag(k model.TypeKind) (int, error) {
 		return tagFunction, nil
 	case model.TypeNull:
 		return tagNull, nil
+	case model.TypeException:
+		return tagException, nil
 	}
 	return 0, fmt.Errorf("invalid value type %q", k)
 }

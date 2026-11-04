@@ -84,6 +84,8 @@ Los valores usan cajas etiquetadas y ubicaciones canónicas en memoria: el enfoq
 
 ## Pruebas y presentación
 
+La [evidencia de aceptación](acceptance.md) registra los 150 escenarios MIPS, la suite global, `vet`, las pruebas web, compatibilidad y límites de verificación.
+
 ```sh
 go test ./internal/compiscript/mips -count=1 -v
 go test ./internal/compiscript ./cmd/compiscript-mips ./cmd/compiscript-tac ./cmd/ide -count=1
