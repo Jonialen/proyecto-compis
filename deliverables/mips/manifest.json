@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "phase": "Compiscript MIPS",
+  "exportedFrom": "working tree; source hashes are authoritative",
+  "baseCommit": "e66c965d4ad55f9237b2d836756757671eea0851",
+  "verifiedSoftwareCommit": "115dc4f489cd3796c34ed178d6c1e635d65a4dd1",
+  "branch": "feat/compiscript-mips",
+  "tools": {
+    "pandoc": "pandoc 3.12.1",
+    "xelatex": "XeTeX 3.141592653-2.6-0.999998 (TeX Live 2026)"
+  },
+  "options": [
+    "--standalone",
+    "--pdf-engine=xelatex",
+    "--toc",
+    "--toc-depth=2",
+    "-V",
+    "papersize=a4",
+    "-V",
+    "geometry:margin=22mm",
+    "-V",
+    "fontsize=10pt",
+    "-V",
+    "mainfont=Arial",
+    "-V",
+    "monofont=Menlo",
+    "-V",
+    "colorlinks=true",
+    "-V",
+    "urlcolor=blue",
+    "-V",
+    "linkcolor=blue",
+    "-M",
+    "lang=es"
+  ],
+  "layout": "A4,22mm margins,Arial10pt,Menlo footnotesize code,fvextra wrap,conditional Highlighting",
+  "sourceDateEpoch": 1793815221,
+  "linkPolicy": "Four primary sources map to sibling PDF filenames; other repository links use the feature branch URL without claiming publication.",
+  "sources": [
+    {
+      "source": "docs/semestre2/mips/report.md",
+      "pdf": "deliverables/mips/report.pdf",
+      "title": "Informe técnico: Compiscript MIPS",
+      "sourceSHA256": "49009e0405e8e83ecb91fa6e4f7d39a35151dadc6151efc80c14dc9ed5278f56",
+      "pdfSHA256": "38057879fecd20e74945216e4ea8884f19d0827bc83a79c48b2e0debc6f7bb05",
+      "pages": 3,
+      "bytes": 65606,
+      "textHeadingsChecked": true
+    },
+    {
+      "source": "docs/semestre2/mips/architecture.md",
+      "pdf": "deliverables/mips/architecture.pdf",
+      "title": "Arquitectura de Compiscript MIPS",
+      "sourceSHA256": "1a70d759bbf3897b7646948c7094f7faa5383c852e4cc2e3ab1a0f61d33d9d22",
+      "pdfSHA256": "628c9e5c6bb5f6b5cdb816475f543db1af6aa919078f3fa49880aad752cff18f",
+      "pages": 4,
+      "bytes": 66873,
+      "textHeadingsChecked": true
+    },
+    {
+      "source": "docs/semestre2/mips/README.md",
+      "pdf": "deliverables/mips/run-guide.pdf",
+      "title": "Guía de ejecución de Compiscript MIPS",
+      "sourceSHA256": "29e9762b17e91daf6d3480f5bc21f0c35517eb34b4d40d51a4d26cdf88d6a981",
+      "pdfSHA256": "c1963291fb70252e242df438f94f8582cb49de76341b54a5b09315378ba833f4",
+      "pages": 4,
+      "bytes": 68845,
+      "textHeadingsChecked": true
+    },
+    {
+      "source": "docs/semestre2/mips/mips-reference.md",
+      "pdf": "deliverables/mips/mips-reference.pdf",
+      "title": "Referencia TAC a MIPS",
+      "sourceSHA256": "e1c08e6a1aeaf7b10937dd3f041e8a82d50bbc37f4affdfc85064ab3305d0282",
+      "pdfSHA256": "b364a83ffc83cc8249d389c3b358a0c5653ca63d2d27538ad58e0884d310bd12",
+      "pages": 4,
+      "bytes": 77282,
+      "textHeadingsChecked": true
+    }
+  ]
+}

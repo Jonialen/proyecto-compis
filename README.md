@@ -36,6 +36,8 @@ go run ./cmd/compiscript-mips -format=json testdata/mips/full-language.cps
 
 En el IDE, **Compile MIPS** muestra el ensamblador y **Download .asm** permite guardarlo; MARS lo ejecuta por separado. Esta fase no es la entrega SQL descrita a continuación.
 
+Documentación en español: [informe](docs/semestre2/mips/report.md), [arquitectura](docs/semestre2/mips/architecture.md), [referencia TAC a MIPS](docs/semestre2/mips/mips-reference.md), [evidencia](docs/semestre2/mips/acceptance.md) y [paquete PDF](deliverables/mips/README.md).
+
 ## Entrega 3: intérprete SQL
 
 El mismo repositorio incluye un intérprete SQL con almacenamiento en archivos (lexer, parser, AST, análisis semántico, `CREATE`/`DROP`/`INSERT`, `SELECT` con `JOIN`, agregaciones y subconsultas, `UPDATE`/`DELETE` e índices en archivos). Detalles, formato de almacenamiento y límites en la [guía de Entrega 3](docs/semestre2/entrega3/README.md).

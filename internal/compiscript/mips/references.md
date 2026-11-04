@@ -100,4 +100,4 @@ la defensa de ciclos está implementada, pero no tiene fixture fuente aceptado.
 
 No se modificaron el frontend, TAC, el núcleo de llamadas, el runtime compartido
 ni la unidad concurrente de excepciones. Los dos comandos enfocados y la suite completa del backend pasaron juntos tras
-la corrección. La aceptación final de todo el proyecto sigue en T8.
+la corrección. La aceptación global de la implementación pasó después, incluidos 150 escenarios MIPS; ver la [evidencia](../../../docs/semestre2/mips/acceptance.md). El seguimiento posterior de T8 amplía documentación, no deja esa verificación del código pendiente.
