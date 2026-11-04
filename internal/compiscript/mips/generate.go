@@ -80,7 +80,10 @@ func Generate(program *tac.Program) (string, error) {
 	if err := g.validateEnvironments(); err != nil {
 		return "", err
 	}
-	g.data.WriteString(".data\n.align 3\nrt_null: .word 8, 0, 0, 0\nrt_false: .word 3, 0, 0, 0\nrt_true: .word 3, 1, 0, 0\nrt_newline: .asciiz \"\\n\"\nrt_true_text: .asciiz \"true\"\nrt_false_text: .asciiz \"false\"\nrt_null_text: .asciiz \"null\"\n")
+	if err := g.validateClasses(); err != nil {
+		return "", err
+	}
+	g.data.WriteString(".data\n.align 3\nrt_uninitialized: .word 0, 0, 0, 0\nrt_null: .word 8, 0, 0, 0\nrt_false: .word 3, 0, 0, 0\nrt_true: .word 3, 1, 0, 0\nrt_newline: .asciiz \"\\n\"\nrt_true_text: .asciiz \"true\"\nrt_false_text: .asciiz \"false\"\nrt_null_text: .asciiz \"null\"\n")
 	// Main symbols and explicit procedure globals share canonical static cells.
 	symbols := map[string]bool{}
 	scan := func(tape []tac.Instruction) {
@@ -120,6 +123,8 @@ func Generate(program *tac.Program) (string, error) {
 	}
 	g.code.WriteString(scalarRuntime)
 	g.code.WriteString(environmentRuntime)
+	g.code.WriteString(g.referenceSupport())
+	g.code.WriteString(exceptionRuntime)
 	return g.data.String() + g.code.String(), nil
 }
 func operands(i tac.Instruction) []tac.Operand {
@@ -229,6 +234,8 @@ func (g *generator) load(o tac.Operand, reg string) error {
 	}
 	g.emit("    lw %s, 0(%s)", reg, reg)
 	g.emit("    beq %s, $zero, rt_undefined", reg)
+	g.emit("    lw $t8, 0(%s)", reg)
+	g.emit("    beq $t8, $zero, rt_undefined")
 	return nil
 }
 func (g *generator) store(o tac.Operand, reg string) error {
@@ -301,8 +308,15 @@ func (g *generator) emitProcedure(label string, p *tac.Procedure, tape []tac.Ins
 		if p.Receiver != nil {
 			g.emit("    sw $a2, %d($fp)", g.homes[key(*p.Receiver)])
 		}
+		for _, formal := range p.Parameters {
+			g.emit("    lw $s3, %d($fp)", g.homes[key(formal)])
+			if err := g.checkValue(formal, "$s3"); err != nil {
+				return err
+			}
+			g.emit("    sw $s3, %d($fp)", g.homes[key(formal)])
+		}
 		for _, required := range append(append([]tac.Operand{}, p.Globals...), p.Captures...) {
-			if err := g.load(required, "$s3"); err != nil {
+			if err := g.requireBinding(required); err != nil {
 				return err
 			}
 		}
@@ -364,7 +378,8 @@ func (g *generator) instruction(i tac.Instruction) error {
 		g.emit("    j %s", label)
 		return nil
 	case tac.Declare:
-		return g.store(i.Target, "$zero")
+		g.emit("    la $s3, rt_uninitialized")
+		return g.store(i.Target, "$s3")
 	case tac.BranchTrue:
 		label, err := g.jumpLabel(i.Label)
 		if err != nil {
@@ -388,6 +403,10 @@ func (g *generator) instruction(i tac.Instruction) error {
 		g.emit("    la $a0, rt_newline")
 		g.emit("    syscall")
 		return nil
+	case tac.NewObject, tac.LoadField, tac.StoreField, tac.BindMethod, tac.NewList, tac.ListLength, tac.LoadIndex, tac.StoreIndex, tac.CheckValue, tac.DynamicMember, tac.DynamicStore:
+		return g.referenceInstruction(i)
+	case tac.PushHandler, tac.PopHandler, tac.CatchException:
+		return g.exceptionInstruction(i)
 	case tac.EnterEnvironment, tac.MakeClosure, tac.CallIndirect:
 		return g.closureInstruction(i)
 	case tac.Call:
@@ -415,115 +434,4 @@ func (g *generator) instruction(i tac.Instruction) error {
 	default:
 		return fmt.Errorf("unsupported opcode %q", i.Op)
 	}
-}
-func (g *generator) scalar(i tac.Instruction) error {
-	unary := i.Op == tac.Negate || i.Op == tac.IntegerToFloat || i.Op == tac.LogicalNot
-	if unary && i.Right != nil || !unary && i.Right == nil {
-		return fmt.Errorf("invalid unary/binary operands")
-	}
-	if err := g.load(i.Left, "$s3"); err != nil {
-		return err
-	}
-	if i.Right != nil {
-		if err := g.load(*i.Right, "$s4"); err != nil {
-			return err
-		}
-	}
-	if i.Op == tac.Equal || i.Op == tac.NotEqual {
-		g.emit("    move $a0, $s3")
-		g.emit("    move $a1, $s4")
-		g.emit("    jal rt_equal")
-		if i.Op == tac.NotEqual {
-			g.emit("    xori $v0, $v0, 1")
-		}
-		g.emit("    move $t0, $v0")
-		g.boolResult("$t0")
-		return g.store(i.Target, "$s5")
-	}
-	if i.Op == tac.LogicalNot {
-		g.emit("    lw $t0, 0($s3)")
-		g.emit("    bne $t0, 3, rt_boolean_error")
-		g.emit("    lw $t0, 4($s3)")
-		g.emit("    xori $t0, $t0, 1")
-		g.boolResult("$t0")
-		return g.store(i.Target, "$s5")
-	}
-	if i.Op == tac.Add && i.Target.Type == model.TypeString {
-		g.emit("    move $a0, $s3")
-		g.emit("    move $a1, $s4")
-		g.emit("    jal rt_concat")
-		return g.store(i.Target, "$v0")
-	}
-	g.emit("    lw $t0, 0($s3)")
-	g.emit("    blt $t0, 1, rt_numeric_error")
-	g.emit("    bgt $t0, 2, rt_numeric_error")
-	g.emit("    l.d $f0, 8($s3)")
-	if !unary {
-		g.emit("    lw $t1, 0($s4)")
-		g.emit("    blt $t1, 1, rt_numeric_error")
-		g.emit("    bgt $t1, 2, rt_numeric_error")
-		g.emit("    l.d $f2, 8($s4)")
-	}
-	switch i.Op {
-	case tac.Add:
-		g.emit("    add.d $f4, $f0, $f2")
-	case tac.Subtract:
-		g.emit("    sub.d $f4, $f0, $f2")
-	case tac.Multiply:
-		g.emit("    mul.d $f4, $f0, $f2")
-	case tac.Divide, tac.Remainder:
-		g.emit("    mtc1 $zero, $f6")
-		g.emit("    cvt.d.w $f6, $f6")
-		g.emit("    c.eq.d $f2, $f6")
-		fault := "rt_division_error"
-		if i.Op == tac.Remainder {
-			fault = "rt_remainder_error"
-		}
-		g.emit("    bc1t %s", fault)
-		g.emit("    div.d $f4, $f0, $f2")
-		if i.Op == tac.Remainder {
-			g.emit("    jal rt_fmod")
-		}
-	case tac.Negate:
-		g.emit("    neg.d $f4, $f0")
-	case tac.IntegerToFloat:
-		g.emit("    mov.d $f4, $f0")
-	case tac.Less, tac.LessEqual, tac.Greater, tac.GreaterEqual:
-		a, b := "$f0", "$f2"
-		if i.Op == tac.Greater || i.Op == tac.GreaterEqual {
-			a, b = b, a
-		}
-		op := "c.lt.d"
-		if i.Op == tac.LessEqual || i.Op == tac.GreaterEqual {
-			op = "c.le.d"
-		}
-		yes, done := g.unique("true"), g.unique("compared")
-		g.emit("    %s %s, %s", op, a, b)
-		g.emit("    bc1t %s", yes)
-		g.emit("    la $s5, rt_false")
-		g.emit("    j %s", done)
-		g.emit("%s:", yes)
-		g.emit("    la $s5, rt_true")
-		g.emit("%s:", done)
-		return g.store(i.Target, "$s5")
-	}
-	tag := tagInteger
-	if i.Target.Type == model.TypeFloat {
-		tag = tagFloat
-	}
-	g.emit("    li $a0, 16")
-	g.emit("    jal rt_alloc")
-	g.emit("    li $t0, %d", tag)
-	g.emit("    sw $t0, 0($v0)")
-	g.emit("    s.d $f4, 8($v0)")
-	return g.store(i.Target, "$v0")
-}
-func (g *generator) boolResult(reg string) {
-	yes, done := g.unique("bool_true"), g.unique("bool_done")
-	g.emit("    bne %s, $zero, %s", reg, yes)
-	g.emit("    la $s5, rt_false")
-	g.emit("    j %s", done)
-	g.emit("%s:", yes)
-	g.emit("    la $s5, rt_true")
-	g.emit("%s:", done)
 }

@@ -15,6 +15,17 @@ func (g *generator) findProcedure(label string) *tac.Procedure {
 	return nil
 }
 
+// A dependency must have been declared, but need not already contain a value:
+// a callee may initialize a write-only binding. Reads still reject its sentinel.
+func (g *generator) requireBinding(o tac.Operand) error {
+	if err := g.address(o, "$s3"); err != nil {
+		return err
+	}
+	g.emit("    lw $s3, 0($s3)")
+	g.emit("    beq $s3, $zero, rt_undefined")
+	return nil
+}
+
 // The argument vector belongs to the caller; the callee copies it into its own
 // frame before evaluating anything. There is no four-register argument limit.
 func (g *generator) stageArguments(args []tac.Operand) (int, error) {
@@ -51,7 +62,7 @@ func (g *generator) directCall(i tac.Instruction) error {
 		return fmt.Errorf("argument count mismatch")
 	}
 	for _, global := range p.Globals {
-		if err := g.load(global, "$s3"); err != nil {
+		if err := g.requireBinding(global); err != nil {
 			return err
 		}
 	}

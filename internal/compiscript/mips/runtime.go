@@ -129,6 +129,9 @@ rt_print:
     beq $t0, 4, rt_print_string
     beq $t0, 9, rt_print_string
     beq $t0, 8, rt_print_null
+    beq $t0, 5, rt_print_reference
+    beq $t0, 6, rt_print_reference
+    beq $t0, 7, rt_print_reference
     j rt_type_error
 rt_print_string:
     lw $a1, 4($a0)
@@ -244,14 +247,7 @@ rt_remainder_error:
 rt_type_error:
     la $a0, rt_msg_type
 rt_fault:
-    li $v0, 4
-    syscall
-    li $v0, 4
-    la $a0, rt_newline
-    syscall
-    li $a0, 1
-    li $v0, 17
-    syscall
+    j rt_raise
 .data
 rt_msg_undefined: .asciiz "undefined binding"
 rt_msg_numeric: .asciiz "invalid numeric operand"
