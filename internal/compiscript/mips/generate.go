@@ -45,6 +45,7 @@ type generator struct {
 	procedures map[string]string
 	serial     int
 	current    string
+	procedure  *tac.Procedure
 	homes      map[string]int
 	labels     map[string]string
 	frameSize  int
@@ -238,6 +239,7 @@ func (g *generator) store(o tac.Operand, reg string) error {
 }
 func (g *generator) emitProcedure(label string, p *tac.Procedure, tape []tac.Instruction) error {
 	g.current = label
+	g.procedure = p
 	g.homes = map[string]int{}
 	g.labels = map[string]string{}
 	add := func(o tac.Operand) {
@@ -285,7 +287,13 @@ func (g *generator) emitProcedure(label string, p *tac.Procedure, tape []tac.Ins
 		g.emit("    sw $zero, %d($fp)", offset)
 	}
 	if p != nil {
-		return fmt.Errorf("MIPS: procedure lowering not implemented")
+		for n, formal := range p.Parameters {
+			g.emit("    lw $t0, %d($a0)", n*4)
+			g.emit("    sw $t0, %d($fp)", g.homes[key(formal)])
+		}
+		if p.Receiver != nil {
+			g.emit("    sw $a2, %d($fp)", g.homes[key(*p.Receiver)])
+		}
 	}
 	for pc, i := range tape {
 		g.registers.used = 0
@@ -294,8 +302,22 @@ func (g *generator) emitProcedure(label string, p *tac.Procedure, tape []tac.Ins
 			return &Error{label, pc, err.Error()}
 		}
 	}
-	g.emit("    li $v0, 10")
-	g.emit("    syscall")
+	if p == nil {
+		g.emit("    li $v0, 10")
+		g.emit("    syscall")
+	} else {
+		g.emit("    j rt_type_error") // A typed procedure may not fall through.
+		g.emit("%s_return:", label)
+		g.emit("    move $sp, $fp")
+		g.emit("    lw $ra, 0($sp)")
+		g.emit("    lw $t9, 4($sp)")
+		for n := 0; n < 8; n++ {
+			g.emit("    lw $s%d, %d($sp)", n, 8+n*4)
+		}
+		g.emit("    addiu $sp, $sp, %d", g.frameSize)
+		g.emit("    move $fp, $t9")
+		g.emit("    jr $ra")
+	}
 	return nil
 }
 func sortedOffsets(homes map[string]int) []int {
@@ -353,6 +375,21 @@ func (g *generator) instruction(i tac.Instruction) error {
 		g.emit("    li $v0, 4")
 		g.emit("    la $a0, rt_newline")
 		g.emit("    syscall")
+		return nil
+	case tac.Call:
+		return g.directCall(i)
+	case tac.Return:
+		if g.procedure == nil {
+			return fmt.Errorf("return outside procedure")
+		}
+		if i.ReturnValue != nil {
+			if err := g.load(*i.ReturnValue, "$v0"); err != nil {
+				return err
+			}
+		} else {
+			g.emit("    la $v0, rt_null")
+		}
+		g.emit("    j %s_return", g.current)
 		return nil
 	case tac.Copy:
 		if err := g.load(i.Left, "$s3"); err != nil {
