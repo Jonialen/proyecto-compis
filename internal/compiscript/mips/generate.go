@@ -77,6 +77,9 @@ func Generate(program *tac.Program) (string, error) {
 		}
 		g.procedures[p.Label] = g.unique("procedure")
 	}
+	if err := g.validateEnvironments(); err != nil {
+		return "", err
+	}
 	g.data.WriteString(".data\n.align 3\nrt_null: .word 8, 0, 0, 0\nrt_false: .word 3, 0, 0, 0\nrt_true: .word 3, 1, 0, 0\nrt_newline: .asciiz \"\\n\"\nrt_true_text: .asciiz \"true\"\nrt_false_text: .asciiz \"false\"\nrt_null_text: .asciiz \"null\"\n")
 	// Main symbols and explicit procedure globals share canonical static cells.
 	symbols := map[string]bool{}
@@ -116,6 +119,7 @@ func Generate(program *tac.Program) (string, error) {
 		}
 	}
 	g.code.WriteString(scalarRuntime)
+	g.code.WriteString(environmentRuntime)
 	return g.data.String() + g.code.String(), nil
 }
 func operands(i tac.Instruction) []tac.Operand {
@@ -193,6 +197,9 @@ func (g *generator) literal(o tac.Operand) (string, error) {
 	return label, nil
 }
 func (g *generator) address(o tac.Operand, reg string) error {
+	if o.Kind == tac.Symbol && len(g.program.Environments) != 0 {
+		return g.environmentAddress(o, reg)
+	}
 	if offset, ok := g.homes[key(o)]; ok {
 		g.emit("    addiu %s, $fp, %d", reg, offset)
 		return nil
@@ -294,6 +301,11 @@ func (g *generator) emitProcedure(label string, p *tac.Procedure, tape []tac.Ins
 		if p.Receiver != nil {
 			g.emit("    sw $a2, %d($fp)", g.homes[key(*p.Receiver)])
 		}
+		for _, required := range append(append([]tac.Operand{}, p.Globals...), p.Captures...) {
+			if err := g.load(required, "$s3"); err != nil {
+				return err
+			}
+		}
 	}
 	for pc, i := range tape {
 		g.registers.used = 0
@@ -376,6 +388,8 @@ func (g *generator) instruction(i tac.Instruction) error {
 		g.emit("    la $a0, rt_newline")
 		g.emit("    syscall")
 		return nil
+	case tac.EnterEnvironment, tac.MakeClosure, tac.CallIndirect:
+		return g.closureInstruction(i)
 	case tac.Call:
 		return g.directCall(i)
 	case tac.Return:

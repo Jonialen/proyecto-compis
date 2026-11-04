@@ -55,15 +55,17 @@ func (g *generator) directCall(i tac.Instruction) error {
 			return err
 		}
 	}
+	g.emit("    move $s7, $zero")
+	if p.LexicalScope != 0 {
+		g.environment(p.LexicalScope, "$s7")
+		g.emit("    beq $s7, $zero, rt_undefined")
+	}
 	size, err := g.stageArguments(i.Arguments)
 	if err != nil {
 		return err
 	}
-	if p.LexicalScope != 0 {
-		return fmt.Errorf("lexical calls require environment lowering")
-	}
 	g.emit("    move $a0, $sp")
-	g.emit("    move $a1, $zero")
+	g.emit("    move $a1, $s7")
 	g.emit("    move $a2, $zero")
 	g.emit("    jal %s", g.procedures[p.Label])
 	return g.finishCall(i, size)

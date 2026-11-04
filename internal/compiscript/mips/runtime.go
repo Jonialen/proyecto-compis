@@ -30,6 +30,7 @@ rt_equal:
 rt_equal_other:
     bne $t0, $t1, rt_equal_no
     beq $t0, 3, rt_equal_bool
+    beq $t0, 7, rt_equal_function
     bne $t0, 4, rt_equal_no
     lw $t4, 8($a0)
     lw $t5, 8($a1)
@@ -45,6 +46,17 @@ rt_equal_chars:
     addiu $t1, $t1, 1
     addiu $t4, $t4, -1
     j rt_equal_chars
+rt_equal_function:
+    lw $t0, 4($a0)
+    lw $t1, 4($a1)
+    bne $t0, $t1, rt_equal_no
+    lw $t0, 8($a0)
+    lw $t1, 8($a1)
+    bne $t0, $t1, rt_equal_no
+    lw $t0, 12($a0)
+    lw $t1, 12($a1)
+    bne $t0, $t1, rt_equal_no
+    j rt_equal_yes
 rt_equal_bool:
     lw $t0, 4($a0)
     lw $t1, 4($a1)
