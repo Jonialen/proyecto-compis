@@ -3,6 +3,10 @@
 .atl/
 # Local ANTLR tool cache; the verified checksum remains tracked.
 tools/antlr/*.jar
+# Local MARS executable and Java preferences; pinned checksum stays tracked.
+/tools/mars/*.jar
+/tools/mars/*.partial
+/tools/mars/.prefs/
 # Local metadata and obsolete root export
 .DS_Store
 /README.pdf
