@@ -45,6 +45,14 @@ type CreateTable struct {
 	Columns []ColumnDef
 }
 
+type AlterTable struct {
+	Pos
+	Table  Ident
+	Action string // ADD, DROP, RENAME
+	Column ColumnDef
+	Name   Ident // dropped column or new table name
+}
+
 type DropTable struct {
 	Pos
 	Name Ident
@@ -235,6 +243,15 @@ func stmtTree(s Statement) *TreeNode {
 				flags += " NOT NULL"
 			}
 			n.Children = append(n.Children, tn("Column", c.Name.Name+flags, c.Pos, typeTree(c.Type)))
+		}
+		return n
+	case *AlterTable:
+		n := tn("AlterTable", s.Table.Name, s.Pos)
+		if s.Action == "ADD" {
+			column := stmtTree(&CreateTable{Pos: s.Pos, Name: s.Table, Columns: []ColumnDef{s.Column}}).Children[0]
+			n.Children = append(n.Children, tn("AddColumn", "", s.Column.Pos, column))
+		} else {
+			n.Children = append(n.Children, tn(s.Action, s.Name.Name, s.Name.Pos))
 		}
 		return n
 	case *DropTable:

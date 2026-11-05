@@ -125,6 +125,8 @@ func (e *Engine) execute(stmts []Statement, cat *Catalog, rep *Report) {
 
 func (e *Engine) executeOne(s Statement, cat *Catalog) (StmtResult, error) {
 	switch s := s.(type) {
+	case *AlterTable:
+		return e.alterTable(s, cat)
 	case *CreateTable:
 		t := &Table{Name: s.Name.Name}
 		for _, c := range s.Columns {

@@ -26,12 +26,16 @@ La interfaz trabaja sobre `sqldata/default/` (ignorado por Git). El servidor esc
 | Léxico | `internal/sql/lexer.go` | Tokens con línea/columna; errores léxicos (carácter no reconocido, cadena o comentario sin cerrar, número mal formado) |
 | Sintáctico | `internal/sql/parser.go` | Árbol sintáctico y AST; recuperación por sentencia en el siguiente `;` |
 | AST | `internal/sql/ast.go` | Nodos tipados y vista en árbol (`ASTTree`) |
-| Semántico | `internal/sql/semantic.go` | Errores con línea y columna; los `CREATE`/`DROP` del mismo script son visibles para las sentencias siguientes |
+| Semántico | `internal/sql/semantic.go` | Errores con línea y columna; los `CREATE`/`DROP`/`ALTER` del mismo script son visibles para las sentencias siguientes |
 | Consultas | `internal/sql/query.go` | Evaluador de expresiones, `JOIN`, `GROUP BY`/agregaciones, `ORDER BY`, subconsultas, elección de índice |
-| Escrituras | `internal/sql/dml.go`, `engine.go` | `CREATE`/`DROP TABLE`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`/`DROP INDEX` |
+| Escrituras | `internal/sql/dml.go`, `engine.go`, `alter.go` | `CREATE`/`DROP`/`ALTER TABLE`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`/`DROP INDEX` |
 | Archivos | `internal/sql/storage.go`, `index.go`, `catalog.go` | `metadata.txt`, tablas CSV e índices |
 
 Un script solo se ejecuta si no tiene errores léxicos, sintácticos ni semánticos; en ese caso no se escribe nada. Los errores de ejecución (clave primaria duplicada, división por cero, subconsulta escalar con más de un registro, desbordamiento) detienen el script en esa sentencia; las anteriores quedan aplicadas y la sentencia fallida no cambia ningún archivo.
+
+## Cambios de esquema
+
+[`ALTER TABLE`](alter-table.md) permite `ADD [COLUMN] columna tipo`, `DROP [COLUMN] columna` y `RENAME TO nueva_tabla`. Conserva los registros restantes y mantiene los índices; `-analyze` comprueba el esquema sin escribir. Las columnas nuevas sin restricciones reciben `NULL`; agregar `NOT NULL` o `PRIMARY KEY` requiere una tabla vacía. No hay `DEFAULT` ni se permite eliminar la última columna.
 
 ## Almacenamiento
 

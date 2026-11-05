@@ -25,6 +25,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Uso: sql [-db dir] [-analyze] [-noindex] [-format text|json] [archivo.sql]")
 		fs.PrintDefaults()
+		fmt.Fprintln(stderr, "\nCambios de esquema:")
+		fmt.Fprintln(stderr, "  ALTER TABLE tabla ADD [COLUMN] columna tipo [PRIMARY KEY] [NOT NULL]")
+		fmt.Fprintln(stderr, "  ALTER TABLE tabla DROP [COLUMN] columna")
+		fmt.Fprintln(stderr, "  ALTER TABLE tabla RENAME TO nueva_tabla")
 	}
 	if err := fs.Parse(args); err != nil {
 		return 2

@@ -55,6 +55,8 @@ func (a *analyzer) statement(s Statement) {
 	switch s := s.(type) {
 	case *CreateTable:
 		a.createTable(s)
+	case *AlterTable:
+		a.alterTable(s)
 	case *DropTable:
 		if a.cat.Table(s.Name.Name) == nil {
 			a.errAt(s.Name.Pos, "La tabla %q no existe", s.Name.Name)

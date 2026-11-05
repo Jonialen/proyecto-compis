@@ -184,6 +184,9 @@ func (p *parser) wrap(mark int, rule string) {
 
 func (p *parser) parseStatement() Statement {
 	t := p.peek()
+	if p.word("ALTER") {
+		return p.parseAlter()
+	}
 	switch t.Type {
 	case "CREATE":
 		return p.parseCreate()
@@ -200,6 +203,46 @@ func (p *parser) parseStatement() Statement {
 	}
 	p.abort(t, "Se esperaba una sentencia (CREATE, DROP, INSERT, UPDATE, DELETE o SELECT) pero se encontró %s", describe(t))
 	return nil
+}
+
+// word recognizes contextual syntax without reserving existing identifiers.
+func (p *parser) word(word string) bool {
+	return p.at("IDENT") && strings.EqualFold(p.peek().Text, word)
+}
+
+func (p *parser) parseAlter() Statement {
+	p.begin("alter_table")
+	defer p.end()
+	start := p.next()
+	p.expect("TABLE", "'TABLE'")
+	s := &AlterTable{Pos: posOf(start), Table: p.expectIdent("el nombre de la tabla")}
+	switch {
+	case p.word("ADD"):
+		s.Action = "ADD"
+		p.next()
+		if p.word("COLUMN") && p.peekAt(1).Type == "IDENT" {
+			p.next()
+		}
+		s.Column = p.parseColumnDef()
+	case p.at("DROP"):
+		s.Action = "DROP"
+		p.next()
+		if p.word("COLUMN") && p.peekAt(1).Type == "IDENT" {
+			p.next()
+		}
+		s.Name = p.expectIdent("el nombre de la columna")
+	case p.word("RENAME"):
+		s.Action = "RENAME"
+		p.next()
+		if !p.word("TO") {
+			p.abort(p.peek(), "Se esperaba TO después de RENAME pero se encontró %s", describe(p.peek()))
+		}
+		p.next()
+		s.Name = p.expectIdent("el nuevo nombre de la tabla")
+	default:
+		p.abort(p.peek(), "Se esperaba ADD, DROP o RENAME después del nombre de la tabla pero se encontró %s", describe(p.peek()))
+	}
+	return s
 }
 
 func (p *parser) parseCreate() Statement {

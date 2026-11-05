@@ -72,6 +72,25 @@ func (c *Catalog) AddTable(t *Table) {
 	c.order = append(c.order, key)
 }
 
+// RenameTable preserves table/index ordering and retargets index definitions.
+func (c *Catalog) RenameTable(name, newName string) {
+	oldKey, newKey := strings.ToLower(name), strings.ToLower(newName)
+	t := c.Table(name)
+	delete(c.Tables, oldKey)
+	t.Name = newName
+	c.Tables[newKey] = t
+	for i, key := range c.order {
+		if key == oldKey {
+			c.order[i] = newKey
+		}
+	}
+	for _, ix := range c.Indexes {
+		if strings.EqualFold(ix.Table, name) {
+			ix.Table = newName
+		}
+	}
+}
+
 func (c *Catalog) DropTable(name string) {
 	key := strings.ToLower(name)
 	delete(c.Tables, key)
