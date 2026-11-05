@@ -108,6 +108,7 @@ func (t TableRef) Label() string {
 
 type Join struct {
 	Pos
+	Left  bool // false preserves the existing inner join behavior
 	Table TableRef
 	On    Expr
 }
@@ -301,7 +302,11 @@ func selectTree(s *Select) *TreeNode {
 	}
 	n.Children = append(n.Children, items, tableRefTree("From", s.From))
 	for _, j := range s.Joins {
-		n.Children = append(n.Children, tn("InnerJoin", "", j.Pos, tableRefTree("Table", j.Table), tn("On", "", j.On.Position(), exprTree(j.On))))
+		kind := "InnerJoin"
+		if j.Left {
+			kind = "LeftJoin"
+		}
+		n.Children = append(n.Children, tn(kind, "", j.Pos, tableRefTree("Table", j.Table), tn("On", "", j.On.Position(), exprTree(j.On))))
 	}
 	if s.Where != nil {
 		n.Children = append(n.Children, tn("Where", "", s.Where.Position(), exprTree(s.Where)))

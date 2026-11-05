@@ -378,14 +378,22 @@ func (p *parser) parseSelect() *Select {
 	s.From = p.parseTableRef()
 	p.end()
 
-	for p.at("INNER", "JOIN") {
+	for p.at("INNER", "JOIN") || p.atLeftJoin() {
 		p.begin("join_clause")
 		jt := p.peek()
-		p.accept("INNER")
+		left := p.atLeftJoin()
+		if left {
+			p.next() // contextual LEFT
+			if p.atWord(0, "OUTER") {
+				p.next()
+			}
+		} else {
+			p.accept("INNER")
+		}
 		p.expect("JOIN", "'JOIN'")
 		tr := p.parseTableRef()
 		p.expect("ON", "'ON'")
-		s.Joins = append(s.Joins, Join{Pos: posOf(jt), Table: tr, On: p.parseExpr()})
+		s.Joins = append(s.Joins, Join{Pos: posOf(jt), Left: left, Table: tr, On: p.parseExpr()})
 		p.end()
 	}
 	s.Where = p.parseOptionalWhere()
@@ -444,6 +452,17 @@ func (p *parser) parseSelectItem() SelectItem {
 	return it
 }
 
+// LEFT and OUTER remain identifiers outside a complete join introducer.
+func (p *parser) atWord(k int, word string) bool {
+	t := p.peekAt(k)
+	return t.Type == "IDENT" && strings.EqualFold(t.Text, word)
+}
+
+func (p *parser) atLeftJoin() bool {
+	return p.atWord(0, "LEFT") && (p.peekAt(1).Type == "JOIN" ||
+		p.atWord(1, "OUTER") && p.peekAt(2).Type == "JOIN")
+}
+
 func (p *parser) parseTableRef() TableRef {
 	p.begin("table_ref")
 	defer p.end()
@@ -451,7 +470,7 @@ func (p *parser) parseTableRef() TableRef {
 	tr := TableRef{Pos: name.Pos, Name: name}
 	if p.accept("AS") {
 		tr.Alias = p.expectIdent("el alias de la tabla").Name
-	} else if p.at("IDENT") {
+	} else if p.at("IDENT") && !p.atLeftJoin() {
 		tr.Alias = p.next().Text
 	}
 	return tr

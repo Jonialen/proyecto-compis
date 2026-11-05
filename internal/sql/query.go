@@ -717,7 +717,13 @@ func (x *execCtx) runSelect(s *Select, parent *env) (*queryResult, error) {
 	conjuncts := flattenAnd(s.Where, nil)
 	perTable := make([][][]any, len(tabs))
 	for i := range tabs {
-		rows, err := x.rowsFor(tabs[i].table, x.indexPreds(tabs, i, conjuncts))
+		var preds []colPred
+		// WHERE is evaluated after null-extension. Filtering a supplying
+		// side here could remove real matches and fabricate unmatched rows.
+		if i == 0 || !s.Joins[i-1].Left {
+			preds = x.indexPreds(tabs, i, conjuncts)
+		}
+		rows, err := x.rowsFor(tabs[i].table, preds)
 		if err != nil {
 			return nil, err
 		}
@@ -731,6 +737,7 @@ func (x *execCtx) runSelect(s *Select, parent *env) (*queryResult, error) {
 	for j := 1; j < len(tabs); j++ {
 		var next []jrow
 		for _, left := range cur {
+			matched := false
 			for _, r := range perTable[j] {
 				combined := append(append(jrow{}, left...), r)
 				v, err := x.eval(s.Joins[j-1].On, &env{tabs: tabs[:j+1], row: combined, parent: parent})
@@ -738,8 +745,12 @@ func (x *execCtx) runSelect(s *Select, parent *env) (*queryResult, error) {
 					return nil, err
 				}
 				if isTrue(v) {
+					matched = true
 					next = append(next, combined)
 				}
+			}
+			if !matched && s.Joins[j-1].Left {
+				next = append(next, append(append(jrow{}, left...), nil))
 			}
 		}
 		cur = next

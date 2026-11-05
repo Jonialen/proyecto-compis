@@ -77,6 +77,8 @@ INDEX idx_edad ON estudiantes(edad)
 
 ## Semántica de ejecución
 
+- `LEFT JOIN` y `LEFT OUTER JOIN` conservan las filas izquierdas sin coincidencia y completan las columnas derechas con `NULL`. Véase [sintaxis y semántica de LEFT JOIN](left-join.md).
+
 - Lógica de tres valores: comparar con `NULL` da `NULL`, y `WHERE` conserva solo las filas con resultado verdadero. `x NOT IN (…)` es `NULL` si la lista contiene `NULL`.
 - Dos enteros operados dan un entero (la división trunca: `1 / 2` es `0`); si interviene un `FLOAT` el resultado es `FLOAT`. Los desbordamientos y la división por cero son errores de ejecución con su posición.
 - Sin `ORDER BY` el resultado sale en el orden de la tabla, con o sin índice (el índice nunca cambia el orden). `ORDER BY` pone los `NULL` primero en orden ascendente (y últimos en descendente); sin `ORDER BY`, el orden es el de la tabla (en un `JOIN`, el de los bucles anidados).
@@ -126,7 +128,7 @@ Además, `query_test.go` calcula a mano los resultados de decenas de consultas (
 
 ## Límites conocidos
 
-- No hay `LIMIT`, `DISTINCT`, `LIKE`, `BETWEEN`, `LEFT JOIN` ni `ORDER BY` por posición: no los pide el enunciado.
+- No hay `LIMIT`, `DISTINCT`, `LIKE`, `BETWEEN` ni `ORDER BY` por posición: no los pide el enunciado.
 - El índice no se usa con `OR`, `NOT`, `NOT IN`, `IN (subconsulta)` ni en la condición `ON` de un `JOIN`; esas consultas hacen recorrido completo y siguen dando el resultado correcto. Las columnas `PRIMARY KEY` no tienen índice automático.
 - `UPDATE`, `DELETE` e `INSERT` reescriben el archivo de la tabla y sus índices (costo proporcional al tamaño de la tabla).
 - No hay transacciones entre sentencias ni bloqueo entre procesos: dos procesos que escriban la misma base a la vez no están soportados (el servidor del IDE sí serializa sus ejecuciones).
