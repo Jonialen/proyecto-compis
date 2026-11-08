@@ -1,5 +1,11 @@
 # Entregables
 
+## Fase 3 de Compiscript: MIPS
+
+El [paquete MIPS](mips/README.md) contiene cuatro PDF en español: [informe](mips/report.pdf), [arquitectura](mips/architecture.pdf), [guía de ejecución](mips/run-guide.pdf) y [referencia TAC a MIPS](mips/mips-reference.pdf). Sus fuentes editables están en `docs/semestre2/mips/`; el manifiesto del paquete registra hashes, páginas y exportación. Es una entrega distinta del intérprete SQL y conserva intacto el paquete anterior.
+
+## Entrega 2: TAC
+
 Las copias de lectura versionadas de la Entrega 2 están en [entrega2](entrega2/). Empiece por el informe y luego use la guía de ejecución para reproducir la evidencia. Las fuentes editables permanecen en `docs/semestre2/entrega2`; no mantenga aquí una segunda copia en Markdown.
 
 | PDF | Fuente editable | Propósito |
@@ -9,7 +15,7 @@ Las copias de lectura versionadas de la Entrega 2 están en [entrega2](entrega2/
 | [Guía de ejecución y revisión](entrega2/run-guide.pdf) | [README.md](../docs/semestre2/entrega2/README.md) | Requisitos previos, uso de la CLI y el IDE, y puntos de entrada de verificación |
 | [Referencia TAC](entrega2/tac-reference.pdf) | [tac-design.md](../docs/semestre2/entrega2/tac-design.md) | Instrucciones, ejemplos de traducción y supuestos del backend |
 
-## Política de versiones
+## Política de versiones de Entrega 2
 
 Estos cuatro PDF son exportaciones, no evidencia adicional de implementación ni de certificación en navegador. Regenere el paquete completo cuando cambien sus fuentes y versione las fuentes y los PDF juntos en el mismo commit. El historial de Git conserva las versiones anteriores; este directorio contiene el paquete actual, no duplicados fechados. Las herramientas de exportación son temporales y no forman parte del sistema de compilación del repositorio.
 

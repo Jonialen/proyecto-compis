@@ -1,6 +1,6 @@
 # Compiscript: compilador e IDE
 
-Proyecto académico de Construcción de Compiladores. Compiscript transforma archivos `.cps` mediante un frontend ANTLR y análisis semántico en código intermedio de tres direcciones (TAC), con diagnósticos ubicados y símbolos extendidos. La CLI y el IDE web Furlantran comparten el mismo núcleo. **Compilar genera código; no ejecuta el programa fuente ni el TAC.**
+Proyecto académico de Construcción de Compiladores. Compiscript transforma archivos `.cps` mediante un frontend ANTLR y análisis semántico en código intermedio de tres direcciones (TAC), con diagnósticos ubicados y símbolos extendidos. La fase 3 agrega una salida MIPS ejecutable en MARS mediante una CLI y acción de IDE separadas. La CLI y el IDE web Furlantran comparten el mismo núcleo. **Compilar genera código; no ejecuta el programa fuente ni el TAC.**
 
 [Repositorio en GitHub](https://github.com/Jonialen/proyecto-compis) · [Guía de Entrega 2](docs/semestre2/entrega2/README.md) · [Entregables PDF](deliverables/README.md)
 
@@ -23,6 +23,20 @@ El primer ejemplo genera TAC de una expresión numérica; el segundo devuelve el
 | IDE local | `go run ./cmd/ide` | Interfaz web en `http://localhost:8080` |
 
 Para el IDE, ejecutar el servidor desde la raíz porque sirve la carpeta relativa `web`. Seleccionar Compiscript, cargar o editar un `.cps` y elegir **Compile .cps**; **Analyze .cps (AST)** conserva el análisis anterior. El servidor escucha en `:8080`, no exclusivamente en loopback: usarlo en un entorno local confiable y detenerlo con Ctrl+C. Los detalles de paneles y errores están en el [manual del IDE](docs/semestre2/entrega2/ide.md).
+
+## Fase 3 de Compiscript: generación MIPS
+
+El backend nuevo traduce el TAC estructurado a ensamblador ejecutable en MARS, incluyendo funciones/recursión, closures, objetos/listas, valores dinámicos y excepciones. La compilación TAC y el análisis anteriores siguen disponibles sin cambios. [Guía de MIPS, arquitectura y pruebas](docs/semestre2/mips/README.md).
+
+```sh
+bash scripts/install-mars.sh
+bash scripts/test-mips.sh
+go run ./cmd/compiscript-mips -format=json testdata/mips/full-language.cps
+```
+
+En el IDE, **Compile MIPS** muestra el ensamblador y **Download .asm** permite guardarlo; MARS lo ejecuta por separado. Esta fase no es la entrega SQL descrita a continuación.
+
+Documentación en español: [informe](docs/semestre2/mips/report.md), [arquitectura](docs/semestre2/mips/architecture.md), [referencia TAC a MIPS](docs/semestre2/mips/mips-reference.md), [evidencia](docs/semestre2/mips/acceptance.md) y [paquete PDF](deliverables/mips/README.md).
 
 ## Entrega 3: intérprete SQL
 
@@ -81,7 +95,7 @@ Las especificaciones de texto `lex` y `yapar`, el ejemplo `input.txt`, el materi
 
 ## Alcance y comprobaciones pendientes
 
-El informe documenta traducción de construcciones válidas del AST, funciones/closures, objetos/listas, valores dinámicos y try/catch, junto con las guardas estáticas y los fallos de ejecución previstos por el IR. Esto no certifica todos los programas, terminación ni una calificación. Los desplazamientos usan celdas abstractas, no una ABI física; no se entrega un ensamblador ni un intérprete de producto.
+El informe documenta traducción de construcciones válidas del AST, funciones/closures, objetos/listas, valores dinámicos y try/catch, junto con las guardas estáticas y los fallos de ejecución previstos por el IR. Esto no certifica todos los programas, terminación ni una calificación. Los desplazamientos del reporte TAC de Entrega 2 usan celdas abstractas, no una ABI física. La fase 3 implementa la disposición física y el ensamblador en un backend separado; sus límites y pruebas están en la [guía MIPS](docs/semestre2/mips/README.md). No se entrega un intérprete TAC de producto.
 
 Antes de presentar: ejecutar la batería en el entorno de evaluación, revisar carga/edición/guardado y paneles en un navegador real, confirmar disponibilidad de los recursos CDN CodeMirror/Viz.js, acceso a GitHub y contribuciones individuales reales. La disponibilidad sin conexión del navegador no está garantizada. Consultar los [controles humanos pendientes](docs/semestre2/entrega2/report.md#brechas-de-requisitos-pendientes-y-controles-de-presentación).
 

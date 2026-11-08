@@ -336,6 +336,49 @@ test('File read failures and legacy grammar/input targets retain safe behavior',
   assert.equal(vm.runInContext('state.editors.cps.getValue()', context), 'new typed source');
 });
 
+test('MIPS action displays assembly as text and downloads only current output', async () => {
+  const report = { ...compilation, mipsText: '.text\n# ' + hostile };
+  const { context, elements } = browser(report);
+  let sent;
+  context.fetch = async (url, options) => { sent = { url, options }; return { ok: true, json: async () => report }; };
+  const downloads = [];
+  context.captureDownload = (content, name) => downloads.push({ content, name });
+  vm.runInContext('downloadText = captureDownload; bindRunButton(); state.fileNames.cps = "example.cps";', context);
+  await elements.get('btn-mips').click();
+  assert.equal(sent.url, '/api/compiscript/mips');
+  assert.deepEqual(JSON.parse(sent.options.body), { source: 'let n = 1;' });
+  assert.equal(text(elements.get('rp-mips')).trim(), report.mipsText);
+  assertTextOnly(elements.get('rp-mips'));
+  assert.equal(elements.get('btn-download-mips').disabled, false);
+  elements.get('btn-download-mips').click();
+  assert.deepEqual(downloads, [{ content: report.mipsText, name: 'example.asm' }]);
+  observeChanges(context);
+  vm.runInContext('state.editors.cps.setValue("print(2);")', context);
+  assert.equal(elements.get('btn-download-mips').disabled, true);
+  elements.get('btn-download-mips').click();
+  assert.equal(downloads.length, 1);
+  assert.ok(!text(elements.get('rp-mips')).includes(hostile));
+});
+
+test('MIPS errors and older responses cannot expose stale assembly', async () => {
+  const report = { ...compilation, mipsText: '.text\nCURRENT' };
+  const { context, elements } = browser(report);
+  observeChanges(context);
+  await vm.runInContext('runCompiscript("mips")', context);
+  const late = deferred(); context.fetch = () => late.promise;
+  const pending = vm.runInContext('runCompiscript("mips")', context);
+  vm.runInContext('state.editors.cps.setValue("new source")', context);
+  late.resolve({ ok: true, json: async () => ({ ...report, mipsText: 'STALE' }) });
+  await pending;
+  assert.ok(!text(elements.get('rp-mips')).includes('STALE'));
+  assert.equal(elements.get('btn-mips').disabled, false);
+  context.fetch = async () => ({ ok: true, json: async () => ({ diagnostics: [{ message: hostile }], scopes: [], mipsText: '' }) });
+  await vm.runInContext('runCompiscript("mips")', context);
+  assert.equal(elements.get('btn-download-mips').disabled, true);
+  assert.ok(!text(elements.get('rp-mips')).includes('CURRENT'));
+  assertTextOnly(elements.get('rp-mips'));
+});
+
 for (const [kind, heading] of [['spec', 'Specification Error'], ['grammar', 'Grammar Error'], [undefined, 'Grammar / Spec Error']]) {
   test(`Error heading: ${kind || 'legacy'}`, async () => {
     const { context, elements } = browser({ success: false, grammar_error: '<bad>', grammar_error_kind: kind });
