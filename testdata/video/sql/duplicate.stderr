@@ -1,0 +1,1 @@
+<stdin>:1:1: error execution: Violación de PRIMARY KEY: el valor 1 de la columna "id" ya existe en la tabla "clientes" (fila 1 del INSERT); no se insertó ninguna fila

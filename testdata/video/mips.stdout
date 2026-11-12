@@ -1,0 +1,12 @@
+objeto:
+<object s1.Child>
+inicial:
+2
+alias:
+4
+independiente:
+2
+metodo sobrescrito:
+12
+fib(8):
+21

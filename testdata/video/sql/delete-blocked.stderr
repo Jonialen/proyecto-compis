@@ -1,0 +1,1 @@
+<stdin>:1:1: error execution: Violación de FOREIGN KEY: no se puede eliminar de "clientes" porque el valor 1 de "id" es referenciado por pedidos.cliente_id; no se eliminó ninguna fila

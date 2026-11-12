@@ -1,0 +1,1 @@
+INSERT INTO pedidos VALUES (11, 9);

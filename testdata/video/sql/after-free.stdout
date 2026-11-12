@@ -1,0 +1,10 @@
+[1] 1 fila(s)
+id | nombre
+---+-------
+1  | Ana
+  plan: Recorrido completo de "clientes": 1 registros
+[2] 1 fila(s)
+id | cliente_id
+---+-----------
+10 | 1
+  plan: Recorrido completo de "pedidos": 1 registros

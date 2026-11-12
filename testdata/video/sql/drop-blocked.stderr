@@ -1,0 +1,1 @@
+<stdin>:1:12: error semantic: No se puede eliminar la tabla "clientes": la FOREIGN KEY pedidos.cliente_id la referencia; elimine antes esa tabla o columna

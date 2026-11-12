@@ -1,0 +1,1 @@
+<stdin>:1:1: error execution: Violación de FOREIGN KEY: el valor 9 de pedidos.cliente_id no existe en clientes.id; no se insertó ninguna fila
