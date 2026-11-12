@@ -25,6 +25,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Uso: sql [-db dir] [-analyze] [-noindex] [-format text|json] [archivo.sql]")
 		fs.PrintDefaults()
+		fmt.Fprintln(stderr, "\nClaves foráneas: columna tipo REFERENCES tabla(clave) o FOREIGN KEY (columna) REFERENCES tabla(clave)")
+		fmt.Fprintln(stderr, "  DELETE y DROP restringen referencias; no se admite CASCADE ni ON DELETE/UPDATE.")
 		fmt.Fprintln(stderr, "\nCambios de esquema:")
 		fmt.Fprintln(stderr, "  ALTER TABLE tabla ADD [COLUMN] columna tipo [PRIMARY KEY] [NOT NULL]")
 		fmt.Fprintln(stderr, "  ALTER TABLE tabla DROP [COLUMN] columna")

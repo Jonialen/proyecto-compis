@@ -254,7 +254,15 @@ func (p *parser) parseCreate() Statement {
 		p.expect("(", "'('")
 		ct := &CreateTable{Pos: posOf(start), Name: name}
 		for {
-			ct.Columns = append(ct.Columns, p.parseColumnDef())
+			switch {
+			case p.word("FOREIGN") && p.peekAt(1).Type == "KEY":
+				ct.ForeignKeys = append(ct.ForeignKeys, p.parseForeignKey())
+			case p.word("CONSTRAINT") && p.peekAt(1).Type == "IDENT":
+				// A column named CONSTRAINT would be followed by a type keyword.
+				p.abort(p.peek(), "Las restricciones con nombre (CONSTRAINT nombre ...) no están soportadas; use FOREIGN KEY (columna) REFERENCES tabla(columna)")
+			default:
+				ct.Columns = append(ct.Columns, p.parseColumnDef())
+			}
 			if !p.accept(",") {
 				break
 			}
@@ -290,10 +298,56 @@ func (p *parser) parseColumnDef() ColumnDef {
 			p.next()
 			p.expect("NULL", "'NULL' después de NOT")
 			cd.NotNull = true
+		case p.word("REFERENCES"):
+			if cd.References != nil {
+				p.abort(p.peek(), "La columna %q tiene más de una cláusula REFERENCES", name.Name)
+			}
+			fk := p.parseReferences(name)
+			cd.References = &fk
 		default:
 			return cd
 		}
 	}
+}
+
+// parseForeignKey reads FOREIGN KEY (columna) REFERENCES tabla(columna).
+// FOREIGN, REFERENCES and CONSTRAINT stay contextual words, not keywords.
+func (p *parser) parseForeignKey() ForeignKeyDef {
+	p.begin("foreign_key")
+	defer p.end()
+	start := p.next() // FOREIGN
+	p.expect("KEY", "'KEY' después de FOREIGN")
+	p.expect("(", "'(' después de FOREIGN KEY")
+	col := p.expectIdent("el nombre de la columna")
+	if p.at(",") {
+		p.abort(p.peek(), "Las FOREIGN KEY compuestas no están soportadas: use una sola columna")
+	}
+	p.expect(")", "')'")
+	if !p.word("REFERENCES") {
+		p.abort(p.peek(), "Se esperaba REFERENCES después de FOREIGN KEY (%s) pero se encontró %s", col.Name, describe(p.peek()))
+	}
+	fk := p.parseReferences(col)
+	fk.Pos = posOf(start)
+	return fk
+}
+
+// parseReferences reads REFERENCES tabla(columna) for the child column col.
+// Referential actions are rejected: deletes and updates always restrict.
+func (p *parser) parseReferences(col Ident) ForeignKeyDef {
+	p.begin("references_clause")
+	defer p.end()
+	start := p.next() // REFERENCES
+	fk := ForeignKeyDef{Pos: posOf(start), Column: col, Table: p.expectIdent("el nombre de la tabla referenciada")}
+	p.expect("(", "'(' después de la tabla referenciada")
+	fk.RefColumn = p.expectIdent("la columna referenciada")
+	if p.at(",") {
+		p.abort(p.peek(), "Las FOREIGN KEY compuestas no están soportadas: use una sola columna")
+	}
+	p.expect(")", "')'")
+	if p.at("ON") {
+		p.abort(p.peek(), "ON DELETE/ON UPDATE no están soportados: las FOREIGN KEY siempre impiden borrar o cambiar claves referenciadas (no hay CASCADE)")
+	}
+	return fk
 }
 
 func (p *parser) parseType() DataType {

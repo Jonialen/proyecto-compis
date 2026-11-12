@@ -137,6 +137,15 @@ func (e *Engine) executeOne(s Statement, cat *Catalog) (StmtResult, error) {
 				NotNull:    c.NotNull || c.PrimaryKey,
 			})
 		}
+		var problem error
+		applyForeignKeys(t, foreignKeyDecls(s.Columns, s.ForeignKeys), cat, func(_ Pos, f string, a ...any) {
+			if problem == nil {
+				problem = fmt.Errorf(f, a...)
+			}
+		})
+		if problem != nil {
+			return StmtResult{}, problem
+		}
 		// Data file first: a crash before the metadata write leaves an
 		// unreferenced file, never a table without its data.
 		if err := writeRows(e.Dir, t, nil); err != nil {
@@ -149,6 +158,9 @@ func (e *Engine) executeOne(s Statement, cat *Catalog) (StmtResult, error) {
 		return StmtResult{Kind: "CREATE TABLE", Message: fmt.Sprintf("Tabla %q creada", t.Name)}, nil
 	case *DropTable:
 		t := cat.Table(s.Name.Name)
+		if l, blocked := cat.dropBlocker(t.Name); blocked {
+			return StmtResult{}, errors.New(dropTableBlockedMsg(t.Name, l))
+		}
 		var idxFiles []string
 		for _, ix := range cat.Indexes {
 			if strings.EqualFold(ix.Table, t.Name) {
@@ -214,7 +226,11 @@ func (e *Engine) insert(s *Insert, cat *Catalog) (StmtResult, error) {
 			seen[r[pk]] = true
 		}
 	}
-	if err := e.writeTable(cat, t, append(rows, newRows...)); err != nil {
+	all := append(rows, newRows...)
+	if err := e.checkChildValues(cat, t, newRows, all, "no se insertó ninguna fila"); err != nil {
+		return StmtResult{}, err
+	}
+	if err := e.writeTable(cat, t, all); err != nil {
 		return StmtResult{}, err
 	}
 	return StmtResult{Kind: "INSERT", RowsAffected: len(newRows), Message: fmt.Sprintf("%d fila(s) insertada(s) en %q", len(newRows), t.Name)}, nil

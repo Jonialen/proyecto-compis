@@ -62,6 +62,10 @@ func (a *analyzer) statement(s Statement) {
 			a.errAt(s.Name.Pos, "La tabla %q no existe", s.Name.Name)
 			return
 		}
+		if l, blocked := a.cat.dropBlocker(s.Name.Name); blocked {
+			a.errAt(s.Name.Pos, "%s", dropTableBlockedMsg(a.cat.Table(s.Name.Name).Name, l))
+			return
+		}
 		a.cat.DropTable(s.Name.Name)
 	case *CreateIndex:
 		a.createIndex(s)
@@ -118,6 +122,9 @@ func (a *analyzer) createTable(s *CreateTable) {
 			PrimaryKey: c.PrimaryKey,
 			NotNull:    c.NotNull || c.PrimaryKey,
 		})
+	}
+	if ok && !applyForeignKeys(t, foreignKeyDecls(s.Columns, s.ForeignKeys), a.cat, a.errAt) {
+		ok = false
 	}
 	if ok {
 		a.cat.AddTable(t)

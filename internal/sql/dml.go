@@ -70,6 +70,7 @@ func (e *Engine) update(s *Update, cat *Catalog) (StmtResult, error) {
 	tabs := []boundTab{{strings.ToLower(t.Name), t}}
 	next := make([][]any, len(rows))
 	changed := 0
+	var updatedRows [][]any
 	for i, row := range rows {
 		next[i] = row
 		if cand != nil && !cand[offs[i]] {
@@ -99,12 +100,22 @@ func (e *Engine) update(s *Update, cat *Catalog) (StmtResult, error) {
 			updated[ci] = cv
 		}
 		next[i] = updated
+		updatedRows = append(updatedRows, updated)
 		changed++
 	}
 	if err := checkPrimaryKey(t, next); err != nil {
 		return StmtResult{}, err
 	}
 	if changed > 0 {
+		const tail = "no se modificó ninguna fila"
+		if err := e.checkChildValues(cat, t, updatedRows, next, tail); err != nil {
+			return StmtResult{}, err
+		}
+		if err := e.checkRemovedKeys(cat, t, rows, next, func(v any, l fkLink) error {
+			return fmt.Errorf("Violación de FOREIGN KEY: no se puede cambiar el valor %v de %q en %q porque es referenciado por %s; %s", v, t.Columns[l.key].Name, t.Name, l, tail)
+		}); err != nil {
+			return StmtResult{}, err
+		}
 		if err := e.writeTable(cat, t, next); err != nil {
 			return StmtResult{}, err
 		}
@@ -143,6 +154,12 @@ func (e *Engine) deleteRows(s *Delete, cat *Catalog) (StmtResult, error) {
 		}
 	}
 	if removed > 0 {
+		// Every selected row is checked before the single table write.
+		if err := e.checkRemovedKeys(cat, t, rows, kept, func(v any, l fkLink) error {
+			return fmt.Errorf("Violación de FOREIGN KEY: no se puede eliminar de %q porque el valor %v de %q es referenciado por %s; no se eliminó ninguna fila", t.Name, v, t.Columns[l.key].Name, l)
+		}); err != nil {
+			return StmtResult{}, err
+		}
 		if err := e.writeTable(cat, t, kept); err != nil {
 			return StmtResult{}, err
 		}

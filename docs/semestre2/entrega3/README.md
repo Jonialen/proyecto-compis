@@ -59,7 +59,7 @@ INDEX idx_edad ON estudiantes(edad)
 ```
 
 - Tipos: `INT`, `FLOAT`, `VARCHAR(n)`, `BOOLEAN`, `DATE` (`YYYY-MM-DD`, validado como fecha real). El tipo se guarda en el esquema y se usa en el análisis semántico y en la ejecución.
-- Restricciones: `PRIMARY KEY` (una por tabla, implica `NOT NULL`, se verifica la unicidad en `INSERT` y `UPDATE`) y `NOT NULL`.
+- Restricciones: `PRIMARY KEY` (una por tabla, implica `NOT NULL`, se verifica la unicidad en `INSERT` y `UPDATE`), `NOT NULL` y [claves foráneas restrictivas](foreign-keys.md). No hay `CASCADE`.
 - En el CSV, `NULL` se escribe `\N`, la cadena vacía `""`, y un texto que empieza con `\` lleva una barra extra para no confundirse con `NULL`.
 - Las escrituras de `metadata.txt`, de cada CSV y de cada índice son atómicas (archivo temporal y renombrado). `INSERT`, `UPDATE` y `DELETE` modifican la tabla completa o nada.
 

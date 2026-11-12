@@ -15,6 +15,7 @@ Los corchetes indican una palabra opcional; no se escriben en SQL. `ADD` reutili
 - No se permiten nombres de columna repetidos, longitudes `VARCHAR` no positivas ni eliminar la última columna.
 - `DROP` elimina únicamente la columna indicada y sus índices. Los índices de las columnas restantes se reconstruyen con las nuevas posiciones del CSV.
 - `RENAME TO` conserva el orden de la tabla en el catálogo, actualiza sus índices y elimina el CSV del nombre anterior. No sobrescribe otra tabla ni un archivo de destino existente. Un cambio solo de mayúsculas conserva la ruta normalizada del CSV.
+- `ADD` admite `REFERENCES tabla(clave)`; `DROP` rechaza eliminar una clave referenciada y elimina la restricción propia de una columna hija. `RENAME` retargeta las referencias. Véase [claves foráneas](foreign-keys.md).
 - `ALTER`, `ADD`, `COLUMN`, `RENAME` y `TO` son palabras contextuales: siguen siendo identificadores válidos donde antes se admitían.
 
 ## Ejemplo aislado

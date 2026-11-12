@@ -26,7 +26,11 @@ func (a *analyzer) alterTable(s *AlterTable) {
 				PrimaryKey: c.PrimaryKey, NotNull: c.NotNull,
 			})
 		}
-		defs = append(defs, s.Column)
+		// The shadow catalog has no other tables, so foreign keys are checked
+		// afterwards against the real one and existing ones are carried over.
+		added := s.Column
+		added.References = nil
+		defs = append(defs, added)
 		shadow := NewCatalog()
 		check := &analyzer{cat: shadow, stmt: a.stmt}
 		check.createTable(&CreateTable{Pos: s.Pos, Name: s.Table, Columns: defs})
@@ -34,7 +38,15 @@ func (a *analyzer) alterTable(s *AlterTable) {
 			a.diags = append(a.diags, check.diags...)
 			return
 		}
-		t.Columns = shadow.Table(t.Name).Columns
+		next := *shadow.Table(t.Name)
+		next.Name = t.Name
+		for i, c := range t.Columns {
+			next.Columns[i].References = c.References
+		}
+		if s.Column.References != nil && !applyForeignKeys(&next, []ForeignKeyDef{*s.Column.References}, a.cat, a.errAt) {
+			return
+		}
+		t.Columns = next.Columns
 	case "DROP":
 		i := t.columnIndex(s.Name.Name)
 		if i < 0 {
@@ -44,6 +56,13 @@ func (a *analyzer) alterTable(s *AlterTable) {
 		if len(t.Columns) == 1 {
 			a.errAt(s.Name.Pos, "No se puede eliminar la última columna de la tabla %q", t.Name)
 			return
+		}
+		// A column's own FOREIGN KEY is dropped with it; a referenced key is not.
+		for _, l := range a.cat.referencesTo(t.Name) {
+			if l.key == i && !(l.child == t && l.col == i) {
+				a.errAt(s.Name.Pos, "No se puede eliminar la columna %q de la tabla %q: la FOREIGN KEY %s la referencia; elimine antes esa tabla o columna", t.Columns[i].Name, t.Name, l)
+				return
+			}
 		}
 		for _, key := range append([]string(nil), a.cat.idxOrd...) {
 			ix := a.cat.Indexes[key]

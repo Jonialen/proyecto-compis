@@ -30,6 +30,14 @@ type Column struct {
 	Type       ColType `json:"type"`
 	PrimaryKey bool    `json:"primaryKey"`
 	NotNull    bool    `json:"notNull"`
+	// References is the single-column FOREIGN KEY of this column, if any.
+	References *ForeignKey `json:"references,omitempty"`
+}
+
+// ForeignKey names the PRIMARY KEY column of the referenced (parent) table.
+type ForeignKey struct {
+	Table  string `json:"table"`
+	Column string `json:"column"`
 }
 
 type Table struct {
@@ -89,6 +97,14 @@ func (c *Catalog) RenameTable(name, newName string) {
 			ix.Table = newName
 		}
 	}
+	// Foreign keys follow the renamed parent (including self-references).
+	for _, other := range c.Tables {
+		for i, col := range other.Columns {
+			if col.References != nil && strings.EqualFold(col.References.Table, name) {
+				other.Columns[i].References = &ForeignKey{Table: newName, Column: col.References.Column}
+			}
+		}
+	}
 }
 
 func (c *Catalog) DropTable(name string) {
@@ -130,6 +146,12 @@ func (c *Catalog) Clone() *Catalog {
 	for _, t := range c.TableList() {
 		cp := *t
 		cp.Columns = append([]Column(nil), t.Columns...)
+		for i, col := range cp.Columns {
+			if col.References != nil {
+				ref := *col.References
+				cp.Columns[i].References = &ref
+			}
+		}
 		n.AddTable(&cp)
 	}
 	for _, k := range c.idxOrd {
@@ -156,6 +178,13 @@ func removeKey(keys []string, key string) []string {
 //	COLUMN nombre VARCHAR(50)
 //	END
 //	INDEX idx_nombre ON estudiantes(nombre)
+//
+// A FOREIGN KEY is an additive column flag, written only when present so
+// databases without foreign keys keep byte-identical metadata:
+//
+//	COLUMN estudiante_id INT NOT_NULL REFERENCES estudiantes(id)
+//
+// Older readers reject the unknown flag instead of silently dropping it.
 
 func (c *Catalog) metadataText() string {
 	var b strings.Builder
@@ -169,6 +198,9 @@ func (c *Catalog) metadataText() string {
 			}
 			if col.NotNull {
 				b.WriteString(" NOT_NULL")
+			}
+			if r := col.References; r != nil {
+				fmt.Fprintf(&b, " REFERENCES %s(%s)", r.Table, r.Column)
 			}
 			b.WriteString("\n")
 		}
@@ -217,12 +249,20 @@ func LoadCatalog(dir string) (*Catalog, error) {
 				return nil, bad(err.Error())
 			}
 			col := Column{Name: fields[1], Type: ct}
-			for _, flag := range fields[3:] {
-				switch flag {
+			flags := fields[3:]
+			for k := 0; k < len(flags); k++ {
+				switch flag := flags[k]; flag {
 				case "PRIMARY_KEY":
 					col.PrimaryKey = true
 				case "NOT_NULL":
 					col.NotNull = true
+				case "REFERENCES":
+					ref, ok := parseRefTarget(flags[k+1:])
+					if !ok || col.References != nil {
+						return nil, bad("REFERENCES inválido")
+					}
+					col.References = ref
+					k++
 				default:
 					return nil, bad("restricción desconocida " + flag)
 				}
@@ -256,7 +296,23 @@ func LoadCatalog(dir string) (*Catalog, error) {
 	if cur != nil {
 		return nil, fmt.Errorf("%s: falta END para la tabla %s", metadataFile, cur.Name)
 	}
+	if err := cat.checkForeignKeys(); err != nil {
+		return nil, fmt.Errorf("%s: %v", metadataFile, err)
+	}
 	return cat, nil
+}
+
+// parseRefTarget reads the "tabla(columna)" field after a REFERENCES flag.
+func parseRefTarget(fields []string) (*ForeignKey, bool) {
+	if len(fields) == 0 {
+		return nil, false
+	}
+	s := fields[0]
+	i := strings.Index(s, "(")
+	if i <= 0 || !strings.HasSuffix(s, ")") || len(s) < i+3 {
+		return nil, false
+	}
+	return &ForeignKey{Table: s[:i], Column: s[i+1 : len(s)-1]}, true
 }
 
 func parseColType(s string) (ColType, error) {

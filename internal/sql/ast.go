@@ -37,12 +37,23 @@ type ColumnDef struct {
 	Type       DataType
 	PrimaryKey bool
 	NotNull    bool
+	References *ForeignKeyDef // inline REFERENCES parent(key); nil if absent
+}
+
+// ForeignKeyDef is a single-column FOREIGN KEY: Column references the
+// PRIMARY KEY RefColumn of table Table.
+type ForeignKeyDef struct {
+	Pos
+	Column    Ident
+	Table     Ident
+	RefColumn Ident
 }
 
 type CreateTable struct {
 	Pos
-	Name    Ident
-	Columns []ColumnDef
+	Name        Ident
+	Columns     []ColumnDef
+	ForeignKeys []ForeignKeyDef // table-level FOREIGN KEY clauses
 }
 
 type AlterTable struct {
@@ -242,7 +253,15 @@ func stmtTree(s Statement) *TreeNode {
 			if c.NotNull {
 				flags += " NOT NULL"
 			}
-			n.Children = append(n.Children, tn("Column", c.Name.Name+flags, c.Pos, typeTree(c.Type)))
+			col := tn("Column", c.Name.Name+flags, c.Pos, typeTree(c.Type))
+			if r := c.References; r != nil {
+				col.Children = append(col.Children, tn("References", r.Table.Name+"("+r.RefColumn.Name+")", r.Pos))
+			}
+			n.Children = append(n.Children, col)
+		}
+		for _, fk := range s.ForeignKeys {
+			n.Children = append(n.Children, tn("ForeignKey", fk.Column.Name, fk.Pos,
+				tn("References", fk.Table.Name+"("+fk.RefColumn.Name+")", fk.Table.Pos)))
 		}
 		return n
 	case *AlterTable:
