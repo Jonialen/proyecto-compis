@@ -4,6 +4,8 @@
 
 El [paquete MIPS](mips/README.md) contiene cuatro PDF en español: [informe](mips/report.pdf), [arquitectura](mips/architecture.pdf), [guía de ejecución](mips/run-guide.pdf) y [referencia TAC a MIPS](mips/mips-reference.pdf). Sus fuentes editables están en `docs/semestre2/mips/`; el manifiesto del paquete registra hashes, páginas y exportación. Es una entrega distinta del intérprete SQL y conserva intacto el paquete anterior.
 
+**Video (enlace provisional):** [Carpeta de entrega del video](https://uvggt-my.sharepoint.com/:f:/r/personal/dia23837_uvg_edu_gt/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fdia23837%5Fuvg%5Fedu%5Fgt%2FDocuments%2FVideo%20Compis&share=cgqR%5FSYPX8AxQ7OLibRUWzxiEgUCn10ckXxe%5F%2DjMxMiz8WWTaQ).
+
 ## Entrega 2: TAC
 
 Las copias de lectura versionadas de la Entrega 2 están en [entrega2](entrega2/). Empiece por el informe y luego use la guía de ejecución para reproducir la evidencia. Las fuentes editables permanecen en `docs/semestre2/entrega2`; no mantenga aquí una segunda copia en Markdown.

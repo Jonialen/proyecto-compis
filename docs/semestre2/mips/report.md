@@ -6,6 +6,7 @@ Construcción de Compiladores · Proyecto Fase 3 · Compiscript.
 |---|---|
 | **Autores** | Jonathan Diaz y Luis Padilla |
 | **Repositorio** | [https://github.com/Jonialen/proyecto-compis](https://github.com/Jonialen/proyecto-compis) |
+| **Video (enlace provisional)** | [Carpeta de entrega del video](https://uvggt-my.sharepoint.com/:f:/r/personal/dia23837_uvg_edu_gt/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fdia23837%5Fuvg%5Fedu%5Fgt%2FDocuments%2FVideo%20Compis&share=cgqR%5FSYPX8AxQ7OLibRUWzxiEgUCn10ckXxe%5F%2DjMxMiz8WWTaQ) |
 | **Software entregado** | Rama `main`, merge `dad441e` |
 
 El enunciado original menciona grupos de tres integrantes; este equipo está formado por dos. Esa diferencia de modalidad debe confirmarla el catedrático: este informe no afirma que haya sido aprobada.

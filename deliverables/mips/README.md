@@ -2,6 +2,8 @@
 
 **Autores:** Jonathan Diaz y Luis Padilla. **Repositorio:** <https://github.com/Jonialen/proyecto-compis>.
 
+**Video (enlace provisional):** [Carpeta de entrega del video](https://uvggt-my.sharepoint.com/:f:/r/personal/dia23837_uvg_edu_gt/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fdia23837%5Fuvg%5Fedu%5Fgt%2FDocuments%2FVideo%20Compis&share=cgqR%5FSYPX8AxQ7OLibRUWzxiEgUCn10ckXxe%5F%2DjMxMiz8WWTaQ).
+
 Empezá por `report.pdf`; después usá `run-guide.pdf` para reproducir la demo. Los Markdown de `docs/semestre2/mips/` son las fuentes editables: no se mantiene una segunda copia de sus contenidos aquí.
 
 | PDF | Fuente | Contenido |
