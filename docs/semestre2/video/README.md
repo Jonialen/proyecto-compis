@@ -4,115 +4,94 @@
 
 **Video (enlace provisional):** [Carpeta de entrega del video](https://uvggt-my.sharepoint.com/:f:/r/personal/dia23837_uvg_edu_gt/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fdia23837%5Fuvg%5Fedu%5Fgt%2FDocuments%2FVideo%20Compis&share=cgqR%5FSYPX8AxQ7OLibRUWzxiEgUCn10ckXxe%5F%2DjMxMiz8WWTaQ).
 
-Este es un guion para ensayar y grabar; no afirma que el video haya sido grabado ni publicado. La parte de SQL es un intérprete separado: **SQL no se traduce a MIPS**. La ejecución usa una base aislada, nunca `sqldata/default`.
+Presenten el IDE en vivo y ejecuten el ASM descargado en MARS gráfico. SQL es un intérprete separado: **SQL no se traduce a MIPS**. Este guion no afirma que el video esté grabado o publicado.
 
-## Antes de comenzar
+## Preparación fuera de cámara
 
-Desde la raíz, con Go compatible con `go.mod`, Java y el MARS local ya disponible, ejecuten:
+Necesitan Go y las dependencias disponibles, Java, `tools/mars/Mars4_5.jar` local y un navegador capaz de cargar los recursos CDN que usa el editor. Ensayen la interfaz una vez antes de grabar; no se garantiza funcionamiento sin conexión. El servidor es de desarrollo local: no lo expongan públicamente.
 
-```bash
-bash scripts/demo-video.sh
-```
-
-El script imprime `Artefactos: .../.atl/demo-video.XXXXXX` al inicio y conserva ese directorio incluso si falla. Compila las tres herramientas allí, sin descargar dependencias; genera `program.tac` y `program.asm`, ejecuta **ese mismo** ASM con `scripts/mars.sh` y compara salida, error y exit. Después ejecuta cada paso SQL contra `db` dentro de ese directorio. Si falla, detengan el ensayo y revisen los archivos `*.stdout`, `*.stderr` y `*.exit` del paso; no continúen como si hubiera pasado. El wrapper MARS requiere Java y el JAR local fijado; no es necesario instalar nada durante la presentación.
-
-Para inspeccionar con comandos manuales desde la raíz, sustituyan en la primera línea la ruta impresa por el ensayo. Esos comandos solo leen los artefactos ya generados; no repiten operaciones sobre la base:
+Desde la raíz del repositorio, preparen una instancia nueva y aislada:
 
 ```bash
-D=.atl/demo-video.RUTA_IMPRESA
-less testdata/video/mips.cps
-less "$D/program.tac"
-less "$D/program.asm"
-less "$D/mars.stdout"
-less testdata/video/sql/setup.sql
-less "$D/delete-blocked.stderr"
-cmp "$D/delete-blocked-before.json" "$D/delete-blocked-after.json"
-less "$D/after-free.stdout"
-less "$D/drop-empty-child-before.json"
+ROOT=$(pwd)
+mkdir -p "$ROOT/.atl"
+D=$(mktemp -d "$ROOT/.atl/video-ide.XXXXXX")
+go build -o "$D/ide" ./cmd/ide
+cp -R "$ROOT/web" "$D/web"
+(cd "$D" && "$D/ide")
 ```
 
-Para repetir manualmente MARS sobre el archivo generado (sin volver a compilar):
+Dejen esa terminal abierta fuera de cámara. El puerto es **8080 fijo**; si está ocupado, detengan manualmente su IDE anterior antes de comenzar. Confirmen que el proceso sigue activo sin errores: si termina o falla al abrir el puerto, no continúen con otra instancia ya abierta, porque podría usar la base real. El binario se construye desde el repositorio, pero sirve la copia de `web` desde `D`; SQL escribe solo en `D/sqldata/default`, no en la base del repositorio. Para otro ensayo, creen otro directorio nuevo: no borren ni reinicien bases existentes.
+
+Abran `http://localhost:8080/` y tengan disponibles los archivos de `testdata/video/`. En otra terminal fuera de cámara, desde la raíz, abran MARS gráfico:
 
 ```bash
-bash scripts/mars.sh "$D/program.asm"
+java -jar tools/mars/Mars4_5.jar
 ```
 
-Para repetir SQL manualmente, usen **otra** base nueva dentro del mismo directorio de ensayo y estos comandos en orden. Cada archivo es una invocación independiente; los rechazos devuelven exit 1 y no son motivo para saltarse el siguiente comando. El script automático ejecuta esos mismos archivos con `-db` y además compara streams y estado público.
-
-```bash
-mkdir "$D/db-manual"
-"$D/sql" -db "$D/db-manual" < testdata/video/sql/setup.sql
-"$D/sql" -db "$D/db-manual" < testdata/video/sql/duplicate.sql
-"$D/sql" -db "$D/db-manual" < testdata/video/sql/missing.sql
-"$D/sql" -db "$D/db-manual" < testdata/video/sql/delete-blocked.sql
-"$D/sql" -db "$D/db-manual" < testdata/video/sql/drop-blocked.sql
-"$D/sql" -db "$D/db-manual" < testdata/video/sql/delete-free.sql
-"$D/sql" -db "$D/db-manual" < testdata/video/sql/after-free.sql
-"$D/sql" -db "$D/db-manual" < testdata/video/sql/clear-child.sql
-"$D/sql" -db "$D/db-manual" < testdata/video/sql/after-clear.sql
-"$D/sql" -db "$D/db-manual" < testdata/video/sql/drop-blocked.sql
-"$D/sql" -db "$D/db-manual" < testdata/video/sql/drop-all.sql
-```
-
-`db-manual` debe ser nuevo: si ya existe, hagan un ensayo nuevo y usen su ruta impresa. No borren bases previas. El mensaje final del script confirma todas las comparaciones; los archivos esperados están en `testdata/video/sql/` y `testdata/video/mips.stdout`.
+La pestaña inicial del editor es `.yalp`: seleccionen **Compiscript** o carguen el `.cps`. Abran SQL en una **nueva pestaña** con `http://localhost:8080/sql.html`, equivalente al enlace **SQL** del encabezado, para conservar el editor principal. SQL no tiene carga de archivos: abran los fixtures en un editor de texto y copien su contenido al editor SQL. Cada paso negativo va en una invocación separada: un error de análisis impide ejecutar el lote.
 
 ## Guion para dos personas (14:00)
 
 ### 0:00–1:00 · Presentación
 
-**Jonathan muestra** el repositorio y dice: «Somos Jonathan Diaz y Luis Padilla. En esta demostración presentamos la traducción y ejecución de Compiscript a MIPS y, por separado, las restricciones de nuestro intérprete SQL. El código está en github.com/Jonialen/proyecto-compis».
+**Jonathan muestra** el IDE y dice: «Somos Jonathan Diaz y Luis Padilla. Mostraremos Compiscript desde su fuente hasta MIPS y su ejecución; después probaremos SQL por separado. El repositorio es github.com/Jonialen/proyecto-compis».
 
-**Luis dice:** «Veremos el programa fuente, su código intermedio, el ensamblador generado y su ejecución. Después probaremos claves primarias y foráneas sobre una base temporal».
+**Luis dice:** «La base de esta demostración es temporal y aislada. El IDE genera ensamblador; MARS lo ejecuta».
 
 ### 1:00–3:00 · Fuente y objetos
 
-**Jonathan muestra** `testdata/video/mips.cps` con el primer comando `less` de arriba y dice: «Base declara el campo entero `n` con valor 2. Child hereda ese campo y sobrescribe `read`: suma 8. Creamos dos objetos Child. `alias` apunta al primero y cambia su campo a 4; el segundo conserva 2. También calculamos fib de 8 de forma recursiva».
+**Jonathan hace clic** en **Load .cps** y selecciona `testdata/video/mips.cps`; muestra el código en **Compiscript**. «Base declara `n` con valor 2; Child hereda el campo y sobrescribe `read`, sumando 8. Creamos dos Child; `alias` modifica el primero a 4 y el segundo conserva 2. También calculamos fib de 8».
 
-**Luis señala** `print(box)` y los `print` de campos: «No mostramos solo resultados de funciones: imprimimos el objeto y consultamos sus campos. La representación esperada es `<object s1.Child>`; es una etiqueta opaca de clase, no un volcado de campos ni prueba de direcciones únicas. La evidencia de alias y de objetos separados son los valores de los campos».
+**Luis señala** `print(box)` y los accesos a campos: «Imprimimos el objeto además de resultados. `<object s1.Child>` es una etiqueta opaca de clase, no una dirección única ni un volcado de campos; los valores de los campos muestran el alias y la independencia».
 
-### 3:00–5:00 · Traducción concreta
+### 3:00–5:00 · Análisis y código intermedio
 
-**Luis muestra** `program.tac` y dice: «El compilador recibe el mismo archivo `.cps`: el análisis léxico produce tokens; el sintáctico construye el AST y el semántico comprueba nombres y tipos. A partir de ahí se genera TAC, una representación de tres direcciones. Aquí buscamos las operaciones del campo, la llamada al método y las llamadas recursivas de fib».
+**Luis hace clic** en **Analyze .cps (AST)** y muestra **AST** y **Diagnostics**. «El análisis léxico identifica tokens internamente, el sintáctico construye el árbol y los diagnósticos muestran problemas; este ejemplo debe analizarse sin errores». No usen la pestaña **Tokens** como evidencia de Compiscript: esta acción no llena ese panel.
 
-**Jonathan muestra** `program.asm` y dice: «La herramienta MIPS vuelve a compilar esa fuente y baja el programa a ensamblador MIPS. Este archivo no es un ejemplo escrito a mano: es precisamente el que el ensayo entrega a MARS. Podemos comparar el campo y las llamadas de TAC con las instrucciones y rutinas generadas, sin confundir el código intermedio con la ejecución».
+**Jonathan hace clic** en **Compile .cps (TAC)** y muestra **TAC**, **Environments** y **Extended symbols**. «El TAC representa operaciones intermedias: busquemos la creación del objeto, enlace del método, acceso al campo y llamadas, incluida la recursiva. Los entornos y símbolos muestran información del análisis». El botón **Run** en Compiscript también compila a TAC: no ejecuta el programa.
 
-### 5:00–7:00 · Ejecutar el ensamblador
+### 5:00–7:00 · MIPS y ejecución gráfica
 
-**Jonathan escribe** `bash scripts/mars.sh "$D/program.asm"` y espera a que termine.
+**Jonathan hace clic** en **Compile MIPS**, muestra la pestaña **MIPS** y relaciona el acceso al campo y la llamada al método en TAC con el ensamblador generado. Luego hace clic en **Download .asm**. Al cargar `mips.cps`, el nombre sugerido es `mips.asm`; usen el archivo realmente descargado, respetando cualquier cambio de nombre del navegador.
 
-**Luis dice:** «MARS ejecuta el ASM generado. La salida debe mostrar el objeto, después 2, 4 y 2 para inicial, alias e independiente; el método sobrescrito devuelve 12 y fib de 8 devuelve 21. El ensayo compara toda la salida con `testdata/video/mips.stdout`, exige el stderr exacto de `testdata/video/mips.stderr` (un salto de línea de MARS, sin diagnósticos) y exit cero».
+**Luis cambia a MARS**, usa **File → Open** para abrir ese archivo descargado y las acciones de menú para ensamblar y después ejecutar (**Run/Go**). Muestra **Run I/O**: se espera `objeto:`, `<object s1.Child>`, y los valores inicial `2`, alias `4`, independiente `2`, método `12` y fib(8) `21` con sus etiquetas. «La ejecución ocurre en MARS, no en un panel de salida del IDE web». Si no coincide, detengan el ensayo; no presenten la ejecución como exitosa.
 
-**Pausa:** si la salida o el simulador no coincide, detenerse; conservar la ruta de artefactos para diagnóstico.
+### 7:00–9:00 · Preparar SQL
 
-### 7:00–9:00 · SQL y preparación
+**Luis cambia** a la pestaña SQL aislada, copia `testdata/video/sql/setup.sql` al editor y señala `FOREIGN KEY (cliente_id) REFERENCES clientes(id)`. Pulsa **▶ Ejecutar** y muestra **Resultados** y **Esquema**. «Creamos clientes con PK `id` y pedidos con FK a clientes. La PK exige unicidad y no acepta NULL; la FK impide referencias a padres inexistentes». La vista **Esquema** muestra tablas y columnas; no hace falta atribuirle una insignia FK.
 
-**Luis muestra** `testdata/video/sql/setup.sql` y dice: «Esta parte no usa el backend MIPS. El intérprete SQL analiza y ejecuta sentencias contra su catálogo y archivos CSV en la base temporal. Creamos clientes con PK `id` y pedidos con una FK `cliente_id` que referencia esa clave. Insertamos clientes 1 y 2 y un pedido que referencia al 1».
+**Jonathan reemplaza** el editor con `testdata/video/sql/select.sql`, pulsa **▶ Ejecutar** y muestra en **Resultados** clientes `(1, Ana)`, `(2, Luis)` y pedido `(10, 1)`. **Analizar** solo valida; **▶ Ejecutar** aplica las sentencias y persiste cambios.
 
-**Jonathan muestra** `setup.stdout`: «La preparación crea ambas tablas e inserta dos clientes y un pedido. La PK exige unicidad y no admite NULL; una PK por sí sola no prohíbe borrar una fila. La FK impide dejar referencias sin padre».
+### 9:00–11:00 · Rechazos y estado conservado
 
-### 9:00–11:00 · Rechazos y preservación
+**Jonathan pega y ejecuta por separado**, reemplazando el contenido cada vez:
 
-**Jonathan muestra** `duplicate.stderr`, `missing.stderr` y `delete-blocked.stderr` en los artefactos y dice: «El duplicado de la PK y el pedido con cliente 9 inexistente se rechazan. El DELETE selecciona los clientes 1 y 2: como el 1 tiene un pedido, se rechaza toda la sentencia y el cliente 2 también permanece».
+1. `testdata/video/sql/duplicate.sql`: muestra el rechazo de PK duplicada en **Errores**.
+2. `testdata/video/sql/missing.sql`: muestra el rechazo de la FK para el cliente inexistente 9.
+3. `testdata/video/sql/delete-blocked.sql`: muestra el rechazo del DELETE que incluye al cliente 1 referenciado.
+4. `testdata/video/sql/drop-blocked.sql`: muestra el rechazo de DROP de la tabla referenciada.
 
-**Luis escribe** `cmp "$D/delete-blocked-before.json" "$D/delete-blocked-after.json"` y dice: «Sin salida y con exit cero significa que los reportes públicos JSON coinciden byte a byte. Se consulta cada tabla en ambas capturas, con esquema, metadatos de FK, índices, conteos y filas. El ensayo hace esta comparación para cada rechazo, abriendo el CLI de nuevo cada vez. Los errores son invocaciones separadas porque el análisis semántico precede a la ejecución de todo el lote».
+**Luis vuelve a pegar y ejecutar** `testdata/video/sql/select.sql` y muestra ambos clientes, incluido el 2 no referenciado, y el pedido `(10, 1)`. «Se rechazó el DELETE completo, no solo la fila referenciada. La FK es restrictiva, no CASCADE».
 
 ### 11:00–13:00 · Borrado permitido y dependencia del esquema
 
-**Luis muestra** `after-free.stdout` y dice: «Borrar el cliente 2 sin pedidos sí funciona: queda el cliente 1 y su pedido. Esto demuestra que la PK sola no bloquea el borrado. Luego borramos las filas de pedidos y comprobamos que está vacía».
+**Luis pega y ejecuta** `testdata/video/sql/delete-free.sql`, luego `testdata/video/sql/after-free.sql`: **Resultados** muestra solo cliente 1 y pedido `(10, 1)`. «Borrar el cliente 2 sin referencias sí funciona; la PK sola no bloquea el borrado».
 
-**Jonathan muestra** `drop-empty-child-before.json` y `drop-blocked.stderr`: «Aunque pedidos esté vacía, su esquema todavía referencia clientes, así que DROP de clientes se rechaza. Al eliminar primero pedidos y después clientes, ambas operaciones son permitidas. Es comportamiento restrictivo por defecto, no una cascada ni una nueva cláusula SQL».
+**Jonathan pega y ejecuta** `testdata/video/sql/clear-child.sql` y después `testdata/video/sql/after-clear.sql`; muestra pedidos sin filas. Ejecuta otra vez `testdata/video/sql/drop-blocked.sql` y muestra el rechazo en **Errores**: «Aunque la tabla hija esté vacía, su esquema todavía referencia a clientes». Finalmente pega y ejecuta `testdata/video/sql/drop-all.sql`: elimina primero pedidos y después clientes; muestra **Resultados** y **Esquema** vacío.
 
 ### 13:00–14:00 · Cierre
 
-**Jonathan dice:** «En resumen, vimos el recorrido de Compiscript hasta MARS, con objetos, alias, herencia y recursión». **Luis dice:** «Y comprobamos en SQL tanto la integridad de inserciones como el rechazo de borrados referenciados, sin modificar la base real. Gracias».
+**Jonathan dice:** «Vimos fuente, análisis, TAC, MIPS y ejecución en MARS, con objetos, alias, herencia y recursión». **Luis dice:** «En SQL mostramos restricciones de inserción y borrado, sobre una base aislada. Gracias».
 
 ## Lista de ensayo
 
-- [ ] Ensayar con cronómetro: 14 minutos, dentro del rango de 10 a 15.
-- [ ] Ejecutar el ensayo completo; confirmar exit cero y conservar la ruta impresa.
-- [ ] Revisar fuente, TAC, ASM, stdout MARS y los cinco pares de capturas JSON.
-- [ ] Confirmar rechazos: PK duplicada, padre FK inexistente, DELETE completo y DROP antes y después de vaciar pedidos.
-- [ ] Confirmar cliente 2 eliminado por separado, pedidos vacío y DROP hijo antes de padre.
-- [ ] Practicar pausas, turnos y comandos; no presentar una falla como éxito.
+- [ ] Ensayar con cronómetro dentro del rango de 10 a 15 minutos y comprobar que el IDE y MARS se ven bien.
+- [ ] Preparar una instancia nueva aislada y verificar el puerto y los recursos del navegador antes de grabar.
+- [ ] Abrir en MARS el ASM descargado de esta compilación y comprobar la salida, sin confundir compilación con ejecución.
+- [ ] Mostrar los cuatro rechazos por separado, el SELECT posterior, el borrado permitido y el DROP bloqueado con hija vacía.
+- [ ] Practicar los turnos; no presentar fallas como éxitos ni afirmar grabación o entrega anticipadamente.
+
+Como regresión técnica opcional **fuera de cámara**, `bash scripts/demo-video.sh` ejecuta el ensayo automatizado con artefactos y MARS en modo headless; no sustituye la demostración gráfica.
 
 Detalles técnicos: [TAC](../entrega2/tac-design.md), [MIPS](../mips/README.md) y [claves foráneas SQL](../entrega3/foreign-keys.md).
