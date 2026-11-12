@@ -2,6 +2,14 @@
 
 Construcción de Compiladores · Proyecto Fase 3 · Compiscript.
 
+| Entrega | Datos |
+|---|---|
+| **Autores** | Jonathan Diaz y Luis Padilla |
+| **Repositorio** | [https://github.com/Jonialen/proyecto-compis](https://github.com/Jonialen/proyecto-compis) |
+| **Software entregado** | Rama `main`, merge `dad441e` |
+
+El enunciado original menciona grupos de tres integrantes; este equipo está formado por dos. Esa diferencia de modalidad debe confirmarla el catedrático: este informe no afirma que haya sido aprobada.
+
 La fase transforma el código intermedio de tres direcciones de Compiscript en ensamblador MIPS ejecutable en MARS. Conserva el frontend ANTLR, el análisis semántico y las interfaces anteriores; incorpora un backend físico, un runtime de valores y una salida de ensamblador en la CLI y el IDE. La compilación genera código: no interpreta el fuente ni ejecuta el simulador.
 
 ## 1. Documentos del paquete
@@ -35,7 +43,7 @@ La ejecución es otro paso: MARS ensambla y simula el archivo generado, con sus 
 | Fuente `.cps` y reporte de errores | `CompileMIPS`, CLI independiente y endpoint aditivo | Pruebas de CLI/API: éxito, errores, ubicación, ausencia de ensamblador parcial e inmutabilidad del fuente |
 | IDE para escribir y compilar | Editor existente, acción Compile MIPS, pestaña MIPS y descarga `.asm` vigente | 41 pruebas web de conexiones/estado/seguridad de texto y API; comprobación visual real pendiente |
 | Arquitectura e instrucciones de uso | Paquete técnico en español y fuentes editables versionadas | Guía, arquitectura, referencia, informe y evidencia enlazados; copias PDF de lectura |
-| Contribuciones individuales de tres integrantes | Deben corresponder al trabajo real del equipo | Control humano: los commits de implementación no certifican por sí solos este requisito |
+| Commits individuales de cada integrante | Deben corresponder al trabajo real de Jonathan Diaz y Luis Padilla | Control humano: el historial de commits no certifica por sí solo este requisito |
 
 La tabla organiza evidencia: **no adjudica puntos ni garantiza una calificación**. La evaluación requiere funcionamiento en el entorno y fecha de presentación.
 
@@ -63,7 +71,16 @@ La generación rechaza metadata inconsistente sin devolver ensamblador parcial. 
 
 ## 5. Verificación observada
 
-El estado del software verificado corresponde al cierre de implementación `115dc4f` y al registro de trabajo posterior, sin cambios funcionales por esta ampliación documental.
+Hay dos instantáneas de verificación. Ninguna fue reejecutada para esta actualización documental, que no cambia código.
+
+**Integración en `main`.** El árbol combinado candidato `d482a72` (padres `ca84c28`, con el trabajo SQL, y `27e6bfc`, con la rama MIPS) se integró sin cambios mediante el merge normal `dad441e`. Sobre ese árbol:
+
+- Suite Go completa, aislada y sin red: 22 paquetes aprobados; 2435 eventos de pruebas aprobadas; ningún caso omitido.
+- `go vet -a ./...`: sin diagnósticos.
+- Web: 41 pruebas aprobadas.
+- Demo pública CLI a MARS: aprobada.
+
+**Cierre de la rama MIPS (histórico).** Corresponde al commit de implementación `115dc4f`, antes de combinarse con el trabajo SQL:
 
 - Suite global `go test -json ./... -count=1`: 21 paquetes aprobados; 2379 eventos de pruebas aprobadas, contando padres y subtests.
 - Aceptación ampliada: 150 escenarios ejecutados como MIPS real, incluyendo las matrices anteriores de valores/efectos, dinámicos/excepciones, objetos y listas.
@@ -91,4 +108,6 @@ Los casos que descubrieron las omisiones se conservaron. El primer pase ampliado
 
 El target es MARS 4.5, sin delayed branching activado. Hay memoria finita, heap monotónico sin recolector, límites explícitos de layouts/desplazamientos y una impresión de listas acotada. La representación decimal de MARS puede diferir de Go para números extremos. Los límites completos están en la guía y la arquitectura.
 
-Queda verificar manualmente el navegador real, el entorno del evaluador, acceso a dependencias/CDN y las contribuciones individuales efectivas. No se afirma que esas comprobaciones se hayan realizado automáticamente. La implementación y la documentación se mantienen en una rama local; publicar, abrir un PR y mergear siguen siendo decisiones del equipo.
+Queda verificar manualmente el navegador real, el entorno del evaluador, acceso a dependencias/CDN y las contribuciones individuales efectivas. No se afirma que esas comprobaciones se hayan realizado automáticamente.
+
+La implementación está publicada en la rama `main` del [repositorio](https://github.com/Jonialen/proyecto-compis) desde el merge `dad441e`. Esta revisión del paquete —autores, enlace al repositorio y estado de publicación— se preparó después de ese merge; su publicación en el repositorio es un paso aparte del equipo.

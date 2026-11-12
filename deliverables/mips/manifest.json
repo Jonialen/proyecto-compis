@@ -2,9 +2,16 @@
   "schema": 1,
   "phase": "Compiscript MIPS",
   "exportedFrom": "working tree; source hashes are authoritative",
-  "baseCommit": "e66c965d4ad55f9237b2d836756757671eea0851",
+  "baseCommit": "dad441efbcc2428ab8f9147a00e4f1bc480f3a9e",
   "verifiedSoftwareCommit": "115dc4f489cd3796c34ed178d6c1e635d65a4dd1",
-  "branch": "feat/compiscript-mips",
+  "branch": "docs/mips-final-submission",
+  "linkBranch": "main",
+  "publishedMainCommit": "dad441efbcc2428ab8f9147a00e4f1bc480f3a9e",
+  "authors": [
+    "Jonathan Diaz",
+    "Luis Padilla"
+  ],
+  "repository": "https://github.com/Jonialen/proyecto-compis",
   "tools": {
     "pandoc": "pandoc 3.12.1",
     "xelatex": "XeTeX 3.141592653-2.6-0.999998 (TeX Live 2026)"
@@ -34,17 +41,17 @@
     "lang=es"
   ],
   "layout": "A4,22mm margins,Arial10pt,Menlo footnotesize code,fvextra wrap,conditional Highlighting",
-  "sourceDateEpoch": 1793815221,
-  "linkPolicy": "Four primary sources map to sibling PDF filenames; other repository links use the feature branch URL without claiming publication.",
+  "sourceDateEpoch": 1794107583,
+  "linkPolicy": "Four primary sources map to sibling PDF filenames; other repository links use blob/main URLs on the published repository; covers carry both authors and the canonical repository link. Documentation working-tree changes are not claimed as published.",
   "sources": [
     {
       "source": "docs/semestre2/mips/report.md",
       "pdf": "deliverables/mips/report.pdf",
       "title": "Informe técnico: Compiscript MIPS",
-      "sourceSHA256": "49009e0405e8e83ecb91fa6e4f7d39a35151dadc6151efc80c14dc9ed5278f56",
-      "pdfSHA256": "38057879fecd20e74945216e4ea8884f19d0827bc83a79c48b2e0debc6f7bb05",
-      "pages": 3,
-      "bytes": 65606,
+      "sourceSHA256": "7266b940e488c018476147c506f4737686308c2a3e0c2d5ae39bac14d0e708a5",
+      "pdfSHA256": "620ce13ac715ff5000b7708e2f5fa26bf0e1a4ccd9fe7652f5b07407978f4fed",
+      "pages": 4,
+      "bytes": 73032,
       "textHeadingsChecked": true
     },
     {
@@ -52,19 +59,19 @@
       "pdf": "deliverables/mips/architecture.pdf",
       "title": "Arquitectura de Compiscript MIPS",
       "sourceSHA256": "1a70d759bbf3897b7646948c7094f7faa5383c852e4cc2e3ab1a0f61d33d9d22",
-      "pdfSHA256": "628c9e5c6bb5f6b5cdb816475f543db1af6aa919078f3fa49880aad752cff18f",
+      "pdfSHA256": "9388740b8fb290ef1f80ed18ed54916956a05fa5c3e3d71ce7b0570ce562ef47",
       "pages": 4,
-      "bytes": 66873,
+      "bytes": 67117,
       "textHeadingsChecked": true
     },
     {
       "source": "docs/semestre2/mips/README.md",
       "pdf": "deliverables/mips/run-guide.pdf",
       "title": "Guía de ejecución de Compiscript MIPS",
-      "sourceSHA256": "29e9762b17e91daf6d3480f5bc21f0c35517eb34b4d40d51a4d26cdf88d6a981",
-      "pdfSHA256": "c1963291fb70252e242df438f94f8582cb49de76341b54a5b09315378ba833f4",
+      "sourceSHA256": "74cdfd31d82524763e7b62b45117c054a328d063247c8d78f1b64fc62f982760",
+      "pdfSHA256": "9a162112517e830e624f17a232e1dad0b0820a7bdad3e5d4d9465b1a8cdbce4c",
       "pages": 4,
-      "bytes": 68845,
+      "bytes": 69274,
       "textHeadingsChecked": true
     },
     {
@@ -72,9 +79,9 @@
       "pdf": "deliverables/mips/mips-reference.pdf",
       "title": "Referencia TAC a MIPS",
       "sourceSHA256": "e1c08e6a1aeaf7b10937dd3f041e8a82d50bbc37f4affdfc85064ab3305d0282",
-      "pdfSHA256": "b364a83ffc83cc8249d389c3b358a0c5653ca63d2d27538ad58e0884d310bd12",
+      "pdfSHA256": "4a674eeb66468b9625214bc3bd9917c8d481ad30d60984130007260a88e946fb",
       "pages": 4,
-      "bytes": 77282,
+      "bytes": 77794,
       "textHeadingsChecked": true
     }
   ]

@@ -2,7 +2,20 @@
 
 La implementación fue verificada con generación real de ensamblador y ejecución en MARS. Esta evidencia cubre los escenarios y comandos indicados; no garantiza todos los programas posibles, terminación ni una calificación.
 
-## Resultado final observado
+## Integración en `main`
+
+El árbol combinado candidato `d482a72` —padres `ca84c28`, con el trabajo SQL, y `27e6bfc`, con la rama MIPS— se verificó antes de integrarse sin cambios mediante el merge normal `dad441e` en `main`.
+
+| Comprobación sobre el árbol combinado | Resultado |
+|---|---|
+| Suite Go completa, aislada y sin red | 22 paquetes aprobados; 2435 eventos de pruebas aprobadas; ningún caso omitido |
+| `go vet -a ./...` | Sin diagnósticos |
+| Pruebas web | 41 aprobadas |
+| Demo pública CLI→MARS | Aprobada |
+
+La sección siguiente es la instantánea histórica del cierre de la rama MIPS, anterior a la combinación con SQL; sus cifras no se mezclan con estas.
+
+## Resultado del cierre de la rama MIPS
 
 La verificación global se ejecutó en una copia temporal de las fuentes finales, con HOME/GOCACHE/TMPDIR aislados, dependencias Go ya disponibles y `GOPROXY=off`, `GOSUMDB=off`, `GOTOOLCHAIN=local`. Se copiaron los JAR locales verificados de MARS y ANTLR para no descargar herramientas ni regenerar archivos en el checkout original.
 
@@ -48,7 +61,7 @@ Dos verificaciones independientes acotadas aprobaron:
 ## Límites y controles humanos
 
 - No hubo herramienta de navegador disponible. Las comprobaciones DOM/HTTP son funcionales; **no se afirma validación visual en un navegador real**. Revisá carga, edición y descarga en el navegador de la presentación.
-- Los aportes individuales reales de los tres integrantes deben comprobarse con el equipo. No se inventaron autores ni se asegura cumplimiento de ese requisito a partir de estos commits.
+- El equipo real está formado por Jonathan Diaz y Luis Padilla; el enunciado original menciona grupos de tres y esa diferencia debe confirmarla el catedrático. Los aportes individuales reales de ambos deben comprobarse con el equipo: no se inventaron autores ni se asegura cumplimiento de ese requisito a partir del historial de commits.
 - MARS, binary64, memoria monotónica y límites de layouts/impresión se describen en la [guía de ejecución](README.md). No se afirma soporte de recursos ilimitados ni de todos los simuladores MIPS.
 - La ejecución sin red aquí utilizó cachés locales existentes. Una máquina nueva necesita obtener previamente dependencias y herramientas; el IDE conserva sus dependencias CDN anteriores.
-- Los cambios permanecen en una rama local. No se hizo push, PR ni merge.
+- La implementación verificada está publicada en `main` de <https://github.com/Jonialen/proyecto-compis> desde el merge `dad441e`. Las revisiones documentales posteriores se publican aparte.

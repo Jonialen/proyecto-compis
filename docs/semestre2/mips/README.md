@@ -138,4 +138,4 @@ La suite MIPS ejecuta ensamblador real; `-short` omite esas ejecuciones externas
 6. Explicar el frame, el valor de retorno y una captura que sobrevive al frame, con la arquitectura y la referencia.
 7. Cerrar con evidencia de pruebas, límites del target y contribuciones reales del equipo.
 
-Antes de presentar, revisá también carga/edición/descarga en un navegador real y el entorno del evaluador. Los commits locales de implementación no demuestran por sí solos las contribuciones individuales de los tres integrantes; no se inventa autoría ni se publica automáticamente el trabajo.
+Antes de presentar, revisá también carga/edición/descarga en un navegador real y el entorno del evaluador. El código está en la rama `main` de [github.com/Jonialen/proyecto-compis](https://github.com/Jonialen/proyecto-compis). El historial de commits no demuestra por sí solo las contribuciones individuales de Jonathan Diaz y Luis Padilla; no se inventa autoría. El enunciado original menciona grupos de tres: la diferencia de modalidad debe confirmarla el catedrático.

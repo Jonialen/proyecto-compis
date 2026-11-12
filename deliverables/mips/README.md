@@ -1,5 +1,7 @@
 # Paquete de lectura de la fase MIPS
 
+**Autores:** Jonathan Diaz y Luis Padilla. **Repositorio:** <https://github.com/Jonialen/proyecto-compis>.
+
 Empezá por `report.pdf`; después usá `run-guide.pdf` para reproducir la demo. Los Markdown de `docs/semestre2/mips/` son las fuentes editables: no se mantiene una segunda copia de sus contenidos aquí.
 
 | PDF | Fuente | Contenido |
@@ -11,7 +13,7 @@ Empezá por `report.pdf`; después usá `run-guide.pdf` para reproducir la demo.
 
 ## Versionado y alcance
 
-Mantené juntos los cuatro PDF: sus enlaces entre documentos usan nombres hermanos. Las referencias a fuentes, ejemplos y evidencia que no se exportan apuntan a rutas del repositorio en la rama `feat/compiscript-mips`; no son permalinks de commits ni se afirma que la rama esté publicada. La lectura del contenido del paquete no necesita esos enlaces externos; consultar el código remoto sí requiere que exista la rama publicada y acceso a GitHub.
+Mantené juntos los cuatro PDF: sus enlaces entre documentos usan nombres hermanos. Las referencias a fuentes, ejemplos y evidencia que no se exportan apuntan a rutas de la rama `main` publicada, donde la implementación se integró con el merge `dad441e`. No son permalinks de commits: muestran el estado actual de `main`, así que una revisión documental aún no publicada no aparece allí hasta que el equipo la publique. La lectura del contenido del paquete no necesita esos enlaces externos; consultar el código remoto requiere acceso a GitHub.
 
 El [manifiesto de exportación](manifest.json) registra hashes de cada fuente/PDF, páginas, herramientas y opciones. Actualizá las cuatro exportaciones y el manifiesto cuando cambie cualquiera de sus fuentes. Generar un PDF no agrega evidencia de funcionamiento ni sustituye las comprobaciones de navegador, entorno del evaluador o contribuciones individuales.
 
